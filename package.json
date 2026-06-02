@@ -1,0 +1,28 @@
+{
+  "name": "gladymar-whatsapp-agent",
+  "version": "1.0.0",
+  "description": "Agente de inteligencia artificial para WhatsApp de Cerámica Gladymar S.A. (Bolivia). Atiende consultas de productos, precios referenciales, sucursales y horarios usando Claude + WhatsApp Cloud API.",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/index.js",
+    "chat": "tsx scripts/chat.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.69.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
