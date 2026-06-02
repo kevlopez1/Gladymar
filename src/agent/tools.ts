@@ -15,6 +15,7 @@ import {
   formatearSucursal,
   ciudadesConSucursal,
 } from "../knowledge/sucursales.js";
+import { infoArea, areasDisponibles } from "../knowledge/contactos.js";
 
 export const TOOLS: Anthropic.Tool[] = [
   {
@@ -46,6 +47,23 @@ export const TOOLS: Anthropic.Tool[] = [
         },
       },
       required: [],
+    },
+  },
+  {
+    name: "consultar_area",
+    description:
+      "Devuelve cómo atender una consulta frecuente o a qué área derivar al cliente. Úsala para: catálogo, contacto de asesor, cotización, direcciones, Recursos Humanos / envío de CV, compras y servicios, reclamos, cómo ser distribuidor, y productos en descuento/ofertas.",
+    input_schema: {
+      type: "object",
+      properties: {
+        area: {
+          type: "string",
+          enum: areasDisponibles(),
+          description:
+            "Área o tema de la consulta. Valores: catalogo, asesor, cotizacion, direcciones, recursos_humanos, compras_servicios, reclamos, distribuidores, ofertas.",
+        },
+      },
+      required: ["area"],
     },
   },
   {
@@ -91,6 +109,11 @@ export function executeTool(name: string, input: Record<string, unknown>): ToolE
       const ciudad = typeof input.ciudad === "string" ? input.ciudad : undefined;
       const sucursales = sucursalesPorCiudad(ciudad);
       return { content: sucursales.map(formatearSucursal).join("\n\n") };
+    }
+
+    case "consultar_area": {
+      const area = typeof input.area === "string" ? input.area : "";
+      return { content: infoArea(area) };
     }
 
     case "escalar_a_humano": {
