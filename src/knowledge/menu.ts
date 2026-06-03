@@ -57,27 +57,37 @@ export const MENU: SeccionMenu[] = [
   },
 ];
 
-/** Renderiza el menú principal (solo las 4 secciones). */
+/** Renderiza el menú principal (solo las 4 secciones). Estética "Editorial de diseño". */
 export function menuPrincipal(): string {
-  const lineas = ["¿En qué podemos ayudarle hoy? 🙂", ""];
+  const lineas = [
+    "*GLADYMAR*",
+    "_Donde sus espacios cobran vida_",
+    "",
+    "Bienvenido a una experiencia de diseño y acabados de excelencia.",
+    "",
+    "¿Cómo podemos ayudarle hoy?",
+    "",
+  ];
   for (const s of MENU) {
-    lineas.push(`*${s.id}.* ${s.titulo}`);
+    lineas.push(`◆ *${s.id}.* ${s.titulo}`);
   }
-  lineas.push("", "Responda con el número o escríbame su consulta.");
+  lineas.push("", "_Indíqueme el número o escríbame su consulta._");
   return lineas.join("\n");
 }
 
 /** Renderiza el submenú de una sección (por id "1".."4" o por título aproximado). */
 export function submenu(seccionId: string): string {
-  const s = MENU.find((x) => x.id === seccionId) ?? MENU.find((x) => normalizar(x.titulo).includes(normalizar(seccionId)));
+  const s =
+    MENU.find((x) => x.id === seccionId) ??
+    MENU.find((x) => normalizar(x.titulo).includes(normalizar(seccionId)));
   if (!s) {
     return menuPrincipal();
   }
-  const lineas = [`*${s.id}. ${s.titulo}*`, ""];
+  const lineas = [`◆ *${s.id}. ${s.titulo}*`, ""];
   for (const o of s.opciones) {
-    lineas.push(`  *${o.id}* ${o.titulo}`);
+    lineas.push(`   *${o.id}*  ${o.titulo}`);
   }
-  lineas.push("", "Responda con el número o escríbame su consulta.");
+  lineas.push("", "_Indíqueme el número o escríbame su consulta._");
   return lineas.join("\n");
 }
 

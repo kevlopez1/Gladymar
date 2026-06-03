@@ -47,7 +47,7 @@ export const TEMAS: Record<string, Tema> = {
       "• Mayor absorción y algo menos resistente.\n" +
       "• Ideal para *paredes* y ambientes de tránsito bajo/medio.\n" +
       "• Más liviana, fácil de cortar y más económica.\n\n" +
-      "👉 En resumen: para pisos de mucho uso o exteriores, *porcelanato*; para paredes o presupuestos ajustados, *cerámica*. Un asesor puede recomendarle el producto exacto según su proyecto.",
+      "◆ En resumen: para pisos de mucho uso o exteriores, *porcelanato*; para paredes o presupuestos ajustados, *cerámica*. Un asesor puede recomendarle el producto exacto según su proyecto.",
     confirmado: true,
   },
 
@@ -60,7 +60,7 @@ export const TEMAS: Record<string, Tema> = {
       "• *Pisos exteriores o zonas húmedas*: adhesivo de alto desempeño / flexible.\n" +
       "• *Cerámica en paredes/interiores*: adhesivo estándar suele ser suficiente.\n\n" +
       "Recomendaciones generales: prepare bien la superficie (nivelada y limpia), use llana dentada del tamaño adecuado y respete los tiempos de fragüe.\n" +
-      "👉 Gladymar cuenta con adhesivos y complementos. Para el producto y rendimiento exactos según su m² y formato, confírmelo con un asesor en sucursal.",
+      "◆ Gladymar cuenta con adhesivos y complementos. Para el producto y rendimiento exactos según su m² y formato, confírmelo con un asesor en sucursal.",
     confirmado: true,
   },
 
