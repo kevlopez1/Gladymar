@@ -113,12 +113,24 @@ El servidor escucha en `http://localhost:3000` (configurable con `PORT`).
 
 1. Meta entrega los mensajes entrantes a `POST /webhook`.
 2. `brain.ts` arma el historial del usuario y llama a Claude con:
-   - el **prompt del sistema** (persona + base de conocimiento), **cacheado** para reducir costo y latencia;
-   - las **herramientas** (`buscar_productos`, `buscar_sucursales`, `escalar_a_humano`).
+   - el **prompt del sistema** (persona + base de conocimiento + menú), **cacheado** para reducir costo y latencia;
+   - las **herramientas** (`mostrar_menu`, `buscar_productos`, `buscar_sucursales`, `info_tema`, `registrar_solicitud`).
 3. Si Claude pide una herramienta, se ejecuta y se le devuelve el resultado (loop hasta la respuesta final).
 4. La respuesta se envía por WhatsApp y el historial se guarda por número (multi-turno, con expiración por TTL).
 
 ---
+
+## 🧭 Menú de atención
+
+El agente guía al cliente con este menú (definido en `src/knowledge/menu.ts`). Entiende tanto números (ej. `2.3`) como lenguaje natural:
+
+1. **Diseñar mi espacio** → 1.1 Roomvo · 1.2 Contactar asesor
+2. **Cotizar productos** → 2.1 Catálogo · 2.2 Asesoramiento · 2.3 Diferencias cerámica/porcelanato · 2.4 Pegamento recomendado · 2.5 Contactar asesor
+3. **Seguimiento de pedidos** → 3.1 Contactar asesor (por el momento)
+4. **Soporte y reclamos** → 4.1 Ubicaciones · 4.2 Teléfonos · 4.3 Horarios · 4.4 Manual de asentamiento · 4.5 Registro de reclamos · 4.6 Soluciones a problemas frecuentes · 4.7 Agendar visita técnica
+
+> El agente **no genera cotizaciones**: conecta al cliente con un asesor de ventas.
+> Los contenidos/enlaces marcados *POR CONFIRMAR* (Roomvo, manual de asentamiento, soluciones oficiales, contactos de áreas) están en `src/knowledge/temas.ts` y `src/knowledge/contactos.ts` para completarse con datos oficiales.
 
 ## 🛠️ Personalización
 

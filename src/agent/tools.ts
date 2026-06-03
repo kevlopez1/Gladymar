@@ -6,29 +6,54 @@
  * el prompt cache (las tools se renderizan antes del system prompt).
  */
 import type Anthropic from "@anthropic-ai/sdk";
-import {
-  buscarCategorias,
-  formatearCategoria,
-} from "../knowledge/productos.js";
+import { buscarCategorias, formatearCategoria } from "../knowledge/productos.js";
 import {
   sucursalesPorCiudad,
   formatearSucursal,
   ciudadesConSucursal,
 } from "../knowledge/sucursales.js";
-import { infoArea, areasDisponibles } from "../knowledge/contactos.js";
+import { menuPrincipal, submenu } from "../knowledge/menu.js";
+import { infoTema, temasDisponibles } from "../knowledge/temas.js";
+import { AREAS } from "../knowledge/contactos.js";
+
+const TIPOS_SOLICITUD = [
+  "contactar_asesor",
+  "cotizacion",
+  "seguimiento_pedido",
+  "reclamo",
+  "visita_tecnica",
+  "recursos_humanos",
+  "compras_servicios",
+  "distribuidor",
+  "otro",
+] as const;
 
 export const TOOLS: Anthropic.Tool[] = [
   {
+    name: "mostrar_menu",
+    description:
+      "Muestra el menú de atención de Gladymar. Sin argumentos muestra el menú principal (1. Diseñar mi espacio, 2. Cotizar productos, 3. Seguimiento de pedidos, 4. Soporte y reclamos). Con 'seccion' muestra el submenú de esa sección. Úsala cuando el cliente saluda, pide opciones, o no sabe qué necesita.",
+    input_schema: {
+      type: "object",
+      properties: {
+        seccion: {
+          type: "string",
+          description: "Número de sección a expandir: '1', '2', '3' o '4'. Vacío para el menú principal.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "buscar_productos",
     description:
-      "Busca categorías de productos de Gladymar por palabra clave o tema (ej. 'porcelanato', 'piso', 'baño', 'grifería', 'pegamento'). Devuelve descripción, formatos, marcas y precio referencial. Usa esta herramienta antes de hablar de productos en concreto.",
+      "Busca categorías de productos de Gladymar por palabra clave (ej. 'porcelanato', 'piso', 'baño', 'pegamento'). Devuelve descripción, formatos, marcas y precio referencial. Úsala para catálogo y asesoramiento de productos.",
     input_schema: {
       type: "object",
       properties: {
         consulta: {
           type: "string",
-          description:
-            "Palabra clave o tema del producto que busca el cliente. Déjalo vacío para listar todas las categorías.",
+          description: "Palabra clave o tema del producto. Vacío para listar todas las categorías.",
         },
       },
       required: [],
@@ -37,52 +62,53 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "buscar_sucursales",
     description:
-      "Devuelve las sucursales de Gladymar con dirección, teléfono, WhatsApp y horario. Filtra por ciudad si se indica. Usa esta herramienta siempre que el cliente pida ubicaciones, horarios o números de contacto.",
+      "Devuelve las sucursales de Gladymar con dirección, teléfono, WhatsApp y horario. Úsala para ubicaciones, teléfonos y horarios (sección 4). Filtra por ciudad si se indica.",
     input_schema: {
       type: "object",
       properties: {
         ciudad: {
           type: "string",
-          description: `Ciudad para filtrar. Ciudades disponibles: ${ciudadesConSucursal().join(", ")}. Déjalo vacío para listar todas.`,
+          description: `Ciudad para filtrar. Disponibles: ${ciudadesConSucursal().join(", ")}. Vacío para todas.`,
         },
       },
       required: [],
     },
   },
   {
-    name: "consultar_area",
+    name: "info_tema",
     description:
-      "Devuelve cómo atender una consulta frecuente o a qué área derivar al cliente. Úsala para: catálogo, contacto de asesor, cotización, direcciones, Recursos Humanos / envío de CV, compras y servicios, reclamos, cómo ser distribuidor, y productos en descuento/ofertas.",
+      "Devuelve contenido informativo o enlaces sobre un tema del menú: Roomvo (visualizador), catálogo, diferencias entre cerámica y porcelanato, tipo de pegamento recomendado, manual de asentamiento y soluciones a problemas frecuentes.",
     input_schema: {
       type: "object",
       properties: {
-        area: {
+        tema: {
           type: "string",
-          enum: areasDisponibles(),
+          enum: temasDisponibles(),
           description:
-            "Área o tema de la consulta. Valores: catalogo, asesor, cotizacion, direcciones, recursos_humanos, compras_servicios, reclamos, distribuidores, ofertas.",
+            "Tema: roomvo, catalogo, diferencias_ceramica_porcelanato, pegamento_recomendado, manual_asentamiento, soluciones_frecuentes.",
         },
       },
-      required: ["area"],
+      required: ["tema"],
     },
   },
   {
-    name: "escalar_a_humano",
+    name: "registrar_solicitud",
     description:
-      "Deriva la conversación a un asesor humano de Gladymar. Úsala cuando el cliente quiere comprar/cotizar formalmente, hacer un reclamo, pide hablar con una persona, o cuando no puedes resolver su consulta. Si conoces la ciudad del cliente, pásala para sugerir la sucursal más cercana.",
+      "Registra y deriva una solicitud que requiere a una persona/área: contactar asesor, cotización, seguimiento de pedidos, reclamo, agendar visita técnica, RR.HH./CV, compras y servicios, o ser distribuidor. Toma los datos del cliente y devuelve la guía de derivación. Úsala cuando el caso no se resuelve solo con información.",
     input_schema: {
       type: "object",
       properties: {
-        ciudad: {
+        tipo: {
           type: "string",
-          description: "Ciudad del cliente, si se conoce, para sugerir la sucursal más conveniente.",
+          enum: [...TIPOS_SOLICITUD],
+          description: "Tipo de solicitud a registrar/derivar.",
         },
-        motivo: {
-          type: "string",
-          description: "Resumen breve del motivo de la derivación (ej. 'cotización de porcelanato 60x60').",
-        },
+        ciudad: { type: "string", description: "Ciudad del cliente (si se conoce), para sugerir la sucursal más conveniente." },
+        nombre: { type: "string", description: "Nombre del cliente, si lo proporcionó." },
+        telefono: { type: "string", description: "Teléfono/WhatsApp de contacto, si lo proporcionó." },
+        detalle: { type: "string", description: "Resumen del caso (ej. 'reclamo: piso suena hueco', 'cotización porcelanato 60x60', 'visita técnica en Equipetrol')." },
       },
-      required: ["motivo"],
+      required: ["tipo", "detalle"],
     },
   },
 ];
@@ -90,7 +116,7 @@ export const TOOLS: Anthropic.Tool[] = [
 /** Resultado de ejecutar una herramienta: texto que vuelve a Claude. */
 export interface ToolExecution {
   content: string;
-  /** Marca para que la capa de WhatsApp sepa que hubo una derivación. */
+  /** Marca para que la capa de WhatsApp/registro sepa que hubo una derivación. */
   escalated?: boolean;
 }
 
@@ -99,42 +125,108 @@ export interface ToolExecution {
  */
 export function executeTool(name: string, input: Record<string, unknown>): ToolExecution {
   switch (name) {
+    case "mostrar_menu": {
+      const seccion = typeof input.seccion === "string" ? input.seccion.trim() : "";
+      return { content: seccion ? submenu(seccion) : menuPrincipal() };
+    }
+
     case "buscar_productos": {
       const consulta = typeof input.consulta === "string" ? input.consulta : undefined;
-      const categorias = buscarCategorias(consulta);
-      return { content: categorias.map(formatearCategoria).join("\n\n") };
+      return { content: buscarCategorias(consulta).map(formatearCategoria).join("\n\n") };
     }
 
     case "buscar_sucursales": {
       const ciudad = typeof input.ciudad === "string" ? input.ciudad : undefined;
-      const sucursales = sucursalesPorCiudad(ciudad);
-      return { content: sucursales.map(formatearSucursal).join("\n\n") };
+      return { content: sucursalesPorCiudad(ciudad).map(formatearSucursal).join("\n\n") };
     }
 
-    case "consultar_area": {
-      const area = typeof input.area === "string" ? input.area : "";
-      return { content: infoArea(area) };
+    case "info_tema": {
+      const tema = typeof input.tema === "string" ? input.tema : "";
+      return { content: infoTema(tema) };
     }
 
-    case "escalar_a_humano": {
-      const ciudad = typeof input.ciudad === "string" ? input.ciudad : undefined;
-      const motivo = typeof input.motivo === "string" ? input.motivo : "consulta general";
-      const sucursales = sucursalesPorCiudad(ciudad).filter((s) => s.whatsapp);
-      const contacto = sucursales[0];
-      const lineas = [
-        `Derivación registrada (motivo: ${motivo}).`,
-        contacto
-          ? `Sugiere al cliente escribir a un asesor de la sucursal *${contacto.ciudad} – ${contacto.nombre}*` +
-            (contacto.whatsapp ? ` por WhatsApp al ${contacto.whatsapp}` : "") +
-            (contacto.telefono ? ` o al teléfono ${contacto.telefono}` : "") +
-            "."
-          : "Sugiere al cliente acercarse a la sucursal más cercana o visitar gladymar.com.bo.",
-        "Confirma al cliente que un asesor podrá darle precios vigentes, stock y cotización formal.",
-      ];
-      return { content: lineas.join(" "), escalated: true };
-    }
+    case "registrar_solicitud":
+      return registrarSolicitud(input);
 
     default:
       return { content: `Error: herramienta desconocida "${name}".` };
+  }
+}
+
+function registrarSolicitud(input: Record<string, unknown>): ToolExecution {
+  const tipo = typeof input.tipo === "string" ? input.tipo : "otro";
+  const ciudad = typeof input.ciudad === "string" ? input.ciudad : undefined;
+  const detalle = typeof input.detalle === "string" ? input.detalle : "consulta general";
+  const nombre = typeof input.nombre === "string" ? input.nombre : undefined;
+
+  // En producción aquí se guardaría la solicitud (DB/CRM) y/o se notificaría al área.
+  console.log(`📝 Solicitud [${tipo}] ${ciudad ? `(${ciudad}) ` : ""}${nombre ? `de ${nombre} ` : ""}- ${detalle}`);
+
+  const contactoSucursal = (): string => {
+    const conWa = sucursalesPorCiudad(ciudad).filter((s) => s.whatsapp);
+    const s = conWa[0];
+    if (!s) return "Sugiere acercarse a la sucursal más cercana o visitar gladymar.com.bo.";
+    return (
+      `Conecta al cliente con un asesor de la sucursal *${s.ciudad} – ${s.nombre}*` +
+      (s.whatsapp ? ` (WhatsApp ${s.whatsapp}` : "") +
+      (s.telefono ? `, tel. ${s.telefono})` : s.whatsapp ? ")" : "") +
+      "."
+    );
+  };
+
+  // Para áreas administrativas usamos los datos de contactos.ts (pueden estar "por confirmar").
+  const areaAdmin = (id: string): ToolExecution => {
+    const area = AREAS[id];
+    const base = area ? area.contacto : "No tengo el contacto de esta área.";
+    return {
+      content: `Solicitud registrada (${detalle}). ${base}`,
+      escalated: true,
+    };
+  };
+
+  switch (tipo) {
+    case "contactar_asesor":
+    case "cotizacion":
+    case "seguimiento_pedido":
+      return {
+        content:
+          `Solicitud registrada (${detalle}). ` +
+          (tipo === "cotizacion"
+            ? "Recuerda: la cotización la realiza un asesor, no este canal. "
+            : "") +
+          contactoSucursal(),
+        escalated: true,
+      };
+
+    case "reclamo":
+      return {
+        content:
+          `Reclamo registrado (${detalle}). Discúlpate por el inconveniente y confirma que un responsable dará seguimiento. ` +
+          "Si aplica, ofrece agendar una visita técnica. " +
+          contactoSucursal(),
+        escalated: true,
+      };
+
+    case "visita_tecnica":
+      return {
+        content:
+          `Solicitud de visita técnica registrada (${detalle}). ` +
+          "Confirma datos de contacto y dirección para coordinar la visita; un asesor/técnico se pondrá en contacto. " +
+          contactoSucursal(),
+        escalated: true,
+      };
+
+    case "recursos_humanos":
+      return areaAdmin("recursos_humanos");
+    case "compras_servicios":
+      return areaAdmin("compras_servicios");
+    case "distribuidor":
+      return areaAdmin("distribuidores");
+
+    default:
+      return {
+        content: `Solicitud registrada (${detalle}). ` + contactoSucursal(),
+        escalated: true,
+      };
   }
 }
