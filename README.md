@@ -106,6 +106,9 @@ El servidor escucha en `http://localhost:3000` (configurable con `PORT`).
 | `WHATSAPP_API_VERSION` | Versión de la Graph API (default `v21.0`). |
 | `WHATSAPP_VERIFY_TOKEN` | Token de verificación del webhook (lo inventas tú). |
 | `SESSION_TTL_MINUTES` | Minutos de inactividad antes de reiniciar una conversación. |
+| `SURVEY_URL` | Enlace de la encuesta de satisfacción. |
+| `SURVEY_DELAY_MINUTES` | Minutos de inactividad para enviar la encuesta (0 = desactivar). |
+| `MANUAL_ASENTAMIENTO_URL` | Enlace público al PDF del Manual de Asentamiento (vacío = no se adjunta). |
 
 ---
 
@@ -117,6 +120,8 @@ El servidor escucha en `http://localhost:3000` (configurable con `PORT`).
    - las **herramientas** (`mostrar_menu`, `buscar_productos`, `buscar_sucursales`, `info_tema`, `registrar_solicitud`).
 3. Si Claude pide una herramienta, se ejecuta y se le devuelve el resultado (loop hasta la respuesta final).
 4. La respuesta se envía por WhatsApp y el historial se guarda por número (multi-turno, con expiración por TTL).
+5. **Encuesta de satisfacción**: tras `SURVEY_DELAY_MINUTES` de inactividad (fin de conversación), se envía automáticamente el enlace de la encuesta una sola vez.
+6. **Manual de Asentamiento**: si el cliente lo solicita y `MANUAL_ASENTAMIENTO_URL` está configurado, el agente adjunta el PDF (Tríptico de Colocación).
 
 ---
 

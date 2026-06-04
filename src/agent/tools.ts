@@ -22,7 +22,6 @@ const TIPOS_SOLICITUD = [
   "seguimiento_pedido",
   "reclamo",
   "visita_tecnica",
-  "recursos_humanos",
   "compras_servicios",
   "distribuidor",
   "otro",
@@ -118,6 +117,8 @@ export interface ToolExecution {
   content: string;
   /** Marca para que la capa de WhatsApp/registro sepa que hubo una derivación. */
   escalated?: boolean;
+  /** El cliente pidió el Manual de Asentamiento: la capa de WhatsApp adjuntará el PDF si hay enlace. */
+  attachManual?: boolean;
 }
 
 /**
@@ -137,12 +138,15 @@ export function executeTool(name: string, input: Record<string, unknown>): ToolE
 
     case "buscar_sucursales": {
       const ciudad = typeof input.ciudad === "string" ? input.ciudad : undefined;
-      return { content: sucursalesPorCiudad(ciudad).map(formatearSucursal).join("\n\n") };
+      const lista = sucursalesPorCiudad(ciudad).map(formatearSucursal).join("\n\n");
+      return {
+        content: `${lista}\n\n_Los enlaces de ubicación (GPS) están disponibles en gladymar.com.bo_`,
+      };
     }
 
     case "info_tema": {
       const tema = typeof input.tema === "string" ? input.tema : "";
-      return { content: infoTema(tema) };
+      return { content: infoTema(tema), attachManual: tema === "manual_asentamiento" };
     }
 
     case "registrar_solicitud":
@@ -216,8 +220,6 @@ function registrarSolicitud(input: Record<string, unknown>): ToolExecution {
         escalated: true,
       };
 
-    case "recursos_humanos":
-      return areaAdmin("recursos_humanos");
     case "compras_servicios":
       return areaAdmin("compras_servicios");
     case "distribuidor":

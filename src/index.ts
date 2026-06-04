@@ -9,14 +9,28 @@ import express from "express";
 import { config } from "./config.js";
 import { GladymarAgent } from "./agent/brain.js";
 import { InMemorySessionStore } from "./session/store.js";
-import { sendText, markAsRead } from "./whatsapp/client.js";
+import { sendText, sendDocument, markAsRead } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages } from "./whatsapp/webhook.js";
+import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 
 const store = new InMemorySessionStore(config.session.ttlMinutes);
 const agent = new GladymarAgent({
   apiKey: config.anthropic.apiKey,
   model: config.anthropic.model,
   store,
+});
+
+// Encuesta de satisfacción: se envía tras N minutos de inactividad (fin de conversación).
+const survey = new SurveyScheduler({
+  delayMs: config.survey.delayMinutes * 60 * 1000,
+  onFire: async (userId) => {
+    try {
+      await sendText(userId, buildSurveyMessage(config.survey.url));
+      console.log(`📨 Encuesta de satisfacción enviada a ${userId}`);
+    } catch (err) {
+      console.error(`No se pudo enviar la encuesta a ${userId}:`, err);
+    }
+  },
 });
 
 const app = express();
@@ -60,10 +74,27 @@ async function handleIncoming(msg: {
 }): Promise<void> {
   console.log(`📩 ${msg.from}${msg.name ? ` (${msg.name})` : ""}: ${msg.text}`);
   void markAsRead(msg.messageId);
+  // Cada mensaje reinicia el temporizador de la encuesta (fin de conversación por inactividad).
+  survey.onActivity(msg.from);
 
   try {
     const reply = await agent.handleMessage(msg.from, msg.text);
     await sendText(msg.from, reply.text);
+
+    // Adjunta el Manual de Asentamiento (PDF) si el cliente lo pidió y hay enlace configurado.
+    if (reply.attachManual && config.assets.manualUrl) {
+      try {
+        await sendDocument(
+          msg.from,
+          config.assets.manualUrl,
+          "Gladymar - Manual de Asentamiento.pdf",
+          "Manual de Asentamiento (Tríptico de Colocación) ◆ Gladymar",
+        );
+      } catch (err) {
+        console.error(`No se pudo adjuntar el manual a ${msg.from}:`, err);
+      }
+    }
+
     if (reply.escalated) {
       console.log(`🔔 Derivación a humano para ${msg.from}`);
     }

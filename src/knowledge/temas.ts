@@ -17,10 +17,11 @@ export interface Tema {
 export const TEMAS: Record<string, Tema> = {
   roomvo: {
     id: "roomvo",
-    titulo: "Roomvo – Visualizador de ambientes",
+    titulo: "Roomvo – Simulador de ambientes",
     contenido:
-      "Con *Roomvo* puede ver cómo quedan nuestros productos en su propio espacio: sube una foto de su ambiente y prueba pisos y revestimientos.\n" +
-      "⚠️ POR CONFIRMAR: enlace oficial de Roomvo de Gladymar. (Mientras no lo tengas, ofrece conectarlo con un asesor o remitir a https://gladymar.com.bo).",
+      "Estamos preparando *Roomvo*, nuestro simulador para ver cómo lucen nuestros productos en su propio espacio (sube una foto y prueba pisos y revestimientos).\n" +
+      "Aún está en implementación; muy pronto estará disponible en https://gladymar.com.bo.\n" +
+      "⚠️ POR CONFIRMAR: enlace definitivo del simulador. Mientras tanto, ofrece acompañar al cliente con un asesor para visualizar opciones de su proyecto.",
     confirmado: false,
   },
 
@@ -66,10 +67,10 @@ export const TEMAS: Record<string, Tema> = {
 
   manual_asentamiento: {
     id: "manual_asentamiento",
-    titulo: "Manual de asentamiento (colocación)",
+    titulo: "Manual de asentamiento (Tríptico de colocación)",
     contenido:
-      "El manual de asentamiento explica cómo colocar correctamente pisos y revestimientos.\n" +
-      "⚠️ POR CONFIRMAR: enlace/PDF oficial del manual de asentamiento de Gladymar. (Mientras no lo tengas, ofrece enviarlo cuando esté disponible o conectar con un asesor).",
+      "Contamos con el *Tríptico de Colocación* (manual de asentamiento) que explica cómo colocar correctamente pisos y revestimientos.\n" +
+      "⚠️ POR CONFIRMAR: enlace/PDF para compartir por WhatsApp (archivo oficial: TRIPTICO COLOCADO.pdf). Mientras se carga, ofrece que un asesor se lo facilite.",
     confirmado: false,
   },
 

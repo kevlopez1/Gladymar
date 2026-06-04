@@ -1,9 +1,13 @@
 /**
  * Sucursales de Cerámica Gladymar.
  *
- * Datos recopilados de fuentes públicas (sitio web, Facebook, directorios).
- * ⚠️ VERIFICA con Gladymar: teléfonos, WhatsApp, direcciones y horarios exactos
- * antes de producción. Los números de WhatsApp aquí son referenciales.
+ * Las marcadas `confirmado: true` provienen del listado OFICIAL enviado por
+ * Gladymar (Andrés Tejada). Las marcadas `confirmado: false` provienen de
+ * fuentes públicas y están PENDIENTES de confirmación oficial (el mensaje
+ * oficial se cortó tras "La Paz – Montes"; faltan datos de Montes, Ingavi,
+ * Juan Pablo II y Cochabamba).
+ *
+ * Nota: los enlaces de ubicación (GPS) de cada sucursal están en gladymar.com.bo.
  */
 
 export interface Sucursal {
@@ -13,39 +17,65 @@ export interface Sucursal {
   telefono?: string;
   whatsapp?: string;
   horario?: string;
+  /** true = dato oficial confirmado por Gladymar; false = fuente pública por confirmar. */
+  confirmado: boolean;
 }
 
 export const SUCURSALES: Sucursal[] = [
-  // ── Santa Cruz ──
+  // ── Santa Cruz (oficial) ──
   {
     ciudad: "Santa Cruz",
-    nombre: "Parque Industrial",
-    direccion: "Parque Industrial Mz. 12",
-    telefono: "3466868",
-    whatsapp: "71656258",
-    horario: "Lun-Vie 08:30-16:30, Sáb 09:00-13:00",
+    nombre: "Gladymar Plus",
+    direccion: "Av. Banzer, 3er anillo interno",
+    telefono: "3441616",
+    whatsapp: "67703821",
+    horario: "Lun-Vie 09:00-18:30, Sáb 09:00-13:00",
+    confirmado: true,
   },
   {
     ciudad: "Santa Cruz",
-    nombre: "Av. Santa Cruz",
-    direccion: "Av. Santa Cruz #2015 esq. Guapay (Canal Cotoca)",
+    nombre: "Canal Cotoca",
+    direccion: "Av. Santa Cruz #2015 esq. Guapay",
     telefono: "3468383",
     whatsapp: "72238416",
     horario: "Lun-Vie 08:30-18:30, Sáb 09:00-13:00",
+    confirmado: true,
   },
   {
     ciudad: "Santa Cruz",
-    nombre: "Av. Circunvalación Este",
-    direccion: "Av. Circunvalación Este, calle 19 de Agosto",
-    whatsapp: "67895527",
+    nombre: "Fábrica (Parque Industrial)",
+    direccion: "Parque Industrial Mz. 11",
+    telefono: "3466868",
+    whatsapp: "71656258",
     horario: "Lun-Vie 08:30-16:30, Sáb 09:00-13:00",
+    confirmado: true,
   },
   {
     ciudad: "Santa Cruz",
     nombre: "Montero",
-    direccion: "Calle Warnes esq. Oruro, Montero",
+    direccion: "Av. Circunvalación Este, C/ 19 de Agosto",
+    whatsapp: "67895527",
+    horario: "Lun-Vie 08:30-16:30, Sáb 09:00-13:00",
+    confirmado: true,
   },
   // ── La Paz ──
+  {
+    ciudad: "La Paz",
+    nombre: "Calacoto (Ballivián)",
+    direccion: "Calacoto, Av. Ballivián esq. calle 16",
+    telefono: "2774454",
+    whatsapp: "71557028",
+    horario: "Lun-Vie 08:30-18:30, Sáb 08:30-12:30",
+    confirmado: true,
+  },
+  {
+    ciudad: "La Paz",
+    nombre: "Montes",
+    direccion: "Av. Montes No. 560",
+    telefono: "2111519",
+    // WhatsApp y horario pendientes (el mensaje oficial se cortó aquí).
+    confirmado: false,
+  },
   {
     ciudad: "La Paz",
     nombre: "Ingavi",
@@ -53,22 +83,7 @@ export const SUCURSALES: Sucursal[] = [
     telefono: "6650517",
     whatsapp: "72987241",
     horario: "Lun-Vie 08:30-12:30 y 14:30-18:30, Sáb 08:30-12:30",
-  },
-  {
-    ciudad: "La Paz",
-    nombre: "Calacoto",
-    direccion: "Av. Ballivián esq. calle 16, Calacoto",
-    telefono: "2774454",
-    whatsapp: "71557028",
-    horario: "Lun-Vie 08:30-18:30, Sáb 08:30-12:30",
-  },
-  {
-    ciudad: "La Paz",
-    nombre: "Montes",
-    direccion: "Av. Montes No. 560",
-    telefono: "2111519",
-    whatsapp: "67896857",
-    horario: "Lun-Vie 08:30-18:30, Sáb 08:30-12:30",
+    confirmado: false,
   },
   {
     ciudad: "La Paz",
@@ -77,19 +92,22 @@ export const SUCURSALES: Sucursal[] = [
     telefono: "2840141",
     whatsapp: "72001279",
     horario: "Lun-Vie 08:30-12:30 y 14:30-18:30, Sáb 08:30-12:30",
+    confirmado: false,
   },
-  // ── Cochabamba ──
+  // ── Cochabamba (por confirmar) ──
   {
     ciudad: "Cochabamba",
     nombre: "Blanco Galindo",
     direccion: "Av. Blanco Galindo O-1290",
     telefono: "4404036",
+    confirmado: false,
   },
   {
     ciudad: "Cochabamba",
     nombre: "Melchor Pérez de Olguín",
     direccion: "Av. Melchor Pérez de Olguín s/n",
     telefono: "4446695",
+    confirmado: false,
   },
 ];
 
@@ -108,10 +126,10 @@ export function sucursalesPorCiudad(ciudad?: string): Sucursal[] {
 
 /** Formatea una sucursal para mostrarla al cliente. */
 export function formatearSucursal(s: Sucursal): string {
-  const lineas = [`📍 *${s.ciudad} – ${s.nombre}*`, `   ${s.direccion}`];
-  if (s.telefono) lineas.push(`   ☎️ Teléfono: ${s.telefono}`);
-  if (s.whatsapp) lineas.push(`   💬 WhatsApp: ${s.whatsapp}`);
-  if (s.horario) lineas.push(`   🕐 ${s.horario}`);
+  const lineas = [`◆ *${s.ciudad} – ${s.nombre}*`, `   ${s.direccion}`];
+  if (s.telefono) lineas.push(`   Teléfono: ${s.telefono}`);
+  if (s.whatsapp) lineas.push(`   WhatsApp: ${s.whatsapp}`);
+  if (s.horario) lineas.push(`   ${s.horario}`);
   return lineas.join("\n");
 }
 

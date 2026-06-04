@@ -18,6 +18,8 @@ const MAX_TOOL_ROUNDS = 5; // tope de seguridad para el loop de herramientas
 export interface AgentReply {
   text: string;
   escalated: boolean;
+  /** El cliente pidió el Manual de Asentamiento (adjuntar PDF si hay enlace configurado). */
+  attachManual: boolean;
 }
 
 export class GladymarAgent {
@@ -49,6 +51,7 @@ export class GladymarAgent {
     messages.push({ role: "user", content: userText });
 
     let escalated = false;
+    let attachManual = false;
     let rounds = 0;
 
     let response = await this.create(messages);
@@ -63,6 +66,7 @@ export class GladymarAgent {
         if (block.type === "tool_use") {
           const result = executeTool(block.name, block.input as Record<string, unknown>);
           if (result.escalated) escalated = true;
+          if (result.attachManual) attachManual = true;
           toolResults.push({
             type: "tool_result",
             tool_use_id: block.id,
@@ -89,6 +93,7 @@ export class GladymarAgent {
     return {
       text: text || "Disculpe, no pude generar una respuesta. ¿Podría reformular su consulta?",
       escalated,
+      attachManual,
     };
   }
 

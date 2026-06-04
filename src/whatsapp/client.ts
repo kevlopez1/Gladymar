@@ -37,6 +37,39 @@ export async function sendText(to: string, body: string): Promise<void> {
 }
 
 /**
+ * Envía un documento (PDF) por WhatsApp a partir de un enlace público.
+ * Útil para el Manual de Asentamiento (Tríptico de Colocación) y catálogos.
+ * @param link URL pública y directa al archivo (debe ser accesible por Meta).
+ */
+export async function sendDocument(
+  to: string,
+  link: string,
+  filename: string,
+  caption?: string,
+): Promise<void> {
+  const url = `${BASE}/${config.whatsapp.phoneNumberId}/messages`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.whatsapp.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "document",
+      document: { link, filename, ...(caption ? { caption } : {}) },
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Error enviando documento WhatsApp (${res.status}): ${detail}`);
+  }
+}
+
+/**
  * Marca un mensaje entrante como leído (opcional, mejora la UX: doble check azul).
  */
 export async function markAsRead(messageId: string): Promise<void> {

@@ -36,6 +36,21 @@ export const config = {
   session: {
     ttlMinutes: Number(optional("SESSION_TTL_MINUTES", "120")),
   },
+
+  survey: {
+    // Encuesta de satisfacción que se envía tras finalizar la conversación.
+    url: optional("SURVEY_URL", "https://gladymar.com.bo/encuesta/"),
+    // Minutos de inactividad tras los cuales se considera "terminada" la
+    // conversación y se envía la encuesta (0 = desactivar).
+    delayMinutes: Number(optional("SURVEY_DELAY_MINUTES", "5")),
+  },
+
+  assets: {
+    // Enlace PÚBLICO y directo al Manual de Asentamiento (Tríptico de Colocación)
+    // en PDF. Si se define, el agente lo adjunta cuando el cliente lo solicita.
+    // Vacío => el agente solo lo menciona/ofrece (no adjunta el archivo).
+    manualUrl: optional("MANUAL_ASENTAMIENTO_URL", ""),
+  },
 };
 
 /**
