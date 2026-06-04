@@ -40,10 +40,10 @@ export const TEMAS: Record<string, Tema> = {
     titulo: "Diferencias entre cerámica y porcelanato",
     contenido:
       "*Porcelanato*\n" +
-      "• Muy baja absorción de agua (≈0,5% o menos) → más resistente a manchas y humedad.\n" +
-      "• Más duro y resistente al desgaste: ideal para *alto tránsito* y exteriores.\n" +
-      "• Disponible en formatos grandes (hasta 90x90 cm).\n" +
-      "• Mayor costo.\n\n" +
+      "• Muy baja absorción de agua (el Porcelanato by Gladymar tiene apenas *0,3%*, clasificado grupo *BIa*) → más resistente a manchas y humedad.\n" +
+      "• Altísima resistencia: el porcelanato Gladymar soporta hasta *310 Kgf* sin estar asentado.\n" +
+      "• Antibacterial e inerte, estructura vítrea y cero porosidad; no se altera con agua ni fuego.\n" +
+      "• Ideal para *alto tránsito* y exteriores. Formatos hasta 90x90 cm. Mayor costo.\n\n" +
       "*Cerámica*\n" +
       "• Mayor absorción y algo menos resistente.\n" +
       "• Ideal para *paredes* y ambientes de tránsito bajo/medio.\n" +
@@ -56,11 +56,12 @@ export const TEMAS: Record<string, Tema> = {
     id: "pegamento_recomendado",
     titulo: "Tipo de pegamento recomendado",
     contenido:
-      "La elección del pegamento (adhesivo) depende del material y la superficie:\n" +
-      "• *Porcelanato y gran formato*: adhesivo de *alto desempeño* (mayor adherencia).\n" +
-      "• *Pisos exteriores o zonas húmedas*: adhesivo de alto desempeño / flexible.\n" +
-      "• *Cerámica en paredes/interiores*: adhesivo estándar suele ser suficiente.\n\n" +
-      "Recomendaciones generales: prepare bien la superficie (nivelada y limpia), use llana dentada del tamaño adecuado y respete los tiempos de fragüe.\n" +
+      "Recomendaciones de colocado de Gladymar:\n" +
+      "• Use un *pegamento/adhesivo impermeable* para evitar desprendimientos por mala adherencia.\n" +
+      "• Aplíquelo con *llana dentada de 8 mm*.\n" +
+      "• El contrapiso/carpeta debe estar *bien nivelado, resistente e impermeabilizado* (hidrofugado), para evitar eflorescencias (salitre).\n" +
+      "• Antes de colocar, abra *4 o más cajas* y tome una pieza de cada una, para uniformar el tono.\n" +
+      "• Respete las juntas (de colocación, dilatación y unión).\n\n" +
       "◆ Gladymar cuenta con adhesivos y complementos. Para el producto y rendimiento exactos según su m² y formato, confírmelo con un asesor en sucursal.",
     confirmado: true,
   },
@@ -69,22 +70,26 @@ export const TEMAS: Record<string, Tema> = {
     id: "manual_asentamiento",
     titulo: "Manual de asentamiento (Tríptico de colocación)",
     contenido:
-      "Contamos con el *Tríptico de Colocación* (manual de asentamiento) que explica cómo colocar correctamente pisos y revestimientos.\n" +
-      "⚠️ POR CONFIRMAR: enlace/PDF para compartir por WhatsApp (archivo oficial: TRIPTICO COLOCADO.pdf). Mientras se carga, ofrece que un asesor se lo facilite.",
-    confirmado: false,
+      "Puntos clave para una colocación correcta (según Gladymar):\n" +
+      "• Pegamento *impermeable* + *llana dentada de 8 mm*.\n" +
+      "• Contrapiso nivelado, resistente e *impermeabilizado* (evita salitre/eflorescencias).\n" +
+      "• Abra *4+ cajas* y mezcle piezas para uniformar el tono.\n" +
+      "• Respete las juntas (colocación, dilatación y unión).\n\n" +
+      "Contamos con el *Tríptico de Colocación* completo. Si lo desea, se lo compartimos; un asesor también puede facilitárselo.",
+    confirmado: true,
   },
 
   soluciones_frecuentes: {
     id: "soluciones_frecuentes",
     titulo: "Soluciones a problemas frecuentes",
     contenido:
-      "Algunos casos comunes (orientativo):\n" +
-      "• *Suena hueco al pisar*: suele indicar falta de pegamento o mala colocación; puede requerir relevamiento.\n" +
-      "• *Diferencia de tono entre piezas*: revise que sean del mismo lote/calibre.\n" +
-      "• *Manchas en el fragüe (junta)*: limpieza con productos adecuados; evitar ácidos fuertes.\n" +
-      "• *Piezas rayadas o fisuradas tras la obra*: revisar manipulación y proceso de colocación.\n\n" +
-      "⚠️ POR CONFIRMAR: lista oficial de soluciones de Gladymar. Para un caso puntual, lo mejor es registrar el reclamo o agendar una *visita técnica*.",
-    confirmado: false,
+      "Casos comunes y su causa habitual:\n" +
+      "• *Piezas que se desprenden*: suele ser pegamento no impermeable o superficie mal preparada. Use adhesivo impermeable sobre un contrapiso firme.\n" +
+      "• *Manchas blancas / salitre (eflorescencia)*: falta de impermeabilización del contrapiso o carpeta.\n" +
+      "• *Diferencia de tono entre piezas*: coloque mezclando piezas de varias cajas (4+) y verifique lote/calibre.\n" +
+      "• *Suena hueco al pisar*: falta de pegamento o mala colocación.\n\n" +
+      "◆ Para un caso puntual, lo mejor es registrar el reclamo o agendar una *visita técnica*.",
+    confirmado: true,
   },
 };
 
