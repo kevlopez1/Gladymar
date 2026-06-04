@@ -1,11 +1,8 @@
 /**
- * Sucursales de Cerámica Gladymar.
+ * Sucursales de Cerámica Gladymar — listado OFICIAL completo.
  *
- * Las marcadas `confirmado: true` provienen del listado OFICIAL enviado por
- * Gladymar (Andrés Tejada). Las marcadas `confirmado: false` provienen de
- * fuentes públicas y están PENDIENTES de confirmación oficial (el mensaje
- * oficial se cortó tras "La Paz – Montes"; faltan datos de Montes, Ingavi,
- * Juan Pablo II y Cochabamba).
+ * Fuente: listado oficial proporcionado por Gladymar (Andrés Tejada).
+ * Cubre Santa Cruz, La Paz, Cochabamba, Sucre, Tarija, Oruro y Potosí.
  *
  * Nota: los enlaces de ubicación (GPS) de cada sucursal están en gladymar.com.bo.
  */
@@ -17,12 +14,10 @@ export interface Sucursal {
   telefono?: string;
   whatsapp?: string;
   horario?: string;
-  /** true = dato oficial confirmado por Gladymar; false = fuente pública por confirmar. */
-  confirmado: boolean;
 }
 
 export const SUCURSALES: Sucursal[] = [
-  // ── Santa Cruz (oficial) ──
+  // ── Santa Cruz ──
   {
     ciudad: "Santa Cruz",
     nombre: "Gladymar Plus",
@@ -30,7 +25,6 @@ export const SUCURSALES: Sucursal[] = [
     telefono: "3441616",
     whatsapp: "67703821",
     horario: "Lun-Vie 09:00-18:30, Sáb 09:00-13:00",
-    confirmado: true,
   },
   {
     ciudad: "Santa Cruz",
@@ -39,7 +33,6 @@ export const SUCURSALES: Sucursal[] = [
     telefono: "3468383",
     whatsapp: "72238416",
     horario: "Lun-Vie 08:30-18:30, Sáb 09:00-13:00",
-    confirmado: true,
   },
   {
     ciudad: "Santa Cruz",
@@ -48,7 +41,6 @@ export const SUCURSALES: Sucursal[] = [
     telefono: "3466868",
     whatsapp: "71656258",
     horario: "Lun-Vie 08:30-16:30, Sáb 09:00-13:00",
-    confirmado: true,
   },
   {
     ciudad: "Santa Cruz",
@@ -56,7 +48,6 @@ export const SUCURSALES: Sucursal[] = [
     direccion: "Av. Circunvalación Este, C/ 19 de Agosto",
     whatsapp: "67895527",
     horario: "Lun-Vie 08:30-16:30, Sáb 09:00-13:00",
-    confirmado: true,
   },
   // ── La Paz ──
   {
@@ -66,48 +57,73 @@ export const SUCURSALES: Sucursal[] = [
     telefono: "2774454",
     whatsapp: "71557028",
     horario: "Lun-Vie 08:30-18:30, Sáb 08:30-12:30",
-    confirmado: true,
   },
   {
     ciudad: "La Paz",
     nombre: "Montes",
     direccion: "Av. Montes No. 560",
     telefono: "2111519",
-    // WhatsApp y horario pendientes (el mensaje oficial se cortó aquí).
-    confirmado: false,
+    whatsapp: "67896857",
+    horario: "Lun-Vie 08:30-18:30, Sáb 08:30-12:30",
   },
   {
     ciudad: "La Paz",
-    nombre: "Ingavi",
+    nombre: "El Alto",
+    direccion: "Av. Juan Pablo II Nro. 3184, El Alto",
+    telefono: "2840141",
+    whatsapp: "72001279",
+    horario: "Lun-Vie 08:30-12:30 y 14:30-18:30, Sáb 08:30-12:30",
+  },
+  // ── Cochabamba ──
+  {
+    ciudad: "Cochabamba",
+    nombre: "Blanco Galindo",
+    direccion: "Av. Blanco Galindo No. 1532, Km 1½",
+    telefono: "4361466",
+    whatsapp: "67408846",
+    horario: "Lun-Vie 08:30-18:30, Sáb 09:00-13:00",
+  },
+  {
+    ciudad: "Cochabamba",
+    nombre: "Juan de la Rosa",
+    direccion: "Av. Juan de la Rosa 311 y Av. América",
+    telefono: "4361466",
+    whatsapp: "67408846",
+    horario: "Lun-Vie 08:30-18:30, Sáb 09:00-13:00",
+  },
+  // ── Sucre ──
+  {
+    ciudad: "Sucre",
+    nombre: "Sucre",
+    direccion: "Av. Ostria Gutiérrez N° 191, Zona Bancario",
+    telefono: "6422828",
+    whatsapp: "67900508",
+    horario: "Lun-Vie 08:30-12:30 y 14:30-18:30, Sáb 08:30-12:30",
+  },
+  // ── Tarija ──
+  {
+    ciudad: "Tarija",
+    nombre: "Tarija",
     direccion: "Av. La Paz esq. Ingavi",
     telefono: "6650517",
     whatsapp: "72987241",
     horario: "Lun-Vie 08:30-12:30 y 14:30-18:30, Sáb 08:30-12:30",
-    confirmado: false,
   },
+  // ── Oruro ──
   {
-    ciudad: "La Paz",
-    nombre: "Juan Pablo II",
-    direccion: "Av. Juan Pablo II Nro. 3184 (El Alto)",
-    telefono: "2840141",
-    whatsapp: "72001279",
-    horario: "Lun-Vie 08:30-12:30 y 14:30-18:30, Sáb 08:30-12:30",
-    confirmado: false,
+    ciudad: "Oruro",
+    nombre: "Oruro",
+    direccion: "C/ Pagador No. 5599 esq. C/ Caro",
+    whatsapp: "72303568",
+    horario: "Lun-Vie 08:00-18:00, Sáb 09:00-13:00",
   },
-  // ── Cochabamba (por confirmar) ──
+  // ── Potosí ──
   {
-    ciudad: "Cochabamba",
-    nombre: "Blanco Galindo",
-    direccion: "Av. Blanco Galindo O-1290",
-    telefono: "4404036",
-    confirmado: false,
-  },
-  {
-    ciudad: "Cochabamba",
-    nombre: "Melchor Pérez de Olguín",
-    direccion: "Av. Melchor Pérez de Olguín s/n",
-    telefono: "4446695",
-    confirmado: false,
+    ciudad: "Potosí",
+    nombre: "Potosí Central",
+    direccion: "C/ La Paz esq. Lucas Laime",
+    whatsapp: "69612800",
+    horario: "Lun-Vie 08:00-18:00, Sáb 09:00-13:00",
   },
 ];
 
@@ -116,11 +132,13 @@ export function ciudadesConSucursal(): string[] {
   return [...new Set(SUCURSALES.map((s) => s.ciudad))];
 }
 
-/** Filtra sucursales por ciudad (búsqueda flexible, sin tildes/mayúsculas). */
+/** Filtra sucursales por ciudad o nombre de sucursal (flexible, sin tildes/mayúsculas). */
 export function sucursalesPorCiudad(ciudad?: string): Sucursal[] {
   if (!ciudad) return SUCURSALES;
   const q = normalizar(ciudad);
-  const filtradas = SUCURSALES.filter((s) => normalizar(s.ciudad).includes(q));
+  const filtradas = SUCURSALES.filter(
+    (s) => normalizar(s.ciudad).includes(q) || normalizar(s.nombre).includes(q),
+  );
   return filtradas.length > 0 ? filtradas : SUCURSALES;
 }
 
