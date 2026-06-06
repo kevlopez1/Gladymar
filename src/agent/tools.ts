@@ -119,6 +119,8 @@ export interface ToolExecution {
   escalated?: boolean;
   /** El cliente pidió el Manual de Asentamiento: la capa de WhatsApp adjuntará el PDF si hay enlace. */
   attachManual?: boolean;
+  /** Datos de la solicitud registrada (para el log en Google Sheets). */
+  solicitud?: { tipo: string; detalle: string; nombre?: string; ciudad?: string; telefono?: string };
 }
 
 /**
@@ -162,8 +164,8 @@ function registrarSolicitud(input: Record<string, unknown>): ToolExecution {
   const ciudad = typeof input.ciudad === "string" ? input.ciudad : undefined;
   const detalle = typeof input.detalle === "string" ? input.detalle : "consulta general";
   const nombre = typeof input.nombre === "string" ? input.nombre : undefined;
+  const telefono = typeof input.telefono === "string" ? input.telefono : undefined;
 
-  // En producción aquí se guardaría la solicitud (DB/CRM) y/o se notificaría al área.
   console.log(`📝 Solicitud [${tipo}] ${ciudad ? `(${ciudad}) ` : ""}${nombre ? `de ${nombre} ` : ""}- ${detalle}`);
 
   const contactoSucursal = (): string => {
@@ -179,56 +181,47 @@ function registrarSolicitud(input: Record<string, unknown>): ToolExecution {
   };
 
   // Para áreas administrativas usamos los datos de contactos.ts (pueden estar "por confirmar").
-  const areaAdmin = (id: string): ToolExecution => {
+  const areaAdmin = (id: string): string => {
     const area = AREAS[id];
     const base = area ? area.contacto : "No tengo el contacto de esta área.";
-    return {
-      content: `Solicitud registrada (${detalle}). ${base}`,
-      escalated: true,
-    };
+    return `Solicitud registrada (${detalle}). ${base}`;
   };
 
+  let content: string;
   switch (tipo) {
     case "contactar_asesor":
     case "cotizacion":
     case "seguimiento_pedido":
-      return {
-        content:
-          `Solicitud registrada (${detalle}). ` +
-          (tipo === "cotizacion"
-            ? "Recuerda: la cotización la realiza un asesor, no este canal. "
-            : "") +
-          contactoSucursal(),
-        escalated: true,
-      };
-
+      content =
+        `Solicitud registrada (${detalle}). ` +
+        (tipo === "cotizacion" ? "Recuerda: la cotización la realiza un asesor, no este canal. " : "") +
+        contactoSucursal();
+      break;
     case "reclamo":
-      return {
-        content:
-          `Reclamo registrado (${detalle}). Discúlpate por el inconveniente y confirma que un responsable dará seguimiento. ` +
-          "Si aplica, ofrece agendar una visita técnica. " +
-          contactoSucursal(),
-        escalated: true,
-      };
-
+      content =
+        `Reclamo registrado (${detalle}). Discúlpate por el inconveniente y confirma que un responsable dará seguimiento. ` +
+        "Si aplica, ofrece agendar una visita técnica. " +
+        contactoSucursal();
+      break;
     case "visita_tecnica":
-      return {
-        content:
-          `Solicitud de visita técnica registrada (${detalle}). ` +
-          "Confirma datos de contacto y dirección para coordinar la visita; un asesor/técnico se pondrá en contacto. " +
-          contactoSucursal(),
-        escalated: true,
-      };
-
+      content =
+        `Solicitud de visita técnica registrada (${detalle}). ` +
+        "Confirma datos de contacto y dirección para coordinar la visita; un asesor/técnico se pondrá en contacto. " +
+        contactoSucursal();
+      break;
     case "compras_servicios":
-      return areaAdmin("compras_servicios");
+      content = areaAdmin("compras_servicios");
+      break;
     case "distribuidor":
-      return areaAdmin("distribuidores");
-
+      content = areaAdmin("distribuidores");
+      break;
     default:
-      return {
-        content: `Solicitud registrada (${detalle}). ` + contactoSucursal(),
-        escalated: true,
-      };
+      content = `Solicitud registrada (${detalle}). ` + contactoSucursal();
   }
+
+  return {
+    content,
+    escalated: true,
+    solicitud: { tipo, detalle, nombre, ciudad, telefono },
+  };
 }

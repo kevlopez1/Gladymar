@@ -51,6 +51,12 @@ export const config = {
     // Vacío => el agente solo lo menciona/ofrece (no adjunta el archivo).
     manualUrl: optional("MANUAL_ASENTAMIENTO_URL", ""),
   },
+
+  sheets: {
+    // URL del Web App de Google Apps Script para registrar cada interacción.
+    // Vacío => registro desactivado (solo consola). Ver README.
+    webhookUrl: optional("SHEETS_WEBHOOK_URL", ""),
+  },
 };
 
 /**

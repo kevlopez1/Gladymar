@@ -20,6 +20,8 @@ export interface AgentReply {
   escalated: boolean;
   /** El cliente pidió el Manual de Asentamiento (adjuntar PDF si hay enlace configurado). */
   attachManual: boolean;
+  /** Solicitud registrada en este turno (para el log en Google Sheets), si hubo. */
+  solicitud?: { tipo: string; detalle: string; nombre?: string; ciudad?: string; telefono?: string };
 }
 
 export class GladymarAgent {
@@ -52,6 +54,7 @@ export class GladymarAgent {
 
     let escalated = false;
     let attachManual = false;
+    let solicitud: AgentReply["solicitud"];
     let rounds = 0;
 
     let response = await this.create(messages);
@@ -67,6 +70,7 @@ export class GladymarAgent {
           const result = executeTool(block.name, block.input as Record<string, unknown>);
           if (result.escalated) escalated = true;
           if (result.attachManual) attachManual = true;
+          if (result.solicitud) solicitud = result.solicitud;
           toolResults.push({
             type: "tool_result",
             tool_use_id: block.id,
@@ -94,6 +98,7 @@ export class GladymarAgent {
       text: text || "Disculpe, no pude generar una respuesta. ¿Podría reformular su consulta?",
       escalated,
       attachManual,
+      solicitud,
     };
   }
 

@@ -137,6 +137,35 @@ El agente guía al cliente con este menú (definido en `src/knowledge/menu.ts`).
 > El agente **no genera cotizaciones**: conecta al cliente con un asesor de ventas.
 > Los contenidos/enlaces marcados *POR CONFIRMAR* (Roomvo, manual de asentamiento, soluciones oficiales, contactos de áreas) están en `src/knowledge/temas.ts` y `src/knowledge/contactos.ts` para completarse con datos oficiales.
 
+## 📊 Registro de clientes en Google Sheets
+
+Cada interacción del agente se registra como una fila en tu hoja de Google Sheets (fecha, teléfono, nombre, mensaje, respuesta, tipo de solicitud, detalle y si se derivó a un asesor).
+
+Se usa un **Google Apps Script** ligado a la hoja (no requiere credenciales en el servidor):
+
+1. Crea una hoja en Google Sheets. En la primera fila pon los encabezados:
+   `Fecha | Teléfono | Nombre | Mensaje | Respuesta | Tipo solicitud | Detalle | Escalado`
+2. Menú **Extensiones → Apps Script** y pega:
+   ```javascript
+   function doPost(e) {
+     var hoja = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+     var d = JSON.parse(e.postData.contents);
+     hoja.appendRow([
+       d.fecha, d.telefono, d.nombre || "", d.mensaje, d.respuesta,
+       d.tipo_solicitud || "", d.detalle || "", d.escalado ? "Sí" : "No"
+     ]);
+     return ContentService
+       .createTextOutput(JSON.stringify({ ok: true }))
+       .setMimeType(ContentService.MimeType.JSON);
+   }
+   ```
+3. **Implementar → Nueva implementación → Aplicación web**. Ejecutar como *tú*; acceso *Cualquier usuario*. Copia la URL.
+4. Pega esa URL en `.env` como `SHEETS_WEBHOOK_URL`.
+
+Si `SHEETS_WEBHOOK_URL` queda vacío, el registro se desactiva (solo consola).
+
+> Para producción de alto volumen o mayor control, esto puede migrarse a la API de Google Sheets con una cuenta de servicio.
+
 ## 🛠️ Personalización
 
 - **Productos / sucursales / empresa**: edita los archivos en `src/knowledge/`.

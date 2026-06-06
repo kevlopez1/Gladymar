@@ -12,6 +12,9 @@ import { InMemorySessionStore } from "./session/store.js";
 import { sendText, sendDocument, markAsRead } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
+import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
+
+const sheets = new SheetsLogger(config.sheets.webhookUrl);
 
 const store = new InMemorySessionStore(config.session.ttlMinutes);
 const agent = new GladymarAgent({
@@ -99,6 +102,18 @@ async function handleIncoming(msg: {
       console.log(`🔔 Derivación a humano para ${msg.from}`);
     }
     console.log(`🤖 -> ${msg.from}: ${reply.text.slice(0, 120)}...`);
+
+    // Registra la interacción en Google Sheets (no bloquea ni interrumpe si falla).
+    void sheets.log({
+      fecha: nowBolivia(),
+      telefono: msg.from,
+      nombre: msg.name,
+      mensaje: msg.text,
+      respuesta: reply.text,
+      tipo_solicitud: reply.solicitud?.tipo,
+      detalle: reply.solicitud?.detalle,
+      escalado: reply.escalated,
+    });
   } catch (err) {
     console.error(`Error atendiendo a ${msg.from}:`, err);
     try {
