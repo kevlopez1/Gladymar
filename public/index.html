@@ -6,68 +6,39 @@
 <title>Gladymar · Demo WhatsApp</title>
 <style>
   :root {
-    --wa-beige: #efe7de;
-    --wa-in: #ffffff;
-    --wa-out: #e7ffdb;
-    --wa-header: #f6f6f6;
-    --wa-text: #111b21;
-    --wa-meta: #667781;
-    --wa-blue: #53bdeb;
-    --wa-green: #25d366;
-    --wa-teal: #0a9d82;
-    --wa-red: #e2231a;
+    --wa-beige: #efe7de; --wa-in: #ffffff; --wa-out: #e7ffdb;
+    --wa-header: #f6f6f6; --wa-text: #111b21; --wa-meta: #667781;
+    --wa-blue: #53bdeb; --wa-teal: #0a9d82; --wa-green: #25d366; --wa-red: #e2231a;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; min-height: 100%; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     background: linear-gradient(160deg, #f3f5f7 0%, #e7ebef 100%);
-    min-height: 100dvh;
-    display: flex; align-items: center; justify-content: center;
-    padding: 14px;
+    min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 14px;
   }
-  /* Marco de teléfono (siempre visible, también en móvil) */
   .phone {
-    position: relative;
-    width: 100%; max-width: 400px;
+    position: relative; width: 100%; max-width: 400px;
     height: min(860px, calc(100dvh - 24px));
-    background: var(--wa-beige);
-    border-radius: 40px;
-    border: 9px solid #0c0c0e;
-    box-shadow: 0 22px 60px rgba(0,0,0,.28);
-    overflow: hidden; display: flex; flex-direction: column;
+    background: var(--wa-beige); border-radius: 40px; border: 9px solid #0c0c0e;
+    box-shadow: 0 22px 60px rgba(0,0,0,.28); overflow: hidden; display: flex; flex-direction: column;
   }
   @media (max-width: 430px) {
     body { padding: 6px; }
     .phone { border-width: 6px; border-radius: 30px; height: calc(100dvh - 12px); }
   }
-  /* Status bar iOS */
-  .statusbar {
-    background: var(--wa-header); flex: 0 0 auto;
-    padding: 9px 22px 3px; display: flex; justify-content: space-between;
-    align-items: center; font-size: 14px; font-weight: 600; color: #000;
-  }
+  .statusbar { background: var(--wa-header); flex: 0 0 auto; padding: 9px 22px 3px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; color: #000; }
   .statusbar .icons { display: flex; gap: 5px; align-items: center; }
-  /* Header */
-  .header {
-    background: var(--wa-header); flex: 0 0 auto; display: flex; align-items: center;
-    padding: 4px 10px 8px; gap: 7px; border-bottom: 1px solid #d9d9d9;
-  }
+  .header { background: var(--wa-header); flex: 0 0 auto; display: flex; align-items: center; padding: 4px 10px 8px; gap: 7px; border-bottom: 1px solid #d9d9d9; }
   .header .back { display: flex; align-items: center; color: #007aff; gap: 2px; }
   .header .back .count { font-size: 16px; }
-  .avatar {
-    width: 38px; height: 38px; border-radius: 50%; flex: 0 0 38px;
-    background: var(--wa-red); display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 1px 2px rgba(0,0,0,.2);
-  }
+  .avatar { width: 38px; height: 38px; border-radius: 50%; flex: 0 0 38px; background: var(--wa-red); display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
   .header .who { flex: 1; min-width: 0; }
   .header .who .name { font-size: 16px; font-weight: 600; color: #000; line-height: 1.15; }
   .header .who .status { font-size: 12px; color: var(--wa-meta); }
   .header .actions { display: flex; gap: 18px; color: #007aff; padding-right: 6px; }
-  /* Chat */
   .chat {
-    flex: 1 1 auto; overflow-y: auto; padding: 10px 8px 12px;
-    background-color: var(--wa-beige);
+    flex: 1 1 auto; overflow-y: auto; padding: 10px 8px 12px; background-color: var(--wa-beige);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='none' stroke='%23d8ccbf' stroke-width='1.1' opacity='0.5'%3E%3Ccircle cx='14' cy='16' r='5'/%3E%3Cpath d='M40 10c4 0 7 3 7 7s-3 7-7 7-7-3-7-7'/%3E%3Crect x='58' y='12' width='12' height='9' rx='2'/%3E%3Cpath d='M10 46l5-5 5 5-5 5z'/%3E%3Cpath d='M34 44h14M34 49h10'/%3E%3Ccircle cx='64' cy='52' r='6'/%3E%3Cpath d='M20 70q5-6 10 0'/%3E%3Cpath d='M50 66l4 4 4-4'/%3E%3C/g%3E%3C/svg%3E");
   }
   .day { text-align: center; margin: 8px 0 12px; }
@@ -75,32 +46,32 @@
   .notice { text-align: center; margin: 0 0 12px; }
   .notice span { background: #fdf4c8; color: #5e5b3e; font-size: 12px; padding: 6px 14px; border-radius: 8px; display: inline-block; max-width: 88%; line-height: 1.35; }
   .row { display: flex; margin: 2px 4px; }
-  .row.in { justify-content: flex-start; }
-  .row.out { justify-content: flex-end; }
-  .bubble {
-    position: relative; max-width: 80%; padding: 6px 9px 8px; border-radius: 8px;
-    font-size: 15px; line-height: 1.32; color: var(--wa-text);
-    box-shadow: 0 1px .5px rgba(11,20,26,.13); word-wrap: break-word;
-  }
+  .row.in { justify-content: flex-start; } .row.out { justify-content: flex-end; }
+  .bubble { position: relative; max-width: 80%; padding: 6px 9px 8px; border-radius: 8px; font-size: 15px; line-height: 1.32; color: var(--wa-text); box-shadow: 0 1px .5px rgba(11,20,26,.13); word-wrap: break-word; }
   .row.in .bubble { background: var(--wa-in); border-top-left-radius: 0; }
   .row.out .bubble { background: var(--wa-out); border-top-right-radius: 0; }
   .bubble .tail { position: absolute; top: 0; width: 9px; height: 13px; }
-  .row.in .bubble .tail { left: -8px; }
-  .row.out .bubble .tail { right: -8px; }
+  .row.in .bubble .tail { left: -8px; } .row.out .bubble .tail { right: -8px; }
   .bubble b { font-weight: 700; } .bubble i { font-style: italic; }
   .bubble a { color: #027eb5; text-decoration: none; }
   .bubble .meta { float: right; margin: 6px 0 -3px 10px; font-size: 11px; color: var(--wa-meta); display: inline-flex; align-items: center; gap: 3px; user-select: none; }
   .bubble .meta .check { color: var(--wa-blue); font-size: 15px; line-height: 1; }
-  /* Botones de opciones (mensaje interactivo de WhatsApp) */
-  .options { max-width: 80%; margin: 1px 4px 8px; display: flex; flex-direction: column; gap: 3px; }
-  .optbtn {
-    background: #fff; border: 0; border-radius: 8px; padding: 12px;
-    font-size: 15px; font-weight: 500; color: var(--wa-teal);
-    box-shadow: 0 1px .5px rgba(11,20,26,.13); cursor: pointer;
-    display: flex; align-items: center; justify-content: center; gap: 7px;
-  }
-  .optbtn:active { background: #f1f1f1; }
-  .options.spent { opacity: .55; pointer-events: none; }
+  /* Botón "Ver opciones" estilo List Message (dentro de la burbuja) */
+  .bubble .listbtn { clear: both; display: flex; align-items: center; justify-content: center; gap: 7px; margin: 7px -9px -8px; padding: 11px; border-top: 1px solid #e9edef; color: var(--wa-teal); font-weight: 500; font-size: 15px; cursor: pointer; }
+  .bubble .listbtn.spent { color: #8696a0; pointer-events: none; }
+  /* Hoja inferior (lista de opciones) */
+  .sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.35); opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 5; }
+  .sheet-backdrop.open { opacity: 1; pointer-events: auto; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 14px 14px 0 0; transform: translateY(110%); transition: transform .28s cubic-bezier(.25,.8,.3,1); z-index: 6; max-height: 76%; display: flex; flex-direction: column; box-shadow: 0 -4px 24px rgba(0,0,0,.18); }
+  .sheet.open { transform: translateY(0); }
+  .sheet-grip { width: 38px; height: 5px; border-radius: 3px; background: #c9cdd1; margin: 9px auto 2px; flex: 0 0 auto; }
+  .sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 18px 12px; border-bottom: 1px solid #eef0f1; flex: 0 0 auto; }
+  .sheet-head .t { font-size: 16px; font-weight: 600; color: #111b21; }
+  .sheet-head .x { color: #54656f; font-size: 19px; cursor: pointer; line-height: 1; padding: 2px 4px; }
+  .sheet-list { overflow-y: auto; }
+  .sheet-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid #f1f3f4; cursor: pointer; font-size: 15.5px; color: #111b21; }
+  .sheet-row:active { background: #f5f6f6; }
+  .sheet-row .radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #c4cad0; flex: 0 0 20px; }
   /* Typing */
   .typing .bubble { padding: 11px 14px; }
   .dots { display: inline-flex; gap: 4px; }
@@ -115,7 +86,7 @@
   .composer .field .ic { color: #8b8b8f; flex: 0 0 auto; }
   .composer .send { width: 36px; height: 36px; border-radius: 50%; background: var(--wa-green); border: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: 0 0 36px; transition: transform .12s; }
   .composer .send:active { transform: scale(.92); }
-  .chat::-webkit-scrollbar { width: 0; }
+  .chat::-webkit-scrollbar, .sheet-list::-webkit-scrollbar { width: 0; }
 </style>
 </head>
 <body>
@@ -161,23 +132,30 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M2.5 12l17-8.5-4 9 4 9-17-8.5 6-4.5z"/></svg>
       </button>
     </form>
+
+    <!-- Hoja inferior con la lista de opciones -->
+    <div class="sheet-backdrop" id="backdrop"></div>
+    <div class="sheet" id="sheet">
+      <div class="sheet-grip"></div>
+      <div class="sheet-head"><span class="t">Selecciona una opción</span><span class="x" id="sheetClose">✕</span></div>
+      <div class="sheet-list" id="sheetList"></div>
+    </div>
   </div>
 
 <script>
   const TAIL_IN = '<svg class="tail" viewBox="0 0 9 13"><path d="M9 0H0v13C0 5 4 0 9 0z" fill="#fff"/></svg>';
   const TAIL_OUT = '<svg class="tail" viewBox="0 0 9 13"><path d="M0 0h9v13C9 5 5 0 0 0z" fill="#e7ffdb"/></svg>';
-  const REPLY_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17l-6-5 6-5"/><path d="M3 12h11a6 6 0 0 1 6 6v1"/></svg>';
+  const LIST_ICON = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>';
   const chat = document.getElementById('chat');
   const input = document.getElementById('input');
   const form = document.getElementById('composer');
+  const backdrop = document.getElementById('backdrop');
+  const sheet = document.getElementById('sheet');
+  const sheetList = document.getElementById('sheetList');
   const sessionId = 'web-' + Math.random().toString(36).slice(2, 11);
   let busy = false;
 
-  function tick(){
-    const d = new Date();
-    document.getElementById('clock').textContent =
-      String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-  }
+  function tick(){ const d=new Date(); document.getElementById('clock').textContent = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
   tick(); setInterval(tick, 30000);
   function nowTime(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 
@@ -192,44 +170,48 @@
   }
   function scrollDown(){ chat.scrollTop = chat.scrollHeight; }
 
-  function addMessage(text, side){
+  function addMessage(text, side, options){
     const row = document.createElement('div');
     row.className = 'row ' + side;
     const checks = side === 'out' ? '<span class="check">✓✓</span>' : '';
+    const hasList = side === 'in' && options && options.length;
+    const listHtml = hasList ? '<div class="listbtn">' + LIST_ICON + '<span>Ver opciones</span></div>' : '';
     row.innerHTML = '<div class="bubble">' + (side==='in'?TAIL_IN:TAIL_OUT) +
       '<span class="txt">' + formatWA(text) + '</span>' +
-      '<span class="meta">' + nowTime() + checks + '</span></div>';
+      '<span class="meta">' + nowTime() + checks + '</span>' + listHtml + '</div>';
     chat.appendChild(row); scrollDown();
+    if (hasList) {
+      const btn = row.querySelector('.listbtn');
+      btn.onclick = () => { if (busy || btn.classList.contains('spent')) return; openSheet(options, btn); };
+    }
   }
 
-  function clearOptions(){ document.querySelectorAll('.options').forEach(e => e.classList.add('spent')); }
-  function renderOptions(opts){
-    if (!opts || !opts.length) return;
-    const wrap = document.createElement('div');
-    wrap.className = 'options';
-    opts.forEach(o => {
-      const b = document.createElement('button');
-      b.className = 'optbtn';
-      b.innerHTML = REPLY_ICON + '<span>' + escapeHtml(o) + '</span>';
-      b.onclick = () => { if (busy) return; clearOptions(); botReply(o, true); };
-      wrap.appendChild(b);
+  function markSpent(){ document.querySelectorAll('.listbtn').forEach(b => b.classList.add('spent')); }
+
+  function openSheet(options, btn){
+    sheetList.innerHTML = '';
+    options.forEach(o => {
+      const r = document.createElement('div');
+      r.className = 'sheet-row';
+      r.innerHTML = '<span>' + escapeHtml(o) + '</span><span class="radio"></span>';
+      r.onclick = () => { closeSheet(); if (btn) btn.classList.add('spent'); markSpent(); botReply(o, true); };
+      sheetList.appendChild(r);
     });
-    chat.appendChild(wrap); scrollDown();
+    backdrop.classList.add('open'); sheet.classList.add('open');
   }
+  function closeSheet(){ backdrop.classList.remove('open'); sheet.classList.remove('open'); }
+  backdrop.onclick = closeSheet;
+  document.getElementById('sheetClose').onclick = closeSheet;
 
   function showTyping(){
-    const row = document.createElement('div');
-    row.className = 'row in typing'; row.id = 'typing';
-    row.innerHTML = '<div class="bubble">' + TAIL_IN + '<span class="dots"><i></i><i></i><i></i></span></div>';
+    const row = document.createElement('div'); row.className='row in typing'; row.id='typing';
+    row.innerHTML = '<div class="bubble">'+TAIL_IN+'<span class="dots"><i></i><i></i><i></i></span></div>';
     chat.appendChild(row); scrollDown();
   }
   function hideTyping(){ const t=document.getElementById('typing'); if(t) t.remove(); }
 
   async function askAgent(message){
-    const res = await fetch('/api/chat', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, message })
-    });
+    const res = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sessionId, message }) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return res.json();
   }
@@ -242,8 +224,7 @@
       const data = await askAgent(message);
       await new Promise(r => setTimeout(r, humanDelay(data.reply)));
       hideTyping();
-      addMessage(data.reply || 'Disculpá, no pude responder. ¿Lo intentamos de nuevo?', 'in');
-      renderOptions(data.options);
+      addMessage(data.reply || 'Disculpá, no pude responder. ¿Lo intentamos de nuevo?', 'in', data.options);
     } catch (e) {
       hideTyping();
       addMessage('⚠️ No pude conectar con el asistente. Verificá la conexión.', 'in');
@@ -254,7 +235,7 @@
     e.preventDefault();
     const text = input.value.trim();
     if (!text || busy) return;
-    input.value = ''; clearOptions(); botReply(text, true);
+    input.value = ''; markSpent(); botReply(text, true);
   });
 
   window.addEventListener('load', () => { botReply('Hola', false); });
