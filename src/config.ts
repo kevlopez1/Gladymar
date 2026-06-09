@@ -27,10 +27,12 @@ export const config = {
   },
 
   whatsapp: {
-    accessToken: required("WHATSAPP_ACCESS_TOKEN"),
-    phoneNumberId: required("WHATSAPP_PHONE_NUMBER_ID"),
+    // Opcionales: el demo web funciona sin estas credenciales (solo necesita
+    // ANTHROPIC_API_KEY). Se requieren únicamente para operar en WhatsApp real.
+    accessToken: optional("WHATSAPP_ACCESS_TOKEN", ""),
+    phoneNumberId: optional("WHATSAPP_PHONE_NUMBER_ID", ""),
     apiVersion: optional("WHATSAPP_API_VERSION", "v21.0"),
-    verifyToken: required("WHATSAPP_VERIFY_TOKEN"),
+    verifyToken: optional("WHATSAPP_VERIFY_TOKEN", ""),
   },
 
   session: {
@@ -65,4 +67,11 @@ export const config = {
  */
 export function validateAnthropicConfig(): void {
   required("ANTHROPIC_API_KEY");
+}
+
+/** Indica si las credenciales de WhatsApp están completas (modo producción). */
+export function isWhatsAppConfigured(): boolean {
+  return Boolean(
+    config.whatsapp.accessToken && config.whatsapp.phoneNumberId && config.whatsapp.verifyToken,
+  );
 }

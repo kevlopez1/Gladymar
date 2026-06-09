@@ -6,7 +6,8 @@
  *   GET  /health   -> healthcheck
  */
 import express from "express";
-import { config } from "./config.js";
+import path from "node:path";
+import { config, isWhatsAppConfigured } from "./config.js";
 import { GladymarAgent } from "./agent/brain.js";
 import { InMemorySessionStore } from "./session/store.js";
 import { sendText, sendDocument, markAsRead } from "./whatsapp/client.js";
@@ -39,9 +40,28 @@ const survey = new SurveyScheduler({
 const app = express();
 app.use(express.json());
 
+// Demo web (réplica de WhatsApp) servida desde /public
+app.use(express.static(path.join(process.cwd(), "public")));
+
 // Healthcheck
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "gladymar-whatsapp-agent" });
+});
+
+// Endpoint del demo web: chatea con el mismo cerebro del agente (sin WhatsApp).
+app.post("/api/chat", async (req, res) => {
+  const { sessionId, message } = req.body ?? {};
+  if (typeof sessionId !== "string" || typeof message !== "string" || message.trim() === "") {
+    res.status(400).json({ error: "Se requieren 'sessionId' y 'message'." });
+    return;
+  }
+  try {
+    const reply = await agent.handleMessage(`demo:${sessionId}`, message);
+    res.json({ reply: reply.text, escalated: reply.escalated });
+  } catch (err) {
+    console.error("Error en /api/chat:", err);
+    res.status(500).json({ error: "Error procesando el mensaje." });
+  }
 });
 
 // Verificación del webhook (handshake con Meta)
@@ -131,5 +151,9 @@ async function handleIncoming(msg: {
 app.listen(config.port, () => {
   console.log(`✅ Agente de Gladymar escuchando en el puerto ${config.port}`);
   console.log(`   Modelo: ${config.anthropic.model}`);
+  console.log(`   Demo web: http://localhost:${config.port}/`);
   console.log(`   Webhook: GET/POST /webhook`);
+  if (!isWhatsAppConfigured()) {
+    console.log("   ⚠️  WhatsApp no configurado: el demo web funciona; el webhook real requiere credenciales.");
+  }
 });

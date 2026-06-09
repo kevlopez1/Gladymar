@@ -60,7 +60,15 @@ cp .env.example .env
 ```
 
 ### 3. Probar el agente SIN WhatsApp (recomendado primero)
-Solo necesitas `ANTHROPIC_API_KEY` en tu `.env`:
+Solo necesitas `ANTHROPIC_API_KEY` en tu `.env` (las credenciales de WhatsApp son opcionales).
+
+**Opción A — Demo web (réplica de WhatsApp):** ideal para mostrar a clientes/gerencia.
+```bash
+npm run dev   # o: npm run build && npm start
+```
+Abre **http://localhost:3000/** : verás una interfaz idéntica a WhatsApp donde puedes chatear con el agente en vivo.
+
+**Opción B — Consola:**
 ```bash
 npm run chat
 ```
