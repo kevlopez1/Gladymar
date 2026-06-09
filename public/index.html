@@ -170,25 +170,27 @@
   }
   function scrollDown(){ chat.scrollTop = chat.scrollHeight; }
 
-  function addMessage(text, side, options){
+  function addMessage(text, side, options, optBtn, optTitle){
     const row = document.createElement('div');
     row.className = 'row ' + side;
     const checks = side === 'out' ? '<span class="check">✓✓</span>' : '';
     const hasList = side === 'in' && options && options.length;
-    const listHtml = hasList ? '<div class="listbtn">' + LIST_ICON + '<span>Ver opciones</span></div>' : '';
+    const btnLabel = optBtn || 'Ver opciones';
+    const listHtml = hasList ? '<div class="listbtn">' + LIST_ICON + '<span>' + escapeHtml(btnLabel) + '</span></div>' : '';
     row.innerHTML = '<div class="bubble">' + (side==='in'?TAIL_IN:TAIL_OUT) +
       '<span class="txt">' + formatWA(text) + '</span>' +
       '<span class="meta">' + nowTime() + checks + '</span>' + listHtml + '</div>';
     chat.appendChild(row); scrollDown();
     if (hasList) {
       const btn = row.querySelector('.listbtn');
-      btn.onclick = () => { if (busy || btn.classList.contains('spent')) return; openSheet(options, btn); };
+      btn.onclick = () => { if (busy || btn.classList.contains('spent')) return; openSheet(options, btn, optTitle); };
     }
   }
 
   function markSpent(){ document.querySelectorAll('.listbtn').forEach(b => b.classList.add('spent')); }
 
-  function openSheet(options, btn){
+  function openSheet(options, btn, title){
+    document.querySelector('.sheet-head .t').textContent = title || 'Selecciona una opción';
     sheetList.innerHTML = '';
     options.forEach(o => {
       const r = document.createElement('div');
@@ -224,7 +226,7 @@
       const data = await askAgent(message);
       await new Promise(r => setTimeout(r, humanDelay(data.reply)));
       hideTyping();
-      addMessage(data.reply || 'Disculpá, no pude responder. ¿Lo intentamos de nuevo?', 'in', data.options);
+      addMessage(data.reply || 'Disculpá, no pude responder. ¿Lo intentamos de nuevo?', 'in', data.options, data.optionsButton, data.optionsTitle);
     } catch (e) {
       hideTyping();
       addMessage('⚠️ No pude conectar con el asistente. Verificá la conexión.', 'in');

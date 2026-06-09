@@ -57,12 +57,12 @@ export const MENU: SeccionMenu[] = [
   },
 ];
 
-/** Menú principal: texto breve + marcador de opciones (se muestran como botones). */
+/** Menú principal: texto breve + marcador de opciones (lista con botón y título). */
 export function menuPrincipal(): string {
   const opciones = MENU.map((s) => s.titulo).join(" | ");
   return [
     "Contanos, ¿cómo te ayudamos hoy? 😊",
-    `[[OPCIONES: ${opciones}]]`,
+    `[[OPCIONES boton="Ver opciones" titulo="¿Cómo te ayudamos?": ${opciones}]]`,
   ].join("\n");
 }
 
@@ -76,8 +76,8 @@ export function submenu(seccionId: string): string {
   }
   const opciones = s.opciones.map((o) => o.titulo).join(" | ");
   return [
-    `*${s.titulo}* ¿Qué te gustaría ver?`,
-    `[[OPCIONES: ${opciones} | Volver al menú]]`,
+    `*${s.titulo}*`,
+    `[[OPCIONES boton="Ver opciones" titulo="${s.titulo}": ${opciones} | Volver al menú]]`,
   ].join("\n");
 }
 

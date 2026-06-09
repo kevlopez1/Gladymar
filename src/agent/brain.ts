@@ -18,28 +18,49 @@ const MAX_TOOL_ROUNDS = 5; // tope de seguridad para el loop de herramientas
 export interface AgentReply {
   text: string;
   escalated: boolean;
-  /** Opciones tipo botón para mostrar al cliente (experiencia interactiva de WhatsApp). */
+  /** Opciones tipo lista para mostrar al cliente (experiencia interactiva de WhatsApp). */
   options: string[];
+  /** Texto del botón que abre la lista (ej. "Ver opciones", "Ver catálogo"). */
+  optionsButton?: string;
+  /** Título de la lista de opciones (encabezado de la hoja). */
+  optionsTitle?: string;
   /** El cliente pidió el Manual de Asentamiento (adjuntar PDF si hay enlace configurado). */
   attachManual: boolean;
   /** Solicitud registrada en este turno (para el log en Google Sheets), si hubo. */
   solicitud?: { tipo: string; prioridad: string; detalle: string; nombre?: string; ciudad?: string; telefono?: string };
 }
 
+interface ParsedOptions {
+  text: string;
+  options: string[];
+  optionsButton?: string;
+  optionsTitle?: string;
+}
+
 /**
- * Extrae las opciones del marcador [[OPCIONES: a | b | c]] del texto del agente
- * y devuelve el texto ya limpio (sin el marcador) + la lista de opciones.
+ * Extrae el marcador de opciones del texto del agente y devuelve el texto limpio.
+ * Formatos soportados:
+ *   [[OPCIONES: a | b | c]]
+ *   [[OPCIONES boton="Ver catálogo" titulo="Catálogo": a | b | c]]
  */
-function extractOptions(text: string): { text: string; options: string[] } {
-  const m = text.match(/\[\[\s*OPCIONES\s*:\s*([^\]]+)\]\]/i);
+function extractOptions(text: string): ParsedOptions {
+  const m = text.match(/\[\[\s*OPCIONES\b([^:\]]*):\s*([^\]]+)\]\]/i);
   if (!m) return { text: text.trim(), options: [] };
-  const options = m[1]
+  const header = m[1] ?? "";
+  const botonM = header.match(/boton\s*=\s*"([^"]*)"/i);
+  const tituloM = header.match(/titulo\s*=\s*"([^"]*)"/i);
+  const options = m[2]
     .split("|")
     .map((s) => s.trim())
     .filter(Boolean)
     .slice(0, 10);
   const cleaned = text.replace(m[0], "").replace(/\n{3,}/g, "\n\n").trim();
-  return { text: cleaned, options };
+  return {
+    text: cleaned,
+    options,
+    optionsButton: botonM?.[1]?.trim() || undefined,
+    optionsTitle: tituloM?.[1]?.trim() || undefined,
+  };
 }
 
 export class GladymarAgent {
@@ -112,13 +133,15 @@ export class GladymarAgent {
     messages.push({ role: "assistant", content: response.content });
     this.store.set(userId, messages);
 
-    const { text: cleanText, options } = extractOptions(
+    const parsed = extractOptions(
       text || "Disculpá, no pude generar una respuesta. ¿Lo intentamos de nuevo?",
     );
 
     return {
-      text: cleanText,
-      options,
+      text: parsed.text,
+      options: parsed.options,
+      optionsButton: parsed.optionsButton,
+      optionsTitle: parsed.optionsTitle,
       escalated,
       attachManual,
       solicitud,

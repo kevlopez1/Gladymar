@@ -57,7 +57,13 @@ app.post("/api/chat", async (req, res) => {
   }
   try {
     const reply = await agent.handleMessage(`demo:${sessionId}`, message);
-    res.json({ reply: reply.text, options: reply.options, escalated: reply.escalated });
+    res.json({
+      reply: reply.text,
+      options: reply.options,
+      optionsButton: reply.optionsButton,
+      optionsTitle: reply.optionsTitle,
+      escalated: reply.escalated,
+    });
   } catch (err) {
     console.error("Error en /api/chat:", err);
     res.status(500).json({ error: "Error procesando el mensaje." });
