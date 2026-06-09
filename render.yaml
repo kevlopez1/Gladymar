@@ -1,0 +1,16 @@
+# Despliegue en Render (https://render.com) — blueprint listo para 1 clic.
+# Render leerá este archivo y creará el servicio web automáticamente.
+# Solo tendrás que pegar tu ANTHROPIC_API_KEY cuando lo pida.
+services:
+  - type: web
+    name: gladymar-demo
+    runtime: node
+    plan: free
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false # Render te pedirá el valor al desplegar (no se guarda en el repo)
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-6
