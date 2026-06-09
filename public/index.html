@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>Gladymar · Demo WhatsApp</title>
+<title>Demo Agente Gladymar</title>
 <style>
   :root {
     --wa-beige: #efe7de; --wa-in: #ffffff; --wa-out: #e7ffdb;
@@ -15,44 +15,55 @@
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     background: linear-gradient(160deg, #f3f5f7 0%, #e7ebef 100%);
-    min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 14px; padding: 16px 14px;
+    min-height: 100dvh; display: flex; flex-direction: column; align-items: center;
+    gap: 12px; padding: 16px 12px;
   }
-  .demo-title { text-align: center; line-height: 1.2; }
-  .demo-title .t { font-size: clamp(16px, 4.6vw, 22px); font-weight: 700; color: #2b3a45; letter-spacing: .3px; }
-  .demo-title .s { font-size: 12px; font-weight: 500; color: #80909b; margin-top: 3px; }
+  .demo-title { text-align: center; line-height: 1.2; margin-top: 4px; }
+  .demo-title .t { font-size: clamp(17px, 4.6vw, 23px); font-weight: 700; color: #2b3a45; letter-spacing: .3px; }
+  .demo-title .s { font-size: 12.5px; font-weight: 500; color: #80909b; margin-top: 3px; }
+  .tabs { display: none; gap: 8px; }
+  .tab { border: 1px solid #cdd5db; background: #fff; color: #41525d; padding: 7px 18px; border-radius: 20px; font-weight: 600; font-size: 13px; cursor: pointer; }
+  .tab.active { background: var(--wa-teal); color: #fff; border-color: var(--wa-teal); }
+  .stage { display: flex; gap: 24px; align-items: flex-start; justify-content: center; }
+  .col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .col-label { font-weight: 600; color: #2b3a45; font-size: 13.5px; }
+  .role-select { border: 1px solid #cdd5db; border-radius: 10px; padding: 7px 10px; font-size: 13px; color: #2b3a45; background: #fff; max-width: 300px; }
   .phone {
-    position: relative; width: 100%; max-width: 340px;
-    height: min(720px, calc(100dvh - 120px));
-    background: var(--wa-beige); border-radius: 38px; border: 9px solid #0c0c0e;
-    box-shadow: 0 22px 60px rgba(0,0,0,.28); overflow: hidden; display: flex; flex-direction: column;
+    position: relative; width: 320px; max-width: 94vw;
+    height: min(700px, calc(100dvh - 200px));
+    background: var(--wa-beige); border-radius: 36px; border: 8px solid #0c0c0e;
+    box-shadow: 0 18px 50px rgba(0,0,0,.26); overflow: hidden; display: flex; flex-direction: column;
   }
-  @media (max-width: 430px) {
-    body { padding: 12px 12px; gap: 10px; }
-    .phone { border-width: 6px; border-radius: 32px; max-width: 320px; height: calc(100dvh - 110px); }
+  @media (max-width: 780px) {
+    .tabs { display: flex; }
+    .stage { gap: 0; }
+    .col { display: none; }
+    .stage.show-admin .col.admin { display: flex; }
+    .stage:not(.show-admin) .col.client { display: flex; }
+    .phone { height: calc(100dvh - 175px); }
   }
-  .statusbar { background: var(--wa-header); flex: 0 0 auto; padding: 9px 22px 3px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; color: #000; }
+  .statusbar { background: var(--wa-header); flex: 0 0 auto; padding: 8px 20px 3px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #000; }
   .statusbar .icons { display: flex; gap: 5px; align-items: center; }
   .header { background: var(--wa-header); flex: 0 0 auto; display: flex; align-items: center; padding: 4px 10px 8px; gap: 7px; border-bottom: 1px solid #d9d9d9; }
   .header .back { display: flex; align-items: center; color: #007aff; gap: 2px; }
-  .header .back .count { font-size: 16px; }
-  .avatar { width: 38px; height: 38px; border-radius: 50%; flex: 0 0 38px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .header .back .count { font-size: 15px; }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; flex: 0 0 36px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
   .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .header .who { flex: 1; min-width: 0; }
-  .header .who .name { font-size: 16px; font-weight: 600; color: #000; line-height: 1.15; }
-  .header .who .status { font-size: 12px; color: var(--wa-meta); }
-  .header .actions { display: flex; gap: 18px; color: #007aff; padding-right: 6px; }
+  .header .who .name { font-size: 15.5px; font-weight: 600; color: #000; line-height: 1.15; }
+  .header .who .status { font-size: 11.5px; color: var(--wa-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header .actions { display: flex; gap: 16px; color: #007aff; padding-right: 4px; }
   .chat {
     flex: 1 1 auto; overflow-y: auto; padding: 10px 8px 12px; background-color: var(--wa-beige);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='none' stroke='%23d8ccbf' stroke-width='1.1' opacity='0.5'%3E%3Ccircle cx='14' cy='16' r='5'/%3E%3Cpath d='M40 10c4 0 7 3 7 7s-3 7-7 7-7-3-7-7'/%3E%3Crect x='58' y='12' width='12' height='9' rx='2'/%3E%3Cpath d='M10 46l5-5 5 5-5 5z'/%3E%3Cpath d='M34 44h14M34 49h10'/%3E%3Ccircle cx='64' cy='52' r='6'/%3E%3Cpath d='M20 70q5-6 10 0'/%3E%3Cpath d='M50 66l4 4 4-4'/%3E%3C/g%3E%3C/svg%3E");
   }
   .day { text-align: center; margin: 8px 0 12px; }
-  .day span { background: #e2f1ce; color: #5b6b56; font-size: 12.5px; font-weight: 500; padding: 5px 12px; border-radius: 8px; }
+  .day span { background: #e2f1ce; color: #5b6b56; font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 8px; }
   .notice { text-align: center; margin: 0 0 12px; }
-  .notice span { background: #fdf4c8; color: #5e5b3e; font-size: 12px; padding: 6px 14px; border-radius: 8px; display: inline-block; max-width: 88%; line-height: 1.35; }
+  .notice span { background: #fdf4c8; color: #5e5b3e; font-size: 11.5px; padding: 6px 14px; border-radius: 8px; display: inline-block; max-width: 88%; line-height: 1.35; }
   .row { display: flex; margin: 2px 4px; }
   .row.in { justify-content: flex-start; } .row.out { justify-content: flex-end; }
-  .bubble { position: relative; max-width: 80%; padding: 6px 9px 8px; border-radius: 8px; font-size: 15px; line-height: 1.32; color: var(--wa-text); box-shadow: 0 1px .5px rgba(11,20,26,.13); word-wrap: break-word; }
+  .bubble { position: relative; max-width: 82%; padding: 6px 9px 8px; border-radius: 8px; font-size: 14.5px; line-height: 1.32; color: var(--wa-text); box-shadow: 0 1px .5px rgba(11,20,26,.13); word-wrap: break-word; }
   .row.in .bubble { background: var(--wa-in); border-top-left-radius: 0; }
   .row.out .bubble { background: var(--wa-out); border-top-right-radius: 0; }
   .bubble .tail { position: absolute; top: 0; width: 9px; height: 13px; }
@@ -61,42 +72,37 @@
   .bubble a { color: #027eb5; text-decoration: none; }
   .bubble .meta { float: right; margin: 6px 0 -3px 10px; font-size: 11px; color: var(--wa-meta); display: inline-flex; align-items: center; gap: 3px; user-select: none; }
   .bubble .meta .check { color: var(--wa-blue); font-size: 15px; line-height: 1; }
-  /* Botón "Ver opciones" estilo List Message (dentro de la burbuja) */
-  .bubble .listbtn { clear: both; display: flex; align-items: center; justify-content: center; gap: 7px; margin: 7px -9px -8px; padding: 11px; border-top: 1px solid #e9edef; color: var(--wa-teal); font-weight: 500; font-size: 15px; cursor: pointer; }
+  .bubble .listbtn { clear: both; display: flex; align-items: center; justify-content: center; gap: 7px; margin: 7px -9px -8px; padding: 11px; border-top: 1px solid #e9edef; color: var(--wa-teal); font-weight: 500; font-size: 14.5px; cursor: pointer; }
   .bubble .listbtn.spent { color: #8696a0; pointer-events: none; }
-  /* Hoja inferior (lista de opciones) */
+  .docrow { display: flex; align-items: center; gap: 10px; background: #f5f6f6; border-radius: 8px; padding: 10px; min-width: 200px; }
+  .docicon { width: 32px; height: 38px; border-radius: 5px; background: #f15b5b; color: #fff; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: 0 0 32px; }
+  .docmeta { flex: 1; min-width: 0; }
+  .docname { font-size: 13.5px; font-weight: 600; color: #111b21; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .docsub { font-size: 11.5px; color: var(--wa-meta); margin-top: 2px; }
+  .docdl { width: 28px; height: 28px; border-radius: 50%; background: #00a884; color: #fff; display: flex; align-items: center; justify-content: center; flex: 0 0 28px; }
   .sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.35); opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 5; }
   .sheet-backdrop.open { opacity: 1; pointer-events: auto; }
   .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 14px 14px 0 0; transform: translateY(110%); transition: transform .28s cubic-bezier(.25,.8,.3,1); z-index: 6; max-height: 76%; display: flex; flex-direction: column; box-shadow: 0 -4px 24px rgba(0,0,0,.18); }
   .sheet.open { transform: translateY(0); }
   .sheet-grip { width: 38px; height: 5px; border-radius: 3px; background: #c9cdd1; margin: 9px auto 2px; flex: 0 0 auto; }
   .sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 18px 12px; border-bottom: 1px solid #eef0f1; flex: 0 0 auto; }
-  .sheet-head .t { font-size: 16px; font-weight: 600; color: #111b21; }
+  .sheet-head .t { font-size: 15.5px; font-weight: 600; color: #111b21; }
   .sheet-head .x { color: #54656f; font-size: 19px; cursor: pointer; line-height: 1; padding: 2px 4px; }
   .sheet-list { overflow-y: auto; }
-  .sheet-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid #f1f3f4; cursor: pointer; font-size: 15.5px; color: #111b21; }
+  .sheet-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 18px; border-bottom: 1px solid #f1f3f4; cursor: pointer; font-size: 15px; color: #111b21; }
   .sheet-row:active { background: #f5f6f6; }
   .sheet-row .radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #c4cad0; flex: 0 0 20px; }
-  /* Documento (PDF) */
-  .docrow { display: flex; align-items: center; gap: 10px; background: #f5f6f6; border-radius: 8px; padding: 10px; min-width: 210px; }
-  .docicon { width: 34px; height: 40px; border-radius: 5px; background: #f15b5b; color: #fff; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: 0 0 34px; box-shadow: inset 0 -10px 0 rgba(0,0,0,.08); }
-  .docmeta { flex: 1; min-width: 0; }
-  .docname { font-size: 14px; font-weight: 600; color: #111b21; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .docsub { font-size: 12px; color: var(--wa-meta); margin-top: 2px; }
-  .docdl { width: 30px; height: 30px; border-radius: 50%; background: #00a884; color: #fff; display: flex; align-items: center; justify-content: center; flex: 0 0 30px; }
-  /* Typing */
   .typing .bubble { padding: 11px 14px; }
   .dots { display: inline-flex; gap: 4px; }
   .dots i { width: 7px; height: 7px; border-radius: 50%; background: #9aa6ad; display: inline-block; animation: blink 1.3s infinite both; }
   .dots i:nth-child(2){ animation-delay: .2s; } .dots i:nth-child(3){ animation-delay: .4s; }
   @keyframes blink { 0%,60%,100%{ opacity:.3; transform: translateY(0);} 30%{ opacity:1; transform: translateY(-3px);} }
-  /* Composer */
   .composer { background: var(--wa-header); flex: 0 0 auto; padding: 7px 8px calc(7px + env(safe-area-inset-bottom)); display: flex; align-items: flex-end; gap: 8px; }
   .composer .plus { color: #007aff; padding: 6px 2px; }
   .composer .field { flex: 1 1 auto; min-width: 0; background: #fff; border: 1px solid #d9d9d9; border-radius: 20px; display: flex; align-items: center; padding: 7px 12px; gap: 8px; min-height: 36px; }
   .composer .field input { flex: 1 1 auto; min-width: 0; width: 100%; border: 0; outline: 0; font-size: 16px; background: transparent; color: #111; }
   .composer .field .ic { color: #8b8b8f; flex: 0 0 auto; }
-  .composer .send { width: 36px; height: 36px; border-radius: 50%; background: var(--wa-green); border: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: 0 0 36px; transition: transform .12s; }
+  .composer .send { width: 36px; height: 36px; border-radius: 50%; background: var(--wa-green); border: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: 0 0 36px; }
   .composer .send:active { transform: scale(.92); }
   .chat::-webkit-scrollbar, .sheet-list::-webkit-scrollbar { width: 0; }
 </style>
@@ -104,181 +110,211 @@
 <body>
   <div class="demo-title">
     <div class="t">Demo Agente Gladymar</div>
-    <div class="s">Vista previa de la atención en WhatsApp</div>
+    <div class="s">Atención a clientes y panel de administradores</div>
   </div>
-  <div class="phone">
-    <div class="statusbar">
-      <span id="clock">11:09</span>
-      <span class="icons">
-        <svg width="18" height="12" viewBox="0 0 18 12"><g fill="#000"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="5" y="4" width="3" height="8" rx="1"/><rect x="10" y="2" width="3" height="10" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></g></svg>
-        <span style="font-size:12px;font-weight:700;">LTE</span>
-        <svg width="26" height="13" viewBox="0 0 26 13"><rect x="1" y="1" width="21" height="11" rx="3" fill="none" stroke="#000" opacity=".4"/><rect x="3" y="3" width="15" height="7" rx="1.5" fill="#000"/><rect x="23" y="4" width="2" height="5" rx="1" fill="#000" opacity=".4"/></svg>
-      </span>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="client">👤 Clientes</button>
+    <button class="tab" data-tab="admin">🛠️ Administradores</button>
+  </div>
+
+  <div class="stage" id="stage">
+    <!-- ===== Columna CLIENTE ===== -->
+    <div class="col client">
+      <div class="col-label">Vista del cliente</div>
+      <div class="phone" id="phone-client">
+        <div class="statusbar"><span class="clock">11:09</span><span class="icons">
+          <svg width="17" height="11" viewBox="0 0 18 12"><g fill="#000"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="5" y="4" width="3" height="8" rx="1"/><rect x="10" y="2" width="3" height="10" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></g></svg>
+          <span style="font-size:11px;font-weight:700;">LTE</span>
+          <svg width="24" height="12" viewBox="0 0 26 13"><rect x="1" y="1" width="21" height="11" rx="3" fill="none" stroke="#000" opacity=".4"/><rect x="3" y="3" width="15" height="7" rx="1.5" fill="#000"/><rect x="23" y="4" width="2" height="5" rx="1" fill="#000" opacity=".4"/></svg>
+        </span></div>
+        <div class="header">
+          <div class="back"><svg width="11" height="18" viewBox="0 0 12 20"><path d="M10 2L2 10l8 8" fill="none" stroke="#007aff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="count">35</span></div>
+          <div class="avatar"><img src="gladymar-logo.png" alt="Gladymar" /></div>
+          <div class="who"><div class="name">Gladymar</div><div class="status">en línea</div></div>
+          <div class="actions"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="2"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg></div>
+        </div>
+        <div class="chat"></div>
+        <form class="composer" autocomplete="off">
+          <span class="plus"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+          <div class="field"><input class="input" type="text" placeholder="Mensaje" /><span class="ic"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2" stroke-linecap="round"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg></span></div>
+          <button class="send" type="submit" aria-label="Enviar"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg></button>
+        </form>
+        <div class="sheet-backdrop"></div>
+        <div class="sheet"><div class="sheet-grip"></div><div class="sheet-head"><span class="t">Selecciona una opción</span><span class="x">✕</span></div><div class="sheet-list"></div></div>
+      </div>
     </div>
 
-    <div class="header">
-      <div class="back">
-        <svg width="12" height="20" viewBox="0 0 12 20"><path d="M10 2L2 10l8 8" fill="none" stroke="#007aff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span class="count">35</span>
+    <!-- ===== Columna ADMINISTRADOR ===== -->
+    <div class="col admin">
+      <div class="col-label">Vista del administrador</div>
+      <select class="role-select" id="roleSelect">
+        <option value="gerente">👑 Gerente General (nacional)</option>
+        <option value="Santa Cruz">Admin · Santa Cruz</option>
+        <option value="La Paz">Admin · La Paz</option>
+        <option value="Cochabamba">Admin · Cochabamba</option>
+        <option value="Sucre">Admin · Sucre</option>
+        <option value="Tarija">Admin · Tarija</option>
+        <option value="Oruro">Admin · Oruro</option>
+        <option value="Potosí">Admin · Potosí</option>
+      </select>
+      <div class="phone" id="phone-admin">
+        <div class="statusbar"><span class="clock">11:09</span><span class="icons">
+          <svg width="17" height="11" viewBox="0 0 18 12"><g fill="#000"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="5" y="4" width="3" height="8" rx="1"/><rect x="10" y="2" width="3" height="10" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></g></svg>
+          <span style="font-size:11px;font-weight:700;">LTE</span>
+          <svg width="24" height="12" viewBox="0 0 26 13"><rect x="1" y="1" width="21" height="11" rx="3" fill="none" stroke="#000" opacity=".4"/><rect x="3" y="3" width="15" height="7" rx="1.5" fill="#000"/><rect x="23" y="4" width="2" height="5" rx="1" fill="#000" opacity=".4"/></svg>
+        </span></div>
+        <div class="header">
+          <div class="back"><svg width="11" height="18" viewBox="0 0 12 20"><path d="M10 2L2 10l8 8" fill="none" stroke="#007aff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="avatar"><img src="gladymar-logo.png" alt="Gladymar" /></div>
+          <div class="who"><div class="name">Gladymar · Panel</div><div class="status" id="adminStatus">Gerente General</div></div>
+          <div class="actions"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="2"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg></div>
+        </div>
+        <div class="chat"></div>
+        <form class="composer" autocomplete="off">
+          <span class="plus"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+          <div class="field"><input class="input" type="text" placeholder="Comando o mensaje" /><span class="ic"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2" stroke-linecap="round"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg></span></div>
+          <button class="send" type="submit" aria-label="Enviar"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg></button>
+        </form>
+        <div class="sheet-backdrop"></div>
+        <div class="sheet"><div class="sheet-grip"></div><div class="sheet-head"><span class="t">Selecciona una opción</span><span class="x">✕</span></div><div class="sheet-list"></div></div>
       </div>
-      <div class="avatar" aria-label="Gladymar">
-        <img src="gladymar-logo.png" alt="Gladymar" />
-      </div>
-      <div class="who">
-        <div class="name">Gladymar</div>
-        <div class="status">en línea</div>
-      </div>
-      <div class="actions">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="2"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>
-      </div>
-    </div>
-
-    <div class="chat" id="chat">
-      <div class="day"><span>HOY</span></div>
-      <div class="notice"><span>🔒 Los mensajes están cifrados de extremo a extremo. Demostración del asistente Gladymar.</span></div>
-    </div>
-
-    <form class="composer" id="composer" autocomplete="off">
-      <span class="plus"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-      <div class="field">
-        <input id="input" type="text" placeholder="Mensaje" />
-        <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2" stroke-linecap="round"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg></span>
-      </div>
-      <button class="send" id="send" type="submit" aria-label="Enviar">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="#fff"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
-      </button>
-    </form>
-
-    <!-- Hoja inferior con la lista de opciones -->
-    <div class="sheet-backdrop" id="backdrop"></div>
-    <div class="sheet" id="sheet">
-      <div class="sheet-grip"></div>
-      <div class="sheet-head"><span class="t">Selecciona una opción</span><span class="x" id="sheetClose">✕</span></div>
-      <div class="sheet-list" id="sheetList"></div>
     </div>
   </div>
 
 <script>
   const TAIL_IN = '<svg class="tail" viewBox="0 0 9 13"><path d="M9 0H0v13C0 5 4 0 9 0z" fill="#fff"/></svg>';
   const TAIL_OUT = '<svg class="tail" viewBox="0 0 9 13"><path d="M0 0h9v13C9 5 5 0 0 0z" fill="#e7ffdb"/></svg>';
-  const LIST_ICON = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>';
-  const chat = document.getElementById('chat');
-  const input = document.getElementById('input');
-  const form = document.getElementById('composer');
-  const backdrop = document.getElementById('backdrop');
-  const sheet = document.getElementById('sheet');
-  const sheetList = document.getElementById('sheetList');
-  const sessionId = 'web-' + Math.random().toString(36).slice(2, 11);
-  let busy = false;
-
-  function tick(){ const d=new Date(); document.getElementById('clock').textContent = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
-  tick(); setInterval(tick, 30000);
+  const LIST_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>';
+  const rid = () => Math.random().toString(36).slice(2, 11);
+  const escapeHtml = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   function nowTime(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
-
-  function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function formatWA(text){
     let t = escapeHtml(text);
-    // Red de seguridad: quita marcadores internos que no debería ver el cliente
     t = t.replace(/\[\[\s*(OPCIONES|DOCUMENTO)[\s\S]*$/i, '');
     t = t.replace(/\[\[[^\]]*\]\]/g, '');
     t = t.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
-    // Viñetas markdown al inicio de línea -> bullet limpio
     t = t.replace(/^[\t ]*[-*]\s+/gm, '• ');
-    // Negrita: primero dobles asteriscos, luego simples
     t = t.replace(/\*\*(?!\s)([^*\n]+?)\*\*/g, '<b>$1</b>');
     t = t.replace(/(^|[\s(¡¿>•])\*(?!\s)([^*\n]+?)\*(?=$|[\s).,!?:;])/g, '$1<b>$2</b>');
     t = t.replace(/(^|[\s(¡¿>])_(?!\s)([^_\n]+?)_(?=$|[\s).,!?:;])/g, '$1<i>$2</i>');
-    t = t.replace(/(^|[\s(¡¿>])~(?!\s)([^~\n]+?)~(?=$|[\s).,!?:;])/g, '$1<s>$2</s>');
-    // Limpia asteriscos sueltos que hayan quedado sin par
     t = t.replace(/\*/g, '');
     return t.replace(/\n/g, '<br>');
   }
-  function scrollDown(){ chat.scrollTop = chat.scrollHeight; }
+  const NOTICE = '<div class="day"><span>HOY</span></div><div class="notice"><span>🔒 Los mensajes están cifrados de extremo a extremo. Demostración del asistente Gladymar.</span></div>';
 
-  function addMessage(text, side, options, optBtn, optTitle){
-    const row = document.createElement('div');
-    row.className = 'row ' + side;
-    const checks = side === 'out' ? '<span class="check">✓✓</span>' : '';
-    const hasList = side === 'in' && options && options.length;
-    const btnLabel = optBtn || 'Ver opciones';
-    const listHtml = hasList ? '<div class="listbtn">' + LIST_ICON + '<span>' + escapeHtml(btnLabel) + '</span></div>' : '';
-    row.innerHTML = '<div class="bubble">' + (side==='in'?TAIL_IN:TAIL_OUT) +
-      '<span class="txt">' + formatWA(text) + '</span>' +
-      '<span class="meta">' + nowTime() + checks + '</span>' + listHtml + '</div>';
-    chat.appendChild(row); scrollDown();
-    if (hasList) {
-      const btn = row.querySelector('.listbtn');
-      btn.onclick = () => { if (busy || btn.classList.contains('spent')) return; openSheet(options, btn, optTitle); };
+  // Reloj
+  function tick(){ const v=nowTime(); document.querySelectorAll('.clock').forEach(e=>e.textContent=v); }
+  tick(); setInterval(tick, 30000);
+
+  // Motor de chat reutilizable por teléfono
+  function createPhone(phoneEl, sendFn){
+    const chat = phoneEl.querySelector('.chat');
+    const form = phoneEl.querySelector('.composer');
+    const input = phoneEl.querySelector('.input');
+    const backdrop = phoneEl.querySelector('.sheet-backdrop');
+    const sheet = phoneEl.querySelector('.sheet');
+    const sheetList = phoneEl.querySelector('.sheet-list');
+    const sheetTitle = phoneEl.querySelector('.sheet-head .t');
+    let busy = false;
+    const scrollDown = () => { chat.scrollTop = chat.scrollHeight; };
+
+    function addMessage(text, side, options, optBtn, optTitle){
+      const row = document.createElement('div'); row.className = 'row ' + side;
+      const checks = side === 'out' ? '<span class="check">✓✓</span>' : '';
+      const hasList = side === 'in' && options && options.length;
+      const listHtml = hasList ? '<div class="listbtn">' + LIST_ICON + '<span>' + escapeHtml(optBtn||'Ver opciones') + '</span></div>' : '';
+      row.innerHTML = '<div class="bubble">' + (side==='in'?TAIL_IN:TAIL_OUT) +
+        '<span class="txt">' + formatWA(text) + '</span><span class="meta">' + nowTime() + checks + '</span>' + listHtml + '</div>';
+      chat.appendChild(row); scrollDown();
+      if (hasList) { const b = row.querySelector('.listbtn'); b.onclick = () => { if (busy || b.classList.contains('spent')) return; openSheet(options, b, optTitle); }; }
     }
+    function addDoc(doc){
+      const row = document.createElement('div'); row.className = 'row in';
+      row.innerHTML = '<div class="bubble">' + TAIL_IN +
+        '<div class="docrow"><div class="docicon">PDF</div><div class="docmeta"><div class="docname">' + escapeHtml(doc.name||'Documento.pdf') + '</div><div class="docsub">' + escapeHtml(doc.info||'PDF') + '</div></div>' +
+        '<div class="docdl"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6"/></svg></div></div>' +
+        '<span class="meta">' + nowTime() + '</span></div>';
+      chat.appendChild(row); scrollDown();
+    }
+    const markSpent = () => phoneEl.querySelectorAll('.listbtn').forEach(b => b.classList.add('spent'));
+    function openSheet(options, btn, title){
+      sheetTitle.textContent = title || 'Selecciona una opción';
+      sheetList.innerHTML = '';
+      options.forEach(o => { const r = document.createElement('div'); r.className='sheet-row';
+        r.innerHTML = '<span>' + escapeHtml(o) + '</span><span class="radio"></span>';
+        r.onclick = () => { closeSheet(); if (btn) btn.classList.add('spent'); markSpent(); bot(o, true); };
+        sheetList.appendChild(r); });
+      backdrop.classList.add('open'); sheet.classList.add('open');
+    }
+    const closeSheet = () => { backdrop.classList.remove('open'); sheet.classList.remove('open'); };
+    backdrop.onclick = closeSheet; phoneEl.querySelector('.sheet-head .x').onclick = closeSheet;
+    function showTyping(){ const r = document.createElement('div'); r.className='row in typing'; r.dataset.typing='1';
+      r.innerHTML = '<div class="bubble">'+TAIL_IN+'<span class="dots"><i></i><i></i><i></i></span></div>'; chat.appendChild(r); scrollDown(); }
+    const hideTyping = () => { const t = chat.querySelector('[data-typing]'); if (t) t.remove(); };
+    const delay = (txt) => Math.min(1800, 450 + (txt?txt.length:0) * 9);
+
+    async function bot(message, renderUser){
+      if (renderUser) addMessage(message, 'out');
+      busy = true; showTyping();
+      try {
+        const data = await sendFn(message);
+        await new Promise(r => setTimeout(r, delay(data.reply)));
+        hideTyping();
+        addMessage(data.reply || '…', 'in', data.options, data.optionsButton, data.optionsTitle);
+        if (data.document) addDoc(data.document);
+      } catch (e) { hideTyping(); addMessage('⚠️ No pude conectar. Verifique la conexión.', 'in'); }
+      finally { busy = false; }
+    }
+    form.addEventListener('submit', (e) => { e.preventDefault(); const t = input.value.trim(); if (!t || busy) return; input.value=''; markSpent(); bot(t, true); });
+    return {
+      reset(){ chat.innerHTML = NOTICE; },
+      start(firstMsg){ bot(firstMsg, false); },
+    };
   }
 
-  function addDoc(doc){
-    const row = document.createElement('div');
-    row.className = 'row in';
-    row.innerHTML = '<div class="bubble">' + TAIL_IN +
-      '<div class="docrow"><div class="docicon">PDF</div>' +
-      '<div class="docmeta"><div class="docname">' + escapeHtml(doc.name || 'Documento.pdf') + '</div>' +
-      '<div class="docsub">' + escapeHtml(doc.info || 'PDF') + '</div></div>' +
-      '<div class="docdl"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6"/></svg></div></div>' +
-      '<span class="meta">' + nowTime() + '</span></div>';
-    chat.appendChild(row); scrollDown();
+  // ---- Cliente ----
+  const clientSession = { id: rid() };
+  const clientPhone = createPhone(document.getElementById('phone-client'), async (message) => {
+    const res = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sessionId: clientSession.id, message }) });
+    if (!res.ok) throw new Error('HTTP '+res.status); return res.json();
+  });
+  clientPhone.reset();
+
+  // ---- Administrador ----
+  const adminSession = { id: rid() };
+  const roleSelect = document.getElementById('roleSelect');
+  const adminStatus = document.getElementById('adminStatus');
+  const adminPhone = createPhone(document.getElementById('phone-admin'), async (message) => {
+    const res = await fetch('/api/admin', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sessionId: adminSession.id, role: roleSelect.value, message }) });
+    if (!res.ok) throw new Error('HTTP '+res.status); return res.json();
+  });
+  function startAdmin(){
+    adminSession.id = rid();
+    adminStatus.textContent = roleSelect.value === 'gerente' ? 'Gerente General' : ('Admin · ' + roleSelect.value);
+    adminPhone.reset();
+    adminPhone.start('menu');
   }
+  roleSelect.addEventListener('change', startAdmin);
 
-  function markSpent(){ document.querySelectorAll('.listbtn').forEach(b => b.classList.add('spent')); }
-
-  function openSheet(options, btn, title){
-    document.querySelector('.sheet-head .t').textContent = title || 'Selecciona una opción';
-    sheetList.innerHTML = '';
-    options.forEach(o => {
-      const r = document.createElement('div');
-      r.className = 'sheet-row';
-      r.innerHTML = '<span>' + escapeHtml(o) + '</span><span class="radio"></span>';
-      r.onclick = () => { closeSheet(); if (btn) btn.classList.add('spent'); markSpent(); botReply(o, true); };
-      sheetList.appendChild(r);
+  // ---- Pestañas (móvil) ----
+  const stage = document.getElementById('stage');
+  let adminStarted = false;
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      if (tab.dataset.tab === 'admin') { stage.classList.add('show-admin'); if (!adminStarted) { startAdmin(); adminStarted = true; } }
+      else stage.classList.remove('show-admin');
     });
-    backdrop.classList.add('open'); sheet.classList.add('open');
-  }
-  function closeSheet(){ backdrop.classList.remove('open'); sheet.classList.remove('open'); }
-  backdrop.onclick = closeSheet;
-  document.getElementById('sheetClose').onclick = closeSheet;
-
-  function showTyping(){
-    const row = document.createElement('div'); row.className='row in typing'; row.id='typing';
-    row.innerHTML = '<div class="bubble">'+TAIL_IN+'<span class="dots"><i></i><i></i><i></i></span></div>';
-    chat.appendChild(row); scrollDown();
-  }
-  function hideTyping(){ const t=document.getElementById('typing'); if(t) t.remove(); }
-
-  async function askAgent(message){
-    const res = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sessionId, message }) });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return res.json();
-  }
-  function humanDelay(text){ return Math.min(2200, 600 + (text ? text.length : 0) * 12); }
-
-  async function botReply(message, renderUser){
-    if (renderUser) addMessage(message, 'out');
-    busy = true; showTyping();
-    try {
-      const data = await askAgent(message);
-      await new Promise(r => setTimeout(r, humanDelay(data.reply)));
-      hideTyping();
-      addMessage(data.reply || 'Disculpe, no pude responder. ¿Podría reformular su consulta?', 'in', data.options, data.optionsButton, data.optionsTitle);
-      if (data.document) addDoc(data.document);
-    } catch (e) {
-      hideTyping();
-      addMessage('⚠️ No pude conectar con el asistente. Verifique la conexión.', 'in');
-    } finally { busy = false; }
-  }
-
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const text = input.value.trim();
-    if (!text || busy) return;
-    input.value = ''; markSpent(); botReply(text, true);
   });
 
-  window.addEventListener('load', () => { botReply('Hola', false); });
+  // Inicio
+  window.addEventListener('load', () => {
+    clientPhone.start('Hola');
+    // En escritorio se ven ambos; arrancamos el admin también.
+    if (window.matchMedia('(min-width: 781px)').matches) { startAdmin(); adminStarted = true; }
+  });
 </script>
 </body>
 </html>

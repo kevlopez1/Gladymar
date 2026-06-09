@@ -14,6 +14,9 @@ import { sendText, sendDocument, markAsRead } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
+import { getAdminByPhone, adminFromRole } from "./admin/roles.js";
+import { handleAdminCommand } from "./admin/commands.js";
+import { bumpConversacion } from "./admin/data.js";
 
 const sheets = new SheetsLogger(config.sheets.webhookUrl);
 
@@ -56,6 +59,7 @@ app.post("/api/chat", async (req, res) => {
     return;
   }
   try {
+    bumpConversacion();
     const reply = await agent.handleMessage(`demo:${sessionId}`, message);
     res.json({
       reply: reply.text,
@@ -69,6 +73,23 @@ app.post("/api/chat", async (req, res) => {
     console.error("Error en /api/chat:", err);
     res.status(500).json({ error: "Error procesando el mensaje." });
   }
+});
+
+// Endpoint del panel de administradores (determinista, sin IA).
+app.post("/api/admin", (req, res) => {
+  const { sessionId, role, message } = req.body ?? {};
+  if (typeof sessionId !== "string" || typeof role !== "string" || typeof message !== "string") {
+    res.status(400).json({ error: "Se requieren 'sessionId', 'role' y 'message'." });
+    return;
+  }
+  const admin = adminFromRole(role);
+  const reply = handleAdminCommand(`adm:${sessionId}`, admin, message);
+  res.json({
+    reply: reply.text,
+    options: reply.options ?? [],
+    optionsButton: reply.optionsButton,
+    optionsTitle: reply.optionsTitle,
+  });
 });
 
 // Verificación del webhook (handshake con Meta)
@@ -104,8 +125,25 @@ async function handleIncoming(msg: {
 }): Promise<void> {
   console.log(`📩 ${msg.from}${msg.name ? ` (${msg.name})` : ""}: ${msg.text}`);
   void markAsRead(msg.messageId);
-  // Cada mensaje reinicia el temporizador de la encuesta (fin de conversación por inactividad).
+
+  // Si el número es de un administrador, va al panel admin (no al agente cliente).
+  const admin = getAdminByPhone(msg.from);
+  if (admin) {
+    try {
+      const r = handleAdminCommand(`wa:${msg.from}`, admin, msg.text);
+      const out = r.options?.length
+        ? `${r.text}\n\n${r.options.map((o, i) => `*${i + 1}.* ${o}`).join("\n")}`
+        : r.text;
+      await sendText(msg.from, out);
+    } catch (err) {
+      console.error(`Error en panel admin para ${msg.from}:`, err);
+    }
+    return;
+  }
+
+  // Cliente: cada mensaje reinicia el temporizador de la encuesta y suma a KPIs.
   survey.onActivity(msg.from);
+  bumpConversacion();
 
   try {
     const reply = await agent.handleMessage(msg.from, msg.text);

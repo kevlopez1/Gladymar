@@ -15,6 +15,7 @@ import {
 import { menuPrincipal, submenu } from "../knowledge/menu.js";
 import { infoTema, temasDisponibles } from "../knowledge/temas.js";
 import { AREAS } from "../knowledge/contactos.js";
+import { recordSolicitud } from "../admin/data.js";
 
 const TIPOS_SOLICITUD = [
   "contactar_asesor",
@@ -189,6 +190,9 @@ function registrarSolicitud(input: Record<string, unknown>): ToolExecution {
 
   const marca = prioridad === "critica" ? "🔴 CRÍTICA" : prioridad === "alta" ? "🟠 ALTA" : "";
   console.log(`📝 Solicitud [${tipo}] ${marca} ${ciudad ? `(${ciudad}) ` : ""}${nombre ? `de ${nombre} ` : ""}- ${detalle}`);
+
+  // Guarda la solicitud para que el panel de administradores la vea.
+  recordSolicitud({ tipo, prioridad, nombre, ciudad, detalle });
 
   const contactoSucursal = (): string => {
     const conWa = sucursalesPorCiudad(ciudad).filter((s) => s.whatsapp);
