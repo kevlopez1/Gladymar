@@ -19,7 +19,7 @@ export const TEMAS: Record<string, Tema> = {
     id: "roomvo",
     titulo: "Roomvo – Simulador de ambientes",
     contenido:
-      "Estamos preparando *Roomvo*, nuestro simulador para que vea cómo lucen nuestros productos en su propio espacio (sube una foto y prueba pisos y revestimientos). ✨\n" +
+      "Estamos preparando *Roomvo*, nuestro simulador para que veas cómo lucen nuestros productos en tu propio espacio (subes una foto y pruebas pisos y revestimientos). ✨\n" +
       "Aún está en implementación; muy pronto estará disponible en https://gladymar.com.bo.\n" +
       "⚠️ POR CONFIRMAR: enlace definitivo del simulador. Mientras tanto, ofrece acompañar al cliente con un asesor e incentivar la visita al showroom.",
     confirmado: false,
@@ -29,7 +29,7 @@ export const TEMAS: Record<string, Tema> = {
     id: "catalogo",
     titulo: "Catálogo de productos",
     contenido:
-      "Puede explorar nuestro catálogo y portafolio aquí:\n" +
+      "Puedes explorar nuestro catálogo y portafolio aquí:\n" +
       "• Portafolio: https://gladymar.com.bo/portafolio/\n" +
       "• Sitio web: https://gladymar.com.bo\n" +
       "(Si el cliente desea el catálogo, envíaselo además como documento PDF con el marcador [[DOCUMENTO: ...]].)",
@@ -49,7 +49,7 @@ export const TEMAS: Record<string, Tema> = {
       "• Mayor absorción y algo menos resistente.\n" +
       "• Ideal para *paredes* y ambientes de tránsito bajo/medio.\n" +
       "• Más liviana, fácil de cortar y más económica.\n\n" +
-      "En resumen: para pisos de mucho uso o exteriores, *porcelanato*; para paredes o presupuestos ajustados, *cerámica*. Un asesor puede recomendarle el producto exacto para su proyecto.",
+      "En resumen: para pisos de mucho uso o exteriores, *porcelanato*; para paredes o presupuestos ajustados, *cerámica*. Un asesor puede recomendarte el producto exacto para tu proyecto.",
     confirmado: true,
   },
 
@@ -58,12 +58,12 @@ export const TEMAS: Record<string, Tema> = {
     titulo: "Tipo de pegamento recomendado",
     contenido:
       "Recomendaciones de colocado de Gladymar:\n" +
-      "• Use un *pegamento/adhesivo impermeable* para evitar desprendimientos por mala adherencia.\n" +
-      "• Aplíquelo con *llana dentada de 8 mm*.\n" +
+      "• Usa un *pegamento/adhesivo impermeable* para evitar desprendimientos por mala adherencia.\n" +
+      "• Aplícalo con *llana dentada de 8 mm*.\n" +
       "• El contrapiso/carpeta debe estar *bien nivelado, resistente e impermeabilizado* (hidrofugado), para evitar eflorescencias (salitre).\n" +
-      "• Antes de colocar, abra *4 o más cajas* y tome una pieza de cada una, para uniformar el tono.\n" +
-      "• Respete las juntas (de colocación, dilatación y unión).\n\n" +
-      "Gladymar cuenta con adhesivos y complementos. Para el producto y rendimiento exactos según sus m² y formato, confírmelo con un asesor.",
+      "• Antes de colocar, abre *4 o más cajas* y toma una pieza de cada una, para uniformar el tono.\n" +
+      "• Respeta las juntas (de colocación, dilatación y unión).\n\n" +
+      "Gladymar cuenta con adhesivos y complementos. Para el producto y rendimiento exactos según tus m² y formato, confírmalo con un asesor.",
     confirmado: true,
   },
 
@@ -74,9 +74,9 @@ export const TEMAS: Record<string, Tema> = {
       "Puntos clave para una colocación correcta (según Gladymar):\n" +
       "• Pegamento *impermeable* + *llana dentada de 8 mm*.\n" +
       "• Contrapiso nivelado, resistente e *impermeabilizado* (evita salitre/eflorescencias).\n" +
-      "• Abra *4+ cajas* y mezcle piezas para uniformar el tono.\n" +
-      "• Respete las juntas (colocación, dilatación y unión).\n\n" +
-      "Contamos con el *Tríptico de Colocación* completo. Si lo desea, se lo compartimos; un asesor también puede facilitárselo.",
+      "• Abre *4+ cajas* y mezcla piezas para uniformar el tono.\n" +
+      "• Respeta las juntas (colocación, dilatación y unión).\n\n" +
+      "Contamos con el *Tríptico de Colocación* completo. Si quieres, te lo compartimos; un asesor también puede facilitártelo.",
     confirmado: true,
   },
 
@@ -85,9 +85,9 @@ export const TEMAS: Record<string, Tema> = {
     titulo: "Soluciones a problemas frecuentes",
     contenido:
       "Casos comunes y su causa habitual:\n" +
-      "• *Piezas que se desprenden*: suele ser pegamento no impermeable o superficie mal preparada. Use adhesivo impermeable sobre un contrapiso firme.\n" +
+      "• *Piezas que se desprenden*: suele ser pegamento no impermeable o superficie mal preparada. Usa adhesivo impermeable sobre un contrapiso firme.\n" +
       "• *Manchas blancas / salitre (eflorescencia)*: falta de impermeabilización del contrapiso o carpeta.\n" +
-      "• *Diferencia de tono entre piezas*: coloque mezclando piezas de varias cajas (4+) y verifique lote/calibre.\n" +
+      "• *Diferencia de tono entre piezas*: coloca mezclando piezas de varias cajas (4+) y verifica lote/calibre.\n" +
       "• *Suena hueco al pisar*: falta de pegamento o mala colocación.\n\n" +
       "Para un caso puntual, lo mejor es registrar el reclamo o agendar una *visita técnica*.",
     confirmado: true,

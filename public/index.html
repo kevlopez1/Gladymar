@@ -32,7 +32,8 @@
   .header { background: var(--wa-header); flex: 0 0 auto; display: flex; align-items: center; padding: 4px 10px 8px; gap: 7px; border-bottom: 1px solid #d9d9d9; }
   .header .back { display: flex; align-items: center; color: #007aff; gap: 2px; }
   .header .back .count { font-size: 16px; }
-  .avatar { width: 38px; height: 38px; border-radius: 50%; flex: 0 0 38px; background: var(--wa-red); display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .avatar { width: 38px; height: 38px; border-radius: 50%; flex: 0 0 38px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .header .who { flex: 1; min-width: 0; }
   .header .who .name { font-size: 16px; font-weight: 600; color: #000; line-height: 1.15; }
   .header .who .status { font-size: 12px; color: var(--wa-meta); }
@@ -113,7 +114,7 @@
         <span class="count">35</span>
       </div>
       <div class="avatar" aria-label="Gladymar">
-        <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 6.5 15.2c-1.3.5-3 .8-4.5.8a8 8 0 0 1 0-16c1.6 0 3.2.4 4.5 1.2A9 9 0 0 0 12 3z" fill="#fff"/><circle cx="12" cy="12" r="2.4" fill="#fff"/></svg>
+        <img src="gladymar-logo.png" alt="Gladymar" />
       </div>
       <div class="who">
         <div class="name">Gladymar</div>
@@ -170,9 +171,15 @@
   function formatWA(text){
     let t = escapeHtml(text);
     t = t.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
-    t = t.replace(/(^|[\s(¡¿])\*(?!\s)([^*\n]+?)\*(?=$|[\s).,!?:;])/g, '$1<b>$2</b>');
-    t = t.replace(/(^|[\s(¡¿])_(?!\s)([^_\n]+?)_(?=$|[\s).,!?:;])/g, '$1<i>$2</i>');
-    t = t.replace(/(^|[\s(¡¿])~(?!\s)([^~\n]+?)~(?=$|[\s).,!?:;])/g, '$1<s>$2</s>');
+    // Viñetas markdown al inicio de línea -> bullet limpio
+    t = t.replace(/^[\t ]*[-*]\s+/gm, '• ');
+    // Negrita: primero dobles asteriscos, luego simples
+    t = t.replace(/\*\*(?!\s)([^*\n]+?)\*\*/g, '<b>$1</b>');
+    t = t.replace(/(^|[\s(¡¿>•])\*(?!\s)([^*\n]+?)\*(?=$|[\s).,!?:;])/g, '$1<b>$2</b>');
+    t = t.replace(/(^|[\s(¡¿>])_(?!\s)([^_\n]+?)_(?=$|[\s).,!?:;])/g, '$1<i>$2</i>');
+    t = t.replace(/(^|[\s(¡¿>])~(?!\s)([^~\n]+?)~(?=$|[\s).,!?:;])/g, '$1<s>$2</s>');
+    // Limpia asteriscos sueltos que hayan quedado sin par
+    t = t.replace(/\*/g, '');
     return t.replace(/\n/g, '<br>');
   }
   function scrollDown(){ chat.scrollTop = chat.scrollHeight; }
