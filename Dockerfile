@@ -1,16 +1,14 @@
 # Imagen universal para desplegar el agente/demo en cualquier hosting
-# (Railway, Fly.io, Cloud Run, etc.).
+# (Railway, Fly.io, Cloud Run, etc.). El servidor se ejecuta con tsx (TypeScript
+# directo), así que no requiere paso de compilación.
 FROM node:22-slim
 
 WORKDIR /app
 
-# Instala dependencias (incluye devDependencies para poder compilar TypeScript)
 COPY package*.json ./
-RUN npm install --include=dev
+RUN npm install
 
-# Copia el código y compila
 COPY . .
-RUN npm run build
 
 ENV NODE_ENV=production
 # El puerto real lo define el hosting vía la variable PORT.
