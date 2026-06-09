@@ -62,6 +62,7 @@ app.post("/api/chat", async (req, res) => {
       options: reply.options,
       optionsButton: reply.optionsButton,
       optionsTitle: reply.optionsTitle,
+      document: reply.document,
       escalated: reply.escalated,
     });
   } catch (err) {

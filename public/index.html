@@ -72,6 +72,13 @@
   .sheet-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid #f1f3f4; cursor: pointer; font-size: 15.5px; color: #111b21; }
   .sheet-row:active { background: #f5f6f6; }
   .sheet-row .radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #c4cad0; flex: 0 0 20px; }
+  /* Documento (PDF) */
+  .docrow { display: flex; align-items: center; gap: 10px; background: #f5f6f6; border-radius: 8px; padding: 10px; min-width: 210px; }
+  .docicon { width: 34px; height: 40px; border-radius: 5px; background: #f15b5b; color: #fff; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: 0 0 34px; box-shadow: inset 0 -10px 0 rgba(0,0,0,.08); }
+  .docmeta { flex: 1; min-width: 0; }
+  .docname { font-size: 14px; font-weight: 600; color: #111b21; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .docsub { font-size: 12px; color: var(--wa-meta); margin-top: 2px; }
+  .docdl { width: 30px; height: 30px; border-radius: 50%; background: #00a884; color: #fff; display: flex; align-items: center; justify-content: center; flex: 0 0 30px; }
   /* Typing */
   .typing .bubble { padding: 11px 14px; }
   .dots { display: inline-flex; gap: 4px; }
@@ -187,6 +194,18 @@
     }
   }
 
+  function addDoc(doc){
+    const row = document.createElement('div');
+    row.className = 'row in';
+    row.innerHTML = '<div class="bubble">' + TAIL_IN +
+      '<div class="docrow"><div class="docicon">PDF</div>' +
+      '<div class="docmeta"><div class="docname">' + escapeHtml(doc.name || 'Documento.pdf') + '</div>' +
+      '<div class="docsub">' + escapeHtml(doc.info || 'PDF') + '</div></div>' +
+      '<div class="docdl"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6"/></svg></div></div>' +
+      '<span class="meta">' + nowTime() + '</span></div>';
+    chat.appendChild(row); scrollDown();
+  }
+
   function markSpent(){ document.querySelectorAll('.listbtn').forEach(b => b.classList.add('spent')); }
 
   function openSheet(options, btn, title){
@@ -226,10 +245,11 @@
       const data = await askAgent(message);
       await new Promise(r => setTimeout(r, humanDelay(data.reply)));
       hideTyping();
-      addMessage(data.reply || 'Disculpá, no pude responder. ¿Lo intentamos de nuevo?', 'in', data.options, data.optionsButton, data.optionsTitle);
+      addMessage(data.reply || 'Disculpe, no pude responder. ¿Podría reformular su consulta?', 'in', data.options, data.optionsButton, data.optionsTitle);
+      if (data.document) addDoc(data.document);
     } catch (e) {
       hideTyping();
-      addMessage('⚠️ No pude conectar con el asistente. Verificá la conexión.', 'in');
+      addMessage('⚠️ No pude conectar con el asistente. Verifique la conexión.', 'in');
     } finally { busy = false; }
   }
 

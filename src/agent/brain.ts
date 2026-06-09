@@ -26,8 +26,21 @@ export interface AgentReply {
   optionsTitle?: string;
   /** El cliente pidió el Manual de Asentamiento (adjuntar PDF si hay enlace configurado). */
   attachManual: boolean;
+  /** Documento (PDF) a "enviar" en el chat, ej. el catálogo (muestra en el demo). */
+  document?: { name: string; info?: string };
   /** Solicitud registrada en este turno (para el log en Google Sheets), si hubo. */
   solicitud?: { tipo: string; prioridad: string; detalle: string; nombre?: string; ciudad?: string; telefono?: string };
+}
+
+/**
+ * Extrae el marcador [[DOCUMENTO: nombre.pdf | info]] del texto del agente.
+ */
+function extractDocument(text: string): { text: string; document?: { name: string; info?: string } } {
+  const m = text.match(/\[\[\s*DOCUMENTO\s*:\s*([^\]]+)\]\]/i);
+  if (!m) return { text };
+  const parts = m[1].split("|").map((s) => s.trim());
+  const cleaned = text.replace(m[0], "").replace(/\n{3,}/g, "\n\n").trim();
+  return { text: cleaned, document: { name: parts[0] || "Documento.pdf", info: parts[1] || undefined } };
 }
 
 interface ParsedOptions {
@@ -133,15 +146,17 @@ export class GladymarAgent {
     messages.push({ role: "assistant", content: response.content });
     this.store.set(userId, messages);
 
-    const parsed = extractOptions(
-      text || "Disculpá, no pude generar una respuesta. ¿Lo intentamos de nuevo?",
+    const withDoc = extractDocument(
+      text || "Disculpe, no pude generar una respuesta. ¿Podría reformular su consulta?",
     );
+    const parsed = extractOptions(withDoc.text);
 
     return {
       text: parsed.text,
       options: parsed.options,
       optionsButton: parsed.optionsButton,
       optionsTitle: parsed.optionsTitle,
+      document: withDoc.document,
       escalated,
       attachManual,
       solicitud,

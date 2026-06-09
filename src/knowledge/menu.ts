@@ -61,8 +61,8 @@ export const MENU: SeccionMenu[] = [
 export function menuPrincipal(): string {
   const opciones = MENU.map((s) => s.titulo).join(" | ");
   return [
-    "Contanos, ¿cómo te ayudamos hoy? 😊",
-    `[[OPCIONES boton="Ver opciones" titulo="¿Cómo te ayudamos?": ${opciones}]]`,
+    "¿En qué podemos ayudarle?",
+    `[[OPCIONES boton="Ver opciones" titulo="¿En qué le ayudamos?": ${opciones}]]`,
   ].join("\n");
 }
 

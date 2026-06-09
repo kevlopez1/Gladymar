@@ -63,16 +63,16 @@ export class SurveyScheduler {
   }
 }
 
-/** Mensaje de la encuesta, en el tono cálido cruceño de Gladymar. */
+/** Mensaje de la encuesta, en tono neutro y premium de Gladymar. */
 export function buildSurveyMessage(url: string): string {
   return [
     "*Gladymar* ✨",
     "",
-    "¡Gracias por escribirnos! 😊 Nos encantaría conocer tu experiencia.",
+    "Gracias por escribirnos. Nos encantaría conocer su experiencia.",
     "",
-    "Es una encuesta cortita:",
+    "Le tomará solo un momento:",
     url,
     "",
-    "_Tu opinión nos ayuda a seguir mejorando. Más que cerámicas, fabricamos emociones._",
+    "_Su opinión nos ayuda a seguir mejorando. Más que cerámicas, fabricamos emociones._",
   ].join("\n");
 }
