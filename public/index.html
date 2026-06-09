@@ -93,8 +93,8 @@
   /* Composer */
   .composer { background: var(--wa-header); flex: 0 0 auto; padding: 7px 8px calc(7px + env(safe-area-inset-bottom)); display: flex; align-items: flex-end; gap: 8px; }
   .composer .plus { color: #007aff; padding: 6px 2px; }
-  .composer .field { flex: 1; background: #fff; border: 1px solid #d9d9d9; border-radius: 20px; display: flex; align-items: center; padding: 7px 12px; gap: 8px; min-height: 36px; }
-  .composer .field input { flex: 1; border: 0; outline: 0; font-size: 16px; background: transparent; color: #111; }
+  .composer .field { flex: 1 1 auto; min-width: 0; background: #fff; border: 1px solid #d9d9d9; border-radius: 20px; display: flex; align-items: center; padding: 7px 12px; gap: 8px; min-height: 36px; }
+  .composer .field input { flex: 1 1 auto; min-width: 0; width: 100%; border: 0; outline: 0; font-size: 16px; background: transparent; color: #111; }
   .composer .field .ic { color: #8b8b8f; flex: 0 0 auto; }
   .composer .send { width: 36px; height: 36px; border-radius: 50%; background: var(--wa-green); border: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: 0 0 36px; transition: transform .12s; }
   .composer .send:active { transform: scale(.92); }
@@ -145,7 +145,7 @@
         <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2" stroke-linecap="round"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg></span>
       </div>
       <button class="send" id="send" type="submit" aria-label="Enviar">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M2.5 12l17-8.5-4 9 4 9-17-8.5 6-4.5z"/></svg>
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="#fff"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
       </button>
     </form>
 
