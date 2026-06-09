@@ -15,17 +15,21 @@
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     background: linear-gradient(160deg, #f3f5f7 0%, #e7ebef 100%);
-    min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 14px;
+    min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 16px 14px;
   }
+  .demo-title { text-align: center; line-height: 1.2; }
+  .demo-title .t { font-size: clamp(16px, 4.6vw, 22px); font-weight: 700; color: #2b3a45; letter-spacing: .3px; }
+  .demo-title .s { font-size: 12px; font-weight: 500; color: #80909b; margin-top: 3px; }
   .phone {
-    position: relative; width: 100%; max-width: 400px;
-    height: min(860px, calc(100dvh - 24px));
-    background: var(--wa-beige); border-radius: 40px; border: 9px solid #0c0c0e;
+    position: relative; width: 100%; max-width: 340px;
+    height: min(720px, calc(100dvh - 120px));
+    background: var(--wa-beige); border-radius: 38px; border: 9px solid #0c0c0e;
     box-shadow: 0 22px 60px rgba(0,0,0,.28); overflow: hidden; display: flex; flex-direction: column;
   }
   @media (max-width: 430px) {
-    body { padding: 6px; }
-    .phone { border-width: 6px; border-radius: 30px; height: calc(100dvh - 12px); }
+    body { padding: 12px 12px; gap: 10px; }
+    .phone { border-width: 6px; border-radius: 32px; max-width: 320px; height: calc(100dvh - 110px); }
   }
   .statusbar { background: var(--wa-header); flex: 0 0 auto; padding: 9px 22px 3px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; color: #000; }
   .statusbar .icons { display: flex; gap: 5px; align-items: center; }
@@ -98,6 +102,10 @@
 </style>
 </head>
 <body>
+  <div class="demo-title">
+    <div class="t">Demo Agente Gladymar</div>
+    <div class="s">Vista previa de la atención en WhatsApp</div>
+  </div>
   <div class="phone">
     <div class="statusbar">
       <span id="clock">11:09</span>
