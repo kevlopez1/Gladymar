@@ -17,7 +17,7 @@ export interface Admin {
 /** Número del administrador (formato internacional sin "+", como llega de WhatsApp). */
 export const ADMIN_TELEFONO = (process.env.GERENTE_TELEFONO || "59167401827").trim();
 
-const ADMIN: Admin = { id: ADMIN_TELEFONO, nombre: "Administrador", role: "gerente" };
+const ADMIN: Admin = { id: ADMIN_TELEFONO, nombre: "Gerente General", role: "gerente" };
 
 /** Mapa teléfono -> Admin (para enrutar en WhatsApp real). */
 export const ADMIN_POR_TELEFONO: Record<string, Admin> = { [ADMIN_TELEFONO]: ADMIN };
