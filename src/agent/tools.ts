@@ -113,7 +113,7 @@ export const TOOLS: Anthropic.Tool[] = [
         },
         ciudad: { type: "string", description: "Ciudad del cliente (si se conoce), para derivar a la sucursal correcta." },
         nombre: { type: "string", description: "Nombre del cliente, si lo proporcionó." },
-        telefono: { type: "string", description: "Teléfono/WhatsApp de contacto, si lo proporcionó." },
+        telefono: { type: "string", description: "Teléfono SOLO si el cliente lo ofrece. NO lo pidas: el cliente ya escribe desde su WhatsApp." },
         detalle: {
           type: "string",
           description:
@@ -219,12 +219,15 @@ function registrarSolicitud(input: Record<string, unknown>): ToolExecution {
         (tipo === "cotizacion" ? "Recuerda: la cotización la realiza un asesor, no este canal. " : "") +
         contactoSucursal();
       break;
-    case "reclamo":
+    case "reclamo": {
+      const suc = sucursalesPorCiudad(ciudad).filter((s) => s.whatsapp)[0];
+      const sucName = suc ? `${suc.ciudad} – ${suc.nombre}` : "la sucursal más cercana";
       content =
-        `Reclamo registrado (${detalle}). Discúlpate por el inconveniente y confirma que un responsable dará seguimiento. ` +
-        "Si aplica, ofrece agendar una visita técnica. " +
-        contactoSucursal();
+        `Reclamo PRIORITARIO registrado (${detalle}). Enrutado a *${sucName}*. ` +
+        "Con empatía, dile al cliente que su caso es PRIORITARIO y que en las próximas horas un asesor de su ciudad lo contactará por este mismo WhatsApp para resolverlo. " +
+        "NO le pidas su número (ya escribe desde aquí) ni le sugieras pasar por tienda o llamar él mismo.";
       break;
+    }
     case "visita_tecnica":
       content =
         `Solicitud de visita técnica registrada (${detalle}). ` +
