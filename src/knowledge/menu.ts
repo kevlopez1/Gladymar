@@ -22,8 +22,8 @@ export const MENU: SeccionMenu[] = [
     id: "1",
     titulo: "Diseñar mi espacio",
     opciones: [
-      { id: "1.1", titulo: "Acceso a Roomvo (visualizador)" },
-      { id: "1.2", titulo: "Contactar asesor" },
+      { id: "1.1", titulo: "Orientación por chat" },
+      { id: "1.2", titulo: "Contactar un asesor de diseño" },
     ],
   },
   {
