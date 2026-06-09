@@ -20,8 +20,7 @@ export const TEMAS: Record<string, Tema> = {
     titulo: "Roomvo – Simulador de ambientes",
     contenido:
       "Estamos preparando *Roomvo*, nuestro simulador para que veas cómo lucen nuestros productos en tu propio espacio (subes una foto y pruebas pisos y revestimientos). ✨\n" +
-      "Aún está en implementación; muy pronto estará disponible en https://gladymar.com.bo.\n" +
-      "⚠️ POR CONFIRMAR: enlace definitivo del simulador. Mientras tanto, ofrece acompañar al cliente con un asesor e incentivar la visita al showroom.",
+      "Estará disponible muy pronto en https://gladymar.com.bo. Mientras tanto, con gusto te conecto con un asesor o te invito a visitar nuestro showroom.",
     confirmado: false,
   },
 
@@ -31,8 +30,7 @@ export const TEMAS: Record<string, Tema> = {
     contenido:
       "Puedes explorar nuestro catálogo y portafolio aquí:\n" +
       "• Portafolio: https://gladymar.com.bo/portafolio/\n" +
-      "• Sitio web: https://gladymar.com.bo\n" +
-      "(Si el cliente desea el catálogo, envíaselo además como documento PDF con el marcador [[DOCUMENTO: ...]].)",
+      "• Sitio web: https://gladymar.com.bo",
     confirmado: true,
   },
 
@@ -99,12 +97,11 @@ export function temasDisponibles(): string[] {
   return Object.keys(TEMAS);
 }
 
-/** Devuelve el contenido de un tema. */
+/** Devuelve el contenido (apto para el cliente) de un tema. */
 export function infoTema(id: string): string {
   const tema = TEMAS[id];
   if (!tema) {
     return `No reconozco el tema "${id}". Temas disponibles: ${temasDisponibles().join(", ")}.`;
   }
-  const aviso = tema.confirmado ? "" : "\n[Dato no confirmado: sé transparente, no inventes enlaces ni datos.]";
-  return `${tema.titulo}\n${tema.contenido}${aviso}`;
+  return `${tema.titulo}\n${tema.contenido}`;
 }

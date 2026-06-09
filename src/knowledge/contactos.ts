@@ -25,9 +25,9 @@ export const AREAS: Record<string, AreaContacto> = {
     id: "compras_servicios",
     nombre: "Compras y Servicios (proveedores)",
     descripcion: "Contacto para proveedores, compras y servicios a la empresa.",
+    // Guía para el agente (no es texto literal para el cliente).
     contacto:
-      "⚠️ POR CONFIRMAR: aún no tengo el contacto oficial del área de Compras y Servicios. " +
-      "Toma los datos del proveedor (nombre, empresa, rubro, teléfono) y su motivo para que el área lo contacte. No inventes un contacto.",
+      "Toma los datos del proveedor (nombre, empresa, rubro, teléfono) y su motivo, y avísale que el área de Compras y Servicios lo contactará. No inventes un contacto.",
     confirmado: false,
   },
 
@@ -35,9 +35,9 @@ export const AREAS: Record<string, AreaContacto> = {
     id: "distribuidores",
     nombre: "Cómo ser distribuidor",
     descripcion: "Requisitos e información para convertirse en distribuidor de Gladymar.",
+    // Guía para el agente (no es texto literal para el cliente).
     contacto:
-      "⚠️ POR CONFIRMAR: aún no tengo el contacto/requisitos oficiales para ser distribuidor. " +
-      "Toma los datos del interesado (nombre, ciudad, empresa, teléfono) para que el área comercial lo contacte. No inventes requisitos ni contactos.",
+      "Toma los datos del interesado (nombre, ciudad, empresa, teléfono) y avísale que el área comercial lo contactará para indicarle los requisitos. No inventes requisitos ni contactos.",
     confirmado: false,
   },
 };
@@ -53,6 +53,5 @@ export function infoArea(id: string): string {
   if (!area) {
     return `No reconozco el área "${id}". Áreas disponibles: ${areasDisponibles().join(", ")}.`;
   }
-  const aviso = area.confirmado ? "" : " [Dato no confirmado: no lo afirmes como oficial; sé transparente.]";
-  return `${area.nombre}: ${area.contacto}${aviso}`;
+  return `${area.nombre}: ${area.contacto}`;
 }

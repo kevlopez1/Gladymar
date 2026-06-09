@@ -151,8 +151,15 @@ export class GladymarAgent {
     );
     const parsed = extractOptions(withDoc.text);
 
+    // Blindaje: nunca dejar marcadores (bien o mal formados) en el texto al cliente.
+    const safeText = parsed.text
+      .replace(/\[\[\s*(OPCIONES|DOCUMENTO)[\s\S]*$/i, "") // marcador sin cerrar al final
+      .replace(/\[\[[^\]]*\]\]/g, "") // cualquier marcador residual
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+
     return {
-      text: parsed.text,
+      text: safeText,
       options: parsed.options,
       optionsButton: parsed.optionsButton,
       optionsTitle: parsed.optionsTitle,

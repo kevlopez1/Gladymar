@@ -178,6 +178,9 @@
   function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function formatWA(text){
     let t = escapeHtml(text);
+    // Red de seguridad: quita marcadores internos que no debería ver el cliente
+    t = t.replace(/\[\[\s*(OPCIONES|DOCUMENTO)[\s\S]*$/i, '');
+    t = t.replace(/\[\[[^\]]*\]\]/g, '');
     t = t.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
     // Viñetas markdown al inicio de línea -> bullet limpio
     t = t.replace(/^[\t ]*[-*]\s+/gm, '• ');
