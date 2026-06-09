@@ -173,8 +173,9 @@
   </div>
 
 <script>
-  const TAIL_IN = '<svg class="tail" viewBox="0 0 9 13"><path d="M9 0H0v13C0 5 4 0 9 0z" fill="#fff"/></svg>';
-  const TAIL_OUT = '<svg class="tail" viewBox="0 0 9 13"><path d="M0 0h9v13C9 5 5 0 0 0z" fill="#e7ffdb"/></svg>';
+  // Sin "colita" SVG (salía como un cuadrado). Se conserva la esquina recta de WhatsApp vía CSS.
+  const TAIL_IN = '';
+  const TAIL_OUT = '';
   const LIST_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>';
   const rid = () => Math.random().toString(36).slice(2, 11);
   const escapeHtml = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
