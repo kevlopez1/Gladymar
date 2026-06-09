@@ -10,7 +10,7 @@ import path from "node:path";
 import { config, isWhatsAppConfigured } from "./config.js";
 import { GladymarAgent } from "./agent/brain.js";
 import { InMemorySessionStore } from "./session/store.js";
-import { sendText, sendDocument, markAsRead } from "./whatsapp/client.js";
+import { sendText, sendDocument, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
@@ -117,6 +117,18 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Divide la respuesta en 2-3 bloques por párrafos (para enviarlos como mensajes separados). */
+function splitBlocks(text: string): string[] {
+  const parts = text.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
+  if (parts.length <= 1) return [text.trim()];
+  if (parts.length > 3) return [parts[0], parts[1], parts.slice(2).join("\n\n")];
+  return parts;
+}
+
 async function handleIncoming(msg: {
   from: string;
   text: string;
@@ -124,11 +136,11 @@ async function handleIncoming(msg: {
   name?: string;
 }): Promise<void> {
   console.log(`📩 ${msg.from}${msg.name ? ` (${msg.name})` : ""}: ${msg.text}`);
-  void markAsRead(msg.messageId);
 
   // Si el número es de un administrador, va al panel admin (no al agente cliente).
   const admin = getAdminByPhone(msg.from);
   if (admin) {
+    void markAsRead(msg.messageId);
     try {
       const r = handleAdminCommand(`wa:${msg.from}`, admin, msg.text);
       const out = r.options?.length
@@ -141,18 +153,24 @@ async function handleIncoming(msg: {
     return;
   }
 
-  // Cliente: cada mensaje reinicia el temporizador de la encuesta y suma a KPIs.
+  // Cliente: marca leído + "escribiendo…", reinicia encuesta y suma a KPIs.
+  void markReadAndTyping(msg.messageId);
   survey.onActivity(msg.from);
   bumpConversacion();
 
   try {
     const reply = await agent.handleMessage(msg.from, msg.text);
-    // En WhatsApp real, las opciones se anexan como lista de texto (fallback).
-    // (Los botones interactivos nativos se pueden implementar más adelante.)
-    const outText = reply.options.length
-      ? `${reply.text}\n\n${reply.options.map((o, i) => `*${i + 1}.* ${o}`).join("\n")}`
-      : reply.text;
-    await sendText(msg.from, outText);
+
+    // Respuestas en bloques: divide en 2-3 mensajes con pausas humanas.
+    const bloques = splitBlocks(reply.text);
+    const fallbackOpciones = reply.options.length
+      ? "\n\n" + reply.options.map((o, i) => `*${i + 1}.* ${o}`).join("\n")
+      : "";
+    for (let i = 0; i < bloques.length; i++) {
+      const esUltimo = i === bloques.length - 1;
+      await sendText(msg.from, esUltimo ? bloques[i] + fallbackOpciones : bloques[i]);
+      if (!esUltimo) await sleep(800);
+    }
 
     // Adjunta el Manual de Asentamiento (PDF) si el cliente lo pidió y hay enlace configurado.
     if (reply.attachManual && config.assets.manualUrl) {

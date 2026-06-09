@@ -70,9 +70,21 @@ export async function sendDocument(
 }
 
 /**
- * Marca un mensaje entrante como leído (opcional, mejora la UX: doble check azul).
+ * Marca un mensaje entrante como leído (doble check azul).
  */
 export async function markAsRead(messageId: string): Promise<void> {
+  await postStatus({ status: "read", message_id: messageId });
+}
+
+/**
+ * Marca como leído Y muestra el indicador "escribiendo…" al cliente.
+ * El indicador se mantiene hasta ~25s o hasta que enviemos un mensaje.
+ */
+export async function markReadAndTyping(messageId: string): Promise<void> {
+  await postStatus({ status: "read", message_id: messageId, typing_indicator: { type: "text" } });
+}
+
+async function postStatus(body: Record<string, unknown>): Promise<void> {
   const url = `${BASE}/${config.whatsapp.phoneNumberId}/messages`;
   try {
     await fetch(url, {
@@ -81,13 +93,9 @@ export async function markAsRead(messageId: string): Promise<void> {
         Authorization: `Bearer ${config.whatsapp.accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        status: "read",
-        message_id: messageId,
-      }),
+      body: JSON.stringify({ messaging_product: "whatsapp", ...body }),
     });
   } catch {
-    // No es crítico; ignoramos errores al marcar como leído.
+    // No es crítico; ignoramos errores de estado/typing.
   }
 }

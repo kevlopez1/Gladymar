@@ -193,6 +193,12 @@
     return t.replace(/\n/g, '<br>');
   }
   const NOTICE = '<div class="day"><span>HOY</span></div><div class="notice"><span>🔒 Los mensajes están cifrados de extremo a extremo. Demostración del asistente Gladymar.</span></div>';
+  function splitBlocks(text){
+    const parts = (text||'').split(/\n{2,}/).map(s=>s.trim()).filter(Boolean);
+    if (parts.length <= 1) return [(text||'').trim()];
+    if (parts.length > 3) return [parts[0], parts[1], parts.slice(2).join('\n\n')];
+    return parts;
+  }
 
   // Reloj
   function tick(){ const v=nowTime(); document.querySelectorAll('.clock').forEach(e=>e.textContent=v); }
@@ -250,9 +256,14 @@
       busy = true; showTyping();
       try {
         const data = await sendFn(message);
-        await new Promise(r => setTimeout(r, delay(data.reply)));
-        hideTyping();
-        addMessage(data.reply || '…', 'in', data.options, data.optionsButton, data.optionsTitle);
+        const blocks = splitBlocks(data.reply || '…');
+        for (let i = 0; i < blocks.length; i++){
+          await new Promise(r => setTimeout(r, i === 0 ? delay(blocks[i]) : 600));
+          hideTyping();
+          const last = i === blocks.length - 1;
+          addMessage(blocks[i], 'in', last ? data.options : null, last ? data.optionsButton : null, last ? data.optionsTitle : null);
+          if (!last) showTyping();
+        }
         if (data.document) addDoc(data.document);
       } catch (e) { hideTyping(); addMessage('⚠️ No pude conectar. Verifique la conexión.', 'in'); }
       finally { busy = false; }
