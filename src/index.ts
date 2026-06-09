@@ -57,7 +57,7 @@ app.post("/api/chat", async (req, res) => {
   }
   try {
     const reply = await agent.handleMessage(`demo:${sessionId}`, message);
-    res.json({ reply: reply.text, escalated: reply.escalated });
+    res.json({ reply: reply.text, options: reply.options, escalated: reply.escalated });
   } catch (err) {
     console.error("Error en /api/chat:", err);
     res.status(500).json({ error: "Error procesando el mensaje." });
@@ -102,7 +102,12 @@ async function handleIncoming(msg: {
 
   try {
     const reply = await agent.handleMessage(msg.from, msg.text);
-    await sendText(msg.from, reply.text);
+    // En WhatsApp real, las opciones se anexan como lista de texto (fallback).
+    // (Los botones interactivos nativos se pueden implementar más adelante.)
+    const outText = reply.options.length
+      ? `${reply.text}\n\n${reply.options.map((o, i) => `*${i + 1}.* ${o}`).join("\n")}`
+      : reply.text;
+    await sendText(msg.from, outText);
 
     // Adjunta el Manual de Asentamiento (PDF) si el cliente lo pidió y hay enlace configurado.
     if (reply.attachManual && config.assets.manualUrl) {

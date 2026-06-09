@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Gladymar · Demo WhatsApp</title>
 <style>
   :root {
@@ -14,44 +14,46 @@
     --wa-meta: #667781;
     --wa-blue: #53bdeb;
     --wa-green: #25d366;
+    --wa-teal: #0a9d82;
     --wa-red: #e2231a;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { height: 100%; margin: 0; }
+  html, body { margin: 0; min-height: 100%; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    background: #d2d8dc;
+    background: linear-gradient(160deg, #f3f5f7 0%, #e7ebef 100%);
+    min-height: 100dvh;
     display: flex; align-items: center; justify-content: center;
-    padding: 20px;
+    padding: 14px;
   }
-  /* Marco de teléfono */
+  /* Marco de teléfono (siempre visible, también en móvil) */
   .phone {
-    width: 100%; max-width: 420px; height: min(880px, 96vh);
+    position: relative;
+    width: 100%; max-width: 400px;
+    height: min(860px, calc(100dvh - 24px));
     background: var(--wa-beige);
-    border-radius: 42px;
-    box-shadow: 0 24px 70px rgba(0,0,0,.35);
-    overflow: hidden; position: relative;
-    display: flex; flex-direction: column;
-    border: 11px solid #1c1c1e;
+    border-radius: 40px;
+    border: 9px solid #0c0c0e;
+    box-shadow: 0 22px 60px rgba(0,0,0,.28);
+    overflow: hidden; display: flex; flex-direction: column;
   }
-  @media (max-width: 480px) {
-    body { padding: 0; }
-    .phone { max-width: none; height: 100vh; border-radius: 0; border: 0; }
+  @media (max-width: 430px) {
+    body { padding: 6px; }
+    .phone { border-width: 6px; border-radius: 30px; height: calc(100dvh - 12px); }
   }
   /* Status bar iOS */
   .statusbar {
-    background: var(--wa-header);
-    padding: 8px 22px 2px; display: flex; justify-content: space-between;
+    background: var(--wa-header); flex: 0 0 auto;
+    padding: 9px 22px 3px; display: flex; justify-content: space-between;
     align-items: center; font-size: 14px; font-weight: 600; color: #000;
   }
   .statusbar .icons { display: flex; gap: 5px; align-items: center; }
-  .statusbar .icons svg { display: block; }
   /* Header */
   .header {
-    background: var(--wa-header); display: flex; align-items: center;
-    padding: 4px 10px 8px; gap: 6px; border-bottom: 1px solid #d9d9d9;
+    background: var(--wa-header); flex: 0 0 auto; display: flex; align-items: center;
+    padding: 4px 10px 8px; gap: 7px; border-bottom: 1px solid #d9d9d9;
   }
-  .header .back { display: flex; align-items: center; color: #007aff; font-size: 17px; gap: 2px; }
+  .header .back { display: flex; align-items: center; color: #007aff; gap: 2px; }
   .header .back .count { font-size: 16px; }
   .avatar {
     width: 38px; height: 38px; border-radius: 50%; flex: 0 0 38px;
@@ -59,75 +61,65 @@
     box-shadow: 0 1px 2px rgba(0,0,0,.2);
   }
   .header .who { flex: 1; min-width: 0; }
-  .header .who .name { font-size: 16px; font-weight: 600; color: #000; line-height: 1.1; }
+  .header .who .name { font-size: 16px; font-weight: 600; color: #000; line-height: 1.15; }
   .header .who .status { font-size: 12px; color: var(--wa-meta); }
   .header .actions { display: flex; gap: 18px; color: #007aff; padding-right: 6px; }
   /* Chat */
   .chat {
-    flex: 1; overflow-y: auto; padding: 10px 8px 12px;
+    flex: 1 1 auto; overflow-y: auto; padding: 10px 8px 12px;
     background-color: var(--wa-beige);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='none' stroke='%23d8ccbf' stroke-width='1.1' opacity='0.5'%3E%3Ccircle cx='14' cy='16' r='5'/%3E%3Cpath d='M40 10c4 0 7 3 7 7s-3 7-7 7-7-3-7-7'/%3E%3Crect x='58' y='12' width='12' height='9' rx='2'/%3E%3Cpath d='M10 46l5-5 5 5-5 5z'/%3E%3Cpath d='M34 44h14M34 49h10'/%3E%3Ccircle cx='64' cy='52' r='6'/%3E%3Cpath d='M20 70q5-6 10 0'/%3E%3Cpath d='M50 66l4 4 4-4'/%3E%3C/g%3E%3C/svg%3E");
   }
   .day { text-align: center; margin: 8px 0 12px; }
-  .day span {
-    background: #e2f1ce; color: #5b6b56; font-size: 12.5px; font-weight: 500;
-    padding: 5px 12px; border-radius: 8px; box-shadow: 0 1px 0 rgba(0,0,0,.05);
-  }
+  .day span { background: #e2f1ce; color: #5b6b56; font-size: 12.5px; font-weight: 500; padding: 5px 12px; border-radius: 8px; }
   .notice { text-align: center; margin: 0 0 12px; }
-  .notice span {
-    background: #fdf4c8; color: #5e5b3e; font-size: 12px;
-    padding: 6px 14px; border-radius: 8px; display: inline-block; max-width: 88%;
-    line-height: 1.35; box-shadow: 0 1px 0 rgba(0,0,0,.05);
-  }
+  .notice span { background: #fdf4c8; color: #5e5b3e; font-size: 12px; padding: 6px 14px; border-radius: 8px; display: inline-block; max-width: 88%; line-height: 1.35; }
   .row { display: flex; margin: 2px 4px; }
   .row.in { justify-content: flex-start; }
   .row.out { justify-content: flex-end; }
   .bubble {
     position: relative; max-width: 80%; padding: 6px 9px 8px; border-radius: 8px;
     font-size: 15px; line-height: 1.32; color: var(--wa-text);
-    box-shadow: 0 1px .5px rgba(11,20,26,.13); word-wrap: break-word; white-space: normal;
+    box-shadow: 0 1px .5px rgba(11,20,26,.13); word-wrap: break-word;
   }
   .row.in .bubble { background: var(--wa-in); border-top-left-radius: 0; }
   .row.out .bubble { background: var(--wa-out); border-top-right-radius: 0; }
   .bubble .tail { position: absolute; top: 0; width: 9px; height: 13px; }
   .row.in .bubble .tail { left: -8px; }
   .row.out .bubble .tail { right: -8px; }
-  .bubble b { font-weight: 700; }
+  .bubble b { font-weight: 700; } .bubble i { font-style: italic; }
   .bubble a { color: #027eb5; text-decoration: none; }
-  .bubble .meta {
-    float: right; margin: 6px 0 -3px 10px; font-size: 11px; color: var(--wa-meta);
-    display: inline-flex; align-items: center; gap: 3px; user-select: none;
-  }
+  .bubble .meta { float: right; margin: 6px 0 -3px 10px; font-size: 11px; color: var(--wa-meta); display: inline-flex; align-items: center; gap: 3px; user-select: none; }
   .bubble .meta .check { color: var(--wa-blue); font-size: 15px; line-height: 1; }
+  /* Botones de opciones (mensaje interactivo de WhatsApp) */
+  .options { max-width: 80%; margin: 1px 4px 8px; display: flex; flex-direction: column; gap: 3px; }
+  .optbtn {
+    background: #fff; border: 0; border-radius: 8px; padding: 12px;
+    font-size: 15px; font-weight: 500; color: var(--wa-teal);
+    box-shadow: 0 1px .5px rgba(11,20,26,.13); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+  }
+  .optbtn:active { background: #f1f1f1; }
+  .options.spent { opacity: .55; pointer-events: none; }
   /* Typing */
   .typing .bubble { padding: 11px 14px; }
   .dots { display: inline-flex; gap: 4px; }
   .dots i { width: 7px; height: 7px; border-radius: 50%; background: #9aa6ad; display: inline-block; animation: blink 1.3s infinite both; }
   .dots i:nth-child(2){ animation-delay: .2s; } .dots i:nth-child(3){ animation-delay: .4s; }
   @keyframes blink { 0%,60%,100%{ opacity:.3; transform: translateY(0);} 30%{ opacity:1; transform: translateY(-3px);} }
-  /* Input */
-  .composer { background: var(--wa-header); padding: 7px 8px calc(7px + env(safe-area-inset-bottom)); display: flex; align-items: flex-end; gap: 8px; }
+  /* Composer */
+  .composer { background: var(--wa-header); flex: 0 0 auto; padding: 7px 8px calc(7px + env(safe-area-inset-bottom)); display: flex; align-items: flex-end; gap: 8px; }
   .composer .plus { color: #007aff; padding: 6px 2px; }
-  .composer .field {
-    flex: 1; background: #fff; border: 1px solid #d9d9d9; border-radius: 20px;
-    display: flex; align-items: center; padding: 7px 12px; gap: 8px; min-height: 36px;
-  }
-  .composer .field input {
-    flex: 1; border: 0; outline: 0; font-size: 16px; background: transparent; color: #111;
-  }
+  .composer .field { flex: 1; background: #fff; border: 1px solid #d9d9d9; border-radius: 20px; display: flex; align-items: center; padding: 7px 12px; gap: 8px; min-height: 36px; }
+  .composer .field input { flex: 1; border: 0; outline: 0; font-size: 16px; background: transparent; color: #111; }
   .composer .field .ic { color: #8b8b8f; flex: 0 0 auto; }
-  .composer .send {
-    width: 36px; height: 36px; border-radius: 50%; background: var(--wa-green);
-    border: 0; display: flex; align-items: center; justify-content: center; cursor: pointer;
-    flex: 0 0 36px; transition: transform .12s;
-  }
+  .composer .send { width: 36px; height: 36px; border-radius: 50%; background: var(--wa-green); border: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: 0 0 36px; transition: transform .12s; }
   .composer .send:active { transform: scale(.92); }
   .chat::-webkit-scrollbar { width: 0; }
 </style>
 </head>
 <body>
   <div class="phone">
-    <!-- Status bar -->
     <div class="statusbar">
       <span id="clock">11:09</span>
       <span class="icons">
@@ -137,7 +129,6 @@
       </span>
     </div>
 
-    <!-- Header -->
     <div class="header">
       <div class="back">
         <svg width="12" height="20" viewBox="0 0 12 20"><path d="M10 2L2 10l8 8" fill="none" stroke="#007aff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -155,13 +146,11 @@
       </div>
     </div>
 
-    <!-- Chat -->
     <div class="chat" id="chat">
       <div class="day"><span>HOY</span></div>
       <div class="notice"><span>🔒 Los mensajes están cifrados de extremo a extremo. Demostración del asistente Gladymar.</span></div>
     </div>
 
-    <!-- Composer -->
     <form class="composer" id="composer" autocomplete="off">
       <span class="plus"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
       <div class="field">
@@ -169,7 +158,7 @@
         <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2" stroke-linecap="round"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg></span>
       </div>
       <button class="send" id="send" type="submit" aria-label="Enviar">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M3 11l18-8-8 18-2-7-8-3z" opacity="0"/><path d="M2.5 12l17-8.5-4 9 4 9-17-8.5 6-4.5z"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M2.5 12l17-8.5-4 9 4 9-17-8.5 6-4.5z"/></svg>
       </button>
     </form>
   </div>
@@ -177,112 +166,98 @@
 <script>
   const TAIL_IN = '<svg class="tail" viewBox="0 0 9 13"><path d="M9 0H0v13C0 5 4 0 9 0z" fill="#fff"/></svg>';
   const TAIL_OUT = '<svg class="tail" viewBox="0 0 9 13"><path d="M0 0h9v13C9 5 5 0 0 0z" fill="#e7ffdb"/></svg>';
+  const REPLY_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17l-6-5 6-5"/><path d="M3 12h11a6 6 0 0 1 6 6v1"/></svg>';
   const chat = document.getElementById('chat');
   const input = document.getElementById('input');
   const form = document.getElementById('composer');
   const sessionId = 'web-' + Math.random().toString(36).slice(2, 11);
   let busy = false;
 
-  // Reloj real en la status bar
   function tick(){
     const d = new Date();
     document.getElementById('clock').textContent =
       String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
   }
   tick(); setInterval(tick, 30000);
+  function nowTime(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 
-  function nowTime(){
-    const d = new Date();
-    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-  }
-
-  function escapeHtml(s){
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-  // Formato WhatsApp: *negrita* _cursiva_ ~tachado~ y enlaces
+  function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function formatWA(text){
     let t = escapeHtml(text);
     t = t.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
     t = t.replace(/(^|[\s(¡¿])\*(?!\s)([^*\n]+?)\*(?=$|[\s).,!?:;])/g, '$1<b>$2</b>');
     t = t.replace(/(^|[\s(¡¿])_(?!\s)([^_\n]+?)_(?=$|[\s).,!?:;])/g, '$1<i>$2</i>');
     t = t.replace(/(^|[\s(¡¿])~(?!\s)([^~\n]+?)~(?=$|[\s).,!?:;])/g, '$1<s>$2</s>');
-    t = t.replace(/\n/g, '<br>');
-    return t;
+    return t.replace(/\n/g, '<br>');
   }
-
   function scrollDown(){ chat.scrollTop = chat.scrollHeight; }
 
   function addMessage(text, side){
     const row = document.createElement('div');
     row.className = 'row ' + side;
-    const checks = side === 'out'
-      ? '<span class="check">✓✓</span>'
-      : '';
-    row.innerHTML =
-      '<div class="bubble">' + (side === 'in' ? TAIL_IN : TAIL_OUT) +
+    const checks = side === 'out' ? '<span class="check">✓✓</span>' : '';
+    row.innerHTML = '<div class="bubble">' + (side==='in'?TAIL_IN:TAIL_OUT) +
       '<span class="txt">' + formatWA(text) + '</span>' +
-      '<span class="meta">' + nowTime() + checks + '</span>' +
-      '</div>';
-    chat.appendChild(row);
-    scrollDown();
-    return row;
+      '<span class="meta">' + nowTime() + checks + '</span></div>';
+    chat.appendChild(row); scrollDown();
+  }
+
+  function clearOptions(){ document.querySelectorAll('.options').forEach(e => e.classList.add('spent')); }
+  function renderOptions(opts){
+    if (!opts || !opts.length) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'options';
+    opts.forEach(o => {
+      const b = document.createElement('button');
+      b.className = 'optbtn';
+      b.innerHTML = REPLY_ICON + '<span>' + escapeHtml(o) + '</span>';
+      b.onclick = () => { if (busy) return; clearOptions(); botReply(o, true); };
+      wrap.appendChild(b);
+    });
+    chat.appendChild(wrap); scrollDown();
   }
 
   function showTyping(){
     const row = document.createElement('div');
-    row.className = 'row in typing';
-    row.id = 'typing';
-    row.innerHTML = '<div class="bubble">' + TAIL_IN +
-      '<span class="dots"><i></i><i></i><i></i></span></div>';
-    chat.appendChild(row);
-    scrollDown();
+    row.className = 'row in typing'; row.id = 'typing';
+    row.innerHTML = '<div class="bubble">' + TAIL_IN + '<span class="dots"><i></i><i></i><i></i></span></div>';
+    chat.appendChild(row); scrollDown();
   }
-  function hideTyping(){ const t = document.getElementById('typing'); if (t) t.remove(); }
+  function hideTyping(){ const t=document.getElementById('typing'); if(t) t.remove(); }
 
   async function askAgent(message){
     const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId, message })
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return res.json();
   }
-
-  // Pausa "humana" proporcional a la longitud de la respuesta
-  function humanDelay(text){
-    return Math.min(2200, 600 + (text ? text.length : 0) * 12);
-  }
+  function humanDelay(text){ return Math.min(2200, 600 + (text ? text.length : 0) * 12); }
 
   async function botReply(message, renderUser){
     if (renderUser) addMessage(message, 'out');
-    busy = true;
-    showTyping();
+    busy = true; showTyping();
     try {
       const data = await askAgent(message);
       await new Promise(r => setTimeout(r, humanDelay(data.reply)));
       hideTyping();
       addMessage(data.reply || 'Disculpá, no pude responder. ¿Lo intentamos de nuevo?', 'in');
+      renderOptions(data.options);
     } catch (e) {
       hideTyping();
-      addMessage('⚠️ No pude conectar con el asistente. Verificá que el servidor esté corriendo.', 'in');
-    } finally {
-      busy = false;
-    }
+      addMessage('⚠️ No pude conectar con el asistente. Verificá la conexión.', 'in');
+    } finally { busy = false; }
   }
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = input.value.trim();
     if (!text || busy) return;
-    input.value = '';
-    botReply(text, true);
+    input.value = ''; clearOptions(); botReply(text, true);
   });
 
-  // Saludo inicial: pedimos el mensaje de bienvenida del agente (sin mostrar "Hola")
-  window.addEventListener('load', () => {
-    botReply('Hola', false);
-  });
+  window.addEventListener('load', () => { botReply('Hola', false); });
 </script>
 </body>
 </html>

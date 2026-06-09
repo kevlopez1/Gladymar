@@ -18,10 +18,28 @@ const MAX_TOOL_ROUNDS = 5; // tope de seguridad para el loop de herramientas
 export interface AgentReply {
   text: string;
   escalated: boolean;
+  /** Opciones tipo botón para mostrar al cliente (experiencia interactiva de WhatsApp). */
+  options: string[];
   /** El cliente pidió el Manual de Asentamiento (adjuntar PDF si hay enlace configurado). */
   attachManual: boolean;
   /** Solicitud registrada en este turno (para el log en Google Sheets), si hubo. */
   solicitud?: { tipo: string; prioridad: string; detalle: string; nombre?: string; ciudad?: string; telefono?: string };
+}
+
+/**
+ * Extrae las opciones del marcador [[OPCIONES: a | b | c]] del texto del agente
+ * y devuelve el texto ya limpio (sin el marcador) + la lista de opciones.
+ */
+function extractOptions(text: string): { text: string; options: string[] } {
+  const m = text.match(/\[\[\s*OPCIONES\s*:\s*([^\]]+)\]\]/i);
+  if (!m) return { text: text.trim(), options: [] };
+  const options = m[1]
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+  const cleaned = text.replace(m[0], "").replace(/\n{3,}/g, "\n\n").trim();
+  return { text: cleaned, options };
 }
 
 export class GladymarAgent {
@@ -94,8 +112,13 @@ export class GladymarAgent {
     messages.push({ role: "assistant", content: response.content });
     this.store.set(userId, messages);
 
+    const { text: cleanText, options } = extractOptions(
+      text || "Disculpá, no pude generar una respuesta. ¿Lo intentamos de nuevo?",
+    );
+
     return {
-      text: text || "Disculpe, no pude generar una respuesta. ¿Podría reformular su consulta?",
+      text: cleanText,
+      options,
       escalated,
       attachManual,
       solicitud,

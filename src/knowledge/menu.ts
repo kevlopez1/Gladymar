@@ -57,22 +57,16 @@ export const MENU: SeccionMenu[] = [
   },
 ];
 
-/** Renderiza el menú principal (las 4 secciones). Tono cálido cruceño (guía oficial). */
+/** Menú principal: texto breve + marcador de opciones (se muestran como botones). */
 export function menuPrincipal(): string {
-  const lineas = [
-    "*GLADYMAR* ✨",
-    "",
-    "Contanos, ¿cómo te ayudamos hoy?",
-    "",
-  ];
-  for (const s of MENU) {
-    lineas.push(`*${s.id}.* ${s.titulo}`);
-  }
-  lineas.push("", "_Respondé con el número o escribinos tu consulta._");
-  return lineas.join("\n");
+  const opciones = MENU.map((s) => s.titulo).join(" | ");
+  return [
+    "Contanos, ¿cómo te ayudamos hoy? 😊",
+    `[[OPCIONES: ${opciones}]]`,
+  ].join("\n");
 }
 
-/** Renderiza el submenú de una sección (por id "1".."4" o por título aproximado). */
+/** Submenú de una sección: texto breve + marcador de opciones. */
 export function submenu(seccionId: string): string {
   const s =
     MENU.find((x) => x.id === seccionId) ??
@@ -80,12 +74,11 @@ export function submenu(seccionId: string): string {
   if (!s) {
     return menuPrincipal();
   }
-  const lineas = [`*${s.id}. ${s.titulo}*`, ""];
-  for (const o of s.opciones) {
-    lineas.push(`   *${o.id}*  ${o.titulo}`);
-  }
-  lineas.push("", "_Respondé con el número o escribinos tu consulta._");
-  return lineas.join("\n");
+  const opciones = s.opciones.map((o) => o.titulo).join(" | ");
+  return [
+    `*${s.titulo}* ¿Qué te gustaría ver?`,
+    `[[OPCIONES: ${opciones} | Volver al menú]]`,
+  ].join("\n");
 }
 
 /** Menú completo (todas las secciones y opciones), útil como referencia del agente. */
