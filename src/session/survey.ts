@@ -63,16 +63,16 @@ export class SurveyScheduler {
   }
 }
 
-/** Mensaje de la encuesta, en la estética "Editorial de diseño". */
+/** Mensaje de la encuesta, en el tono cálido cruceño de Gladymar. */
 export function buildSurveyMessage(url: string): string {
   return [
-    "◆ *Gladymar*",
+    "*Gladymar* ✨",
     "",
-    "Gracias por escribirnos. Nos encantaría conocer su experiencia.",
+    "¡Gracias por escribirnos! 😊 Nos encantaría conocer tu experiencia.",
     "",
-    "Cuéntenos en una breve encuesta:",
+    "Es una encuesta cortita:",
     url,
     "",
-    "_Su opinión nos ayuda a seguir elevando cada detalle._",
+    "_Tu opinión nos ayuda a seguir mejorando. Más que cerámicas, fabricamos emociones._",
   ].join("\n");
 }

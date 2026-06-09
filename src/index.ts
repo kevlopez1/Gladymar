@@ -111,6 +111,7 @@ async function handleIncoming(msg: {
       mensaje: msg.text,
       respuesta: reply.text,
       tipo_solicitud: reply.solicitud?.tipo,
+      prioridad: reply.solicitud?.prioridad,
       detalle: reply.solicitud?.detalle,
       escalado: reply.escalated,
     });

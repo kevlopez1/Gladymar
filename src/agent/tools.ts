@@ -22,10 +22,13 @@ const TIPOS_SOLICITUD = [
   "seguimiento_pedido",
   "reclamo",
   "visita_tecnica",
+  "alerta",
   "compras_servicios",
   "distribuidor",
   "otro",
 ] as const;
+
+const PRIORIDADES = ["normal", "alta", "critica"] as const;
 
 export const TOOLS: Anthropic.Tool[] = [
   {
@@ -93,7 +96,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "registrar_solicitud",
     description:
-      "Registra y deriva una solicitud que requiere a una persona/área: contactar asesor, cotización, seguimiento de pedidos, reclamo, agendar visita técnica, RR.HH./CV, compras y servicios, o ser distribuidor. Toma los datos del cliente y devuelve la guía de derivación. Úsala cuando el caso no se resuelve solo con información.",
+      "Registra y deriva una solicitud que requiere a una persona/área: contactar asesor, cotización, seguimiento de pedido, reclamo, agendar visita técnica, alerta (amenaza viral / cliente muy alterado / mystery shopper), compras y servicios, o ser distribuidor. Toma los datos del cliente y devuelve la guía de derivación. Úsala cuando el caso no se resuelve solo con información.",
     input_schema: {
       type: "object",
       properties: {
@@ -102,10 +105,20 @@ export const TOOLS: Anthropic.Tool[] = [
           enum: [...TIPOS_SOLICITUD],
           description: "Tipo de solicitud a registrar/derivar.",
         },
-        ciudad: { type: "string", description: "Ciudad del cliente (si se conoce), para sugerir la sucursal más conveniente." },
+        prioridad: {
+          type: "string",
+          enum: [...PRIORIDADES],
+          description:
+            "Prioridad. 'alta' para leads premium (>1000 m², construcción nueva, arquitecto, proyecto grande, producto importado) o cliente alterado; 'critica' para reclamos graves o amenaza de difusión viral. Por defecto 'normal'.",
+        },
+        ciudad: { type: "string", description: "Ciudad del cliente (si se conoce), para derivar a la sucursal correcta." },
         nombre: { type: "string", description: "Nombre del cliente, si lo proporcionó." },
         telefono: { type: "string", description: "Teléfono/WhatsApp de contacto, si lo proporcionó." },
-        detalle: { type: "string", description: "Resumen del caso (ej. 'reclamo: piso suena hueco', 'cotización porcelanato 60x60', 'visita técnica en Equipetrol')." },
+        detalle: {
+          type: "string",
+          description:
+            "Resumen del caso con todos los datos reunidos (ej. para cotización: producto, formato, uso, m², presupuesto, zona, showroom; para reclamo: factura, producto, fecha, descripción).",
+        },
       },
       required: ["tipo", "detalle"],
     },
@@ -120,7 +133,14 @@ export interface ToolExecution {
   /** El cliente pidió el Manual de Asentamiento: la capa de WhatsApp adjuntará el PDF si hay enlace. */
   attachManual?: boolean;
   /** Datos de la solicitud registrada (para el log en Google Sheets). */
-  solicitud?: { tipo: string; detalle: string; nombre?: string; ciudad?: string; telefono?: string };
+  solicitud?: {
+    tipo: string;
+    prioridad: string;
+    detalle: string;
+    nombre?: string;
+    ciudad?: string;
+    telefono?: string;
+  };
 }
 
 /**
@@ -161,12 +181,14 @@ export function executeTool(name: string, input: Record<string, unknown>): ToolE
 
 function registrarSolicitud(input: Record<string, unknown>): ToolExecution {
   const tipo = typeof input.tipo === "string" ? input.tipo : "otro";
+  const prioridad = typeof input.prioridad === "string" ? input.prioridad : "normal";
   const ciudad = typeof input.ciudad === "string" ? input.ciudad : undefined;
   const detalle = typeof input.detalle === "string" ? input.detalle : "consulta general";
   const nombre = typeof input.nombre === "string" ? input.nombre : undefined;
   const telefono = typeof input.telefono === "string" ? input.telefono : undefined;
 
-  console.log(`📝 Solicitud [${tipo}] ${ciudad ? `(${ciudad}) ` : ""}${nombre ? `de ${nombre} ` : ""}- ${detalle}`);
+  const marca = prioridad === "critica" ? "🔴 CRÍTICA" : prioridad === "alta" ? "🟠 ALTA" : "";
+  console.log(`📝 Solicitud [${tipo}] ${marca} ${ciudad ? `(${ciudad}) ` : ""}${nombre ? `de ${nombre} ` : ""}- ${detalle}`);
 
   const contactoSucursal = (): string => {
     const conWa = sucursalesPorCiudad(ciudad).filter((s) => s.whatsapp);
@@ -209,6 +231,11 @@ function registrarSolicitud(input: Record<string, unknown>): ToolExecution {
         "Confirma datos de contacto y dirección para coordinar la visita; un asesor/técnico se pondrá en contacto. " +
         contactoSucursal();
       break;
+    case "alerta":
+      content =
+        `Alerta registrada (${detalle}). Mantén la calma, sé empática y resolutiva, y deriva de inmediato a un responsable. ` +
+        contactoSucursal();
+      break;
     case "compras_servicios":
       content = areaAdmin("compras_servicios");
       break;
@@ -222,6 +249,6 @@ function registrarSolicitud(input: Record<string, unknown>): ToolExecution {
   return {
     content,
     escalated: true,
-    solicitud: { tipo, detalle, nombre, ciudad, telefono },
+    solicitud: { tipo, prioridad, detalle, nombre, ciudad, telefono },
   };
 }

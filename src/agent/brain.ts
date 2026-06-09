@@ -21,7 +21,7 @@ export interface AgentReply {
   /** El cliente pidió el Manual de Asentamiento (adjuntar PDF si hay enlace configurado). */
   attachManual: boolean;
   /** Solicitud registrada en este turno (para el log en Google Sheets), si hubo. */
-  solicitud?: { tipo: string; detalle: string; nombre?: string; ciudad?: string; telefono?: string };
+  solicitud?: { tipo: string; prioridad: string; detalle: string; nombre?: string; ciudad?: string; telefono?: string };
 }
 
 export class GladymarAgent {

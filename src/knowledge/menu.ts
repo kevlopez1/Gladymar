@@ -39,7 +39,7 @@ export const MENU: SeccionMenu[] = [
   },
   {
     id: "3",
-    titulo: "Seguimiento de pedidos",
+    titulo: "Seguimiento de pedido",
     opciones: [{ id: "3.1", titulo: "Contactar asesor (por el momento)" }],
   },
   {
@@ -57,21 +57,18 @@ export const MENU: SeccionMenu[] = [
   },
 ];
 
-/** Renderiza el menú principal (solo las 4 secciones). Estética "Editorial de diseño". */
+/** Renderiza el menú principal (las 4 secciones). Tono cálido cruceño (guía oficial). */
 export function menuPrincipal(): string {
   const lineas = [
-    "*GLADYMAR*",
-    "_Donde sus espacios cobran vida_",
+    "*GLADYMAR* ✨",
     "",
-    "Bienvenido a una experiencia de diseño y acabados de excelencia.",
-    "",
-    "¿Cómo podemos ayudarle hoy?",
+    "Contanos, ¿cómo te ayudamos hoy?",
     "",
   ];
   for (const s of MENU) {
-    lineas.push(`◆ *${s.id}.* ${s.titulo}`);
+    lineas.push(`*${s.id}.* ${s.titulo}`);
   }
-  lineas.push("", "_Indíqueme el número o escríbame su consulta._");
+  lineas.push("", "_Respondé con el número o escribinos tu consulta._");
   return lineas.join("\n");
 }
 
@@ -83,11 +80,11 @@ export function submenu(seccionId: string): string {
   if (!s) {
     return menuPrincipal();
   }
-  const lineas = [`◆ *${s.id}. ${s.titulo}*`, ""];
+  const lineas = [`*${s.id}. ${s.titulo}*`, ""];
   for (const o of s.opciones) {
     lineas.push(`   *${o.id}*  ${o.titulo}`);
   }
-  lineas.push("", "_Indíqueme el número o escríbame su consulta._");
+  lineas.push("", "_Respondé con el número o escribinos tu consulta._");
   return lineas.join("\n");
 }
 

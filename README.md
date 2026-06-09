@@ -144,7 +144,7 @@ Cada interacción del agente se registra como una fila en tu hoja de Google Shee
 Se usa un **Google Apps Script** ligado a la hoja (no requiere credenciales en el servidor):
 
 1. Crea una hoja en Google Sheets. En la primera fila pon los encabezados:
-   `Fecha | Teléfono | Nombre | Mensaje | Respuesta | Tipo solicitud | Detalle | Escalado`
+   `Fecha | Teléfono | Nombre | Mensaje | Respuesta | Tipo solicitud | Prioridad | Detalle | Escalado`
 2. Menú **Extensiones → Apps Script** y pega:
    ```javascript
    function doPost(e) {
@@ -152,7 +152,7 @@ Se usa un **Google Apps Script** ligado a la hoja (no requiere credenciales en e
      var d = JSON.parse(e.postData.contents);
      hoja.appendRow([
        d.fecha, d.telefono, d.nombre || "", d.mensaje, d.respuesta,
-       d.tipo_solicitud || "", d.detalle || "", d.escalado ? "Sí" : "No"
+       d.tipo_solicitud || "", d.prioridad || "", d.detalle || "", d.escalado ? "Sí" : "No"
      ]);
      return ContentService
        .createTextOutput(JSON.stringify({ ok: true }))

@@ -18,8 +18,10 @@ export interface InteractionLog {
   mensaje: string;
   /** Respuesta del agente. */
   respuesta: string;
-  /** Tipo de solicitud detectada (cotización, reclamo, visita_tecnica, etc.), si hubo. */
+  /** Tipo de solicitud detectada (cotización, reclamo, visita_tecnica, alerta, etc.), si hubo. */
   tipo_solicitud?: string;
+  /** Prioridad de la solicitud: normal | alta | critica. */
+  prioridad?: string;
   /** Detalle/resumen de la solicitud, si hubo. */
   detalle?: string;
   /** Si la conversación se derivó a un asesor humano. */
