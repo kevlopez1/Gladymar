@@ -50,8 +50,15 @@ export function parseIncomingMessages(body: unknown): IncomingMessage[] {
             messageId: msg.id,
             name: contactName,
           });
+        } else if (msg.type === "interactive" && msg.interactive) {
+          // El cliente tocó una opción de lista o un botón: usamos su id como texto.
+          const reply = msg.interactive.list_reply ?? msg.interactive.button_reply;
+          const text = reply?.id || reply?.title;
+          if (text) {
+            result.push({ from: msg.from, text, messageId: msg.id, name: contactName });
+          }
         }
-        // Otros tipos (imagen, audio, ubicación, botones) podrían manejarse aquí.
+        // Otros tipos (imagen, audio, ubicación) podrían manejarse aquí.
       }
     }
   }
@@ -71,6 +78,11 @@ interface WebhookPayload {
           id: string;
           type: string;
           text?: { body?: string };
+          interactive?: {
+            type?: string;
+            list_reply?: { id?: string; title?: string };
+            button_reply?: { id?: string; title?: string };
+          };
         }>;
       };
     }>;

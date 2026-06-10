@@ -70,6 +70,59 @@ export async function sendDocument(
 }
 
 /**
+ * Envía un *mensaje interactivo de lista* de WhatsApp (botón "Ver opciones" que
+ * abre una lista), replicando la experiencia del demo.
+ * @param body Texto del mensaje (cuerpo).
+ * @param buttonLabel Texto del botón (máx. 20 caracteres).
+ * @param sectionTitle Título de la lista (máx. 24).
+ * @param options Opciones (máx. 10). El `id` que vuelve es el texto de la opción.
+ */
+export async function sendInteractiveList(
+  to: string,
+  body: string,
+  buttonLabel: string,
+  sectionTitle: string,
+  options: string[],
+): Promise<void> {
+  const rows = options.slice(0, 10).map((o) => {
+    const row: { id: string; title: string; description?: string } = {
+      id: o.slice(0, 200),
+      title: o.length > 24 ? o.slice(0, 23) + "…" : o,
+    };
+    if (o.length > 24) row.description = o.slice(0, 72);
+    return row;
+  });
+
+  const url = `${BASE}/${config.whatsapp.phoneNumberId}/messages`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.whatsapp.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "list",
+        body: { text: (body || "Selecciona una opción:").slice(0, 1024) },
+        action: {
+          button: (buttonLabel || "Ver opciones").slice(0, 20),
+          sections: [{ title: (sectionTitle || "Opciones").slice(0, 24), rows }],
+        },
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Error enviando lista interactiva (${res.status}): ${detail}`);
+  }
+}
+
+/**
  * Marca un mensaje entrante como leído (doble check azul).
  */
 export async function markAsRead(messageId: string): Promise<void> {

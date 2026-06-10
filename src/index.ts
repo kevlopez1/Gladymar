@@ -10,7 +10,7 @@ import path from "node:path";
 import { config, isWhatsAppConfigured } from "./config.js";
 import { GladymarAgent } from "./agent/brain.js";
 import { InMemorySessionStore } from "./session/store.js";
-import { sendText, sendDocument, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
+import { sendText, sendDocument, sendInteractiveList, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
@@ -162,13 +162,29 @@ async function handleIncoming(msg: {
     const reply = await agent.handleMessage(msg.from, msg.text);
 
     // Respuestas en bloques: divide en 2-3 mensajes con pausas humanas.
+    // El último bloque, si hay opciones, se envía como LISTA interactiva (igual que el demo).
     const bloques = splitBlocks(reply.text);
-    const fallbackOpciones = reply.options.length
-      ? "\n\n" + reply.options.map((o, i) => `*${i + 1}.* ${o}`).join("\n")
-      : "";
     for (let i = 0; i < bloques.length; i++) {
       const esUltimo = i === bloques.length - 1;
-      await sendText(msg.from, esUltimo ? bloques[i] + fallbackOpciones : bloques[i]);
+      if (esUltimo && reply.options.length) {
+        try {
+          await sendInteractiveList(
+            msg.from,
+            bloques[i] || "Selecciona una opción:",
+            reply.optionsButton || "Ver opciones",
+            reply.optionsTitle || "Opciones",
+            reply.options,
+          );
+        } catch (err) {
+          console.error("Lista interactiva falló; envío como texto:", err);
+          await sendText(
+            msg.from,
+            `${bloques[i]}\n\n${reply.options.map((o, j) => `*${j + 1}.* ${o}`).join("\n")}`,
+          );
+        }
+      } else {
+        await sendText(msg.from, bloques[i]);
+      }
       if (!esUltimo) await sleep(800);
     }
 
