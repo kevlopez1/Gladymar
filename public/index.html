@@ -150,13 +150,13 @@
       <div class="col-label">Vista del administrador</div>
       <select class="role-select" id="roleSelect">
         <option value="gerente">👑 Gerente General (nacional)</option>
-        <option value="Santa Cruz">Administrador · Santa Cruz</option>
-        <option value="La Paz">Administrador · La Paz</option>
-        <option value="Cochabamba">Administrador · Cochabamba</option>
-        <option value="Sucre">Administrador · Sucre</option>
-        <option value="Tarija">Administrador · Tarija</option>
-        <option value="Oruro">Administrador · Oruro</option>
-        <option value="Potosí">Administrador · Potosí</option>
+        <option value="Santa Cruz">Thalía Vera · Santa Cruz</option>
+        <option value="La Paz">José Ramos · La Paz</option>
+        <option value="Cochabamba">María René Áviles · Cochabamba</option>
+        <option value="Sucre">Jorge Montecinos · Sucre</option>
+        <option value="Tarija">Rosana Patana · Tarija</option>
+        <option value="Potosí">Gabriel Flores · Potosí</option>
+        <option value="Oruro">Gustavo Villegas · Oruro</option>
       </select>
       <div class="phone" id="phone-admin">
         <div class="statusbar"><span class="clock">11:09</span><span class="icons">
@@ -301,9 +301,12 @@
     const res = await fetch('/api/admin', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sessionId: adminSession.id, role: roleSelect.value, message }) });
     if (!res.ok) throw new Error('HTTP '+res.status); return res.json();
   });
+  const ADMIN_NOMBRE = { 'Santa Cruz':'Thalía Vera', 'La Paz':'José Ramos', 'Cochabamba':'María René Áviles', 'Sucre':'Jorge Montecinos', 'Tarija':'Rosana Patana', 'Potosí':'Gabriel Flores', 'Oruro':'Gustavo Villegas' };
   function startAdmin(){
     adminSession.id = rid();
-    adminStatus.textContent = roleSelect.value === 'gerente' ? 'Gerente General · Bolivia' : ('Administrador · ' + roleSelect.value);
+    adminStatus.textContent = roleSelect.value === 'gerente'
+      ? 'Gerente General · Bolivia'
+      : ((ADMIN_NOMBRE[roleSelect.value] || 'Administrador') + ' · ' + roleSelect.value);
     adminPhone.reset();
     adminPhone.start('menu');
   }
