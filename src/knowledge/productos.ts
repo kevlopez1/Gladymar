@@ -1,11 +1,9 @@
 /**
- * Catálogo de categorías de productos de Gladymar.
+ * Categorías de productos de Gladymar (según el catálogo oficial en Excel).
  *
- * Es un resumen de orientación para el agente, NO una lista de SKUs ni precios
- * vigentes. Los precios son SOLO referenciales; el agente debe dejar claro que
- * el precio final y la disponibilidad se confirman en sucursal o con un asesor.
- *
- * ⚠️ Actualiza este catálogo con el equipo comercial de Gladymar.
+ * Es el resumen para orientar; el detalle (productos específicos) vive en
+ * catalogo.ts y se consulta con buscarCatalogo. Los precios se confirman
+ * siempre con un asesor (el catálogo no incluye precios).
  */
 
 export interface CategoriaProducto {
@@ -14,93 +12,55 @@ export interface CategoriaProducto {
   descripcion: string;
   formatos?: string[];
   marcas?: string[];
-  precioReferencial?: string;
   palabrasClave: string[];
 }
 
 export const CATEGORIAS: CategoriaProducto[] = [
   {
-    id: "porcelanato",
-    nombre: "Porcelanato",
+    id: "porcelanato-gladymar",
+    nombre: "Porcelanato y pisos Gladymar",
     descripcion:
-      "Porcelanato nacional e importado de alta resistencia para pisos y revestimientos. Incluye la línea 'Insignia', inspirada 100% en la cultura y colores de Bolivia.",
-    formatos: ["40x40", "60x60", "80x80", "90x90"],
-    marcas: ["Kaiser", "Eleganza", "Capri", "Portobello", "Aparici"],
-    precioReferencial:
-      "Referencial: desde ~Bs. 49/m² (formatos chicos) y ~Bs. 99/m² (60x60). Confirmar precio vigente en sucursal.",
-    palabrasClave: [
-      "porcelanato",
-      "porcelana",
-      "piso de porcelanato",
-      "insignia",
-      "90x90",
-      "60x60",
-      "gran formato",
-    ],
+      "Porcelanato y cerámica de fabricación nacional Gladymar para pisos y revestimientos.",
+    formatos: ["41x41", "60x60", "80x80", "90x90"],
+    marcas: ["Porcelanato by Gladymar", "Eleganza", "Capri", "Terraforte", "Platinum"],
+    palabrasClave: ["porcelanato", "piso", "pisos", "ceramica", "cerámica", "revestimiento", "nacional", "gladymar"],
   },
   {
-    id: "pisos-revestimientos",
-    nombre: "Pisos y Revestimientos (cerámica)",
+    id: "pisos-importados",
+    nombre: "Pisos importados",
     descripcion:
-      "Cerámica para pisos y paredes, nacional e importada, en distintos formatos, colores y acabados (imitación piedra, madera, cemento).",
-    formatos: ["20x20", "30x30", "33x33", "45x45", "60x60"],
-    marcas: ["Kaiser", "Eleganza", "Capri"],
-    precioReferencial: "Referencial: varía según formato y diseño. Confirmar en sucursal.",
-    palabrasClave: [
-      "ceramica",
-      "cerámica",
-      "piso",
-      "pisos",
-      "revestimiento",
-      "pared",
-      "azulejo",
-      "baldosa",
-      "ceramico",
-    ],
+      "Porcelanatos importados de alta gama (efecto mármol, piedra, madera y cemento), gran formato.",
+    formatos: ["60x120", "120x120", "20x120", "100x100"],
+    marcas: ["Eliane", "Portinari", "Ceusa", "Embramaco", "Castelatto"],
+    palabrasClave: ["importado", "importados", "gran formato", "marmol", "mármol", "madera", "piedra", "120x120", "60x120", "eliane", "portinari"],
   },
   {
-    id: "sanitarios-griferia",
-    nombre: "Griferías y Sanitarios",
-    descripcion:
-      "Inodoros, lavamanos, grifería para baño y cocina, accesorios y herrajes de primeras marcas.",
-    marcas: ["Briggs", "Edesa"],
-    precioReferencial:
-      "Referencial: según modelo. Griferías Briggs/Edesa con hasta 5 años de garantía. Confirmar en sucursal.",
-    palabrasClave: [
-      "sanitario",
-      "sanitarios",
-      "inodoro",
-      "baño",
-      "bano",
-      "lavamanos",
-      "griferia",
-      "grifería",
-      "grifo",
-      "ducha",
-      "lavaplatos",
-      "cocina",
-    ],
+    id: "griferia",
+    nombre: "Griferías",
+    descripcion: "Griferías para cocina, baño y ducha de primeras marcas.",
+    marcas: ["Deca", "Fani", "Artema"],
+    palabrasClave: ["griferia", "grifería", "grifo", "mezclador", "ducha", "lavaplatos", "cocina", "monocomando"],
   },
   {
-    id: "complementos",
-    nombre: "Complementos para la obra",
-    descripcion:
-      "Pegamentos/adhesivos cementicios, fragüe, perfiles metálicos, impermeabilizantes, pinturas Coral y herramientas para la colocación.",
-    marcas: ["Pinturas Coral"],
-    precioReferencial: "Referencial: según producto. Confirmar en sucursal.",
-    palabrasClave: [
-      "pegamento",
-      "adhesivo",
-      "fragüe",
-      "fragua",
-      "perfil",
-      "perfiles",
-      "impermeabilizante",
-      "pintura",
-      "coral",
-      "herramienta",
-      "complemento",
-    ],
+    id: "sanitarios",
+    nombre: "Sanitarios",
+    descripcion: "Inodoros, lavamanos y piezas sanitarias.",
+    marcas: ["Deca"],
+    palabrasClave: ["sanitario", "sanitarios", "inodoro", "lavamanos", "lavabo", "baño", "bano", "tanque"],
+  },
+  {
+    id: "perfiles",
+    nombre: "Perfiles",
+    descripcion: "Perfiles y juntas para pisos y paredes (terminaciones).",
+    marcas: ["Atrim"],
+    palabrasClave: ["perfil", "perfiles", "junta", "juntas", "terminacion", "terminación", "atrim"],
+  },
+  {
+    id: "adhesivos",
+    nombre: "Adhesivos y cemento",
+    descripcion: "Adhesivos/pegamentos cementicios y complementos para la colocación.",
+    marcas: ["La Calera"],
+    palabrasClave: ["pegamento", "adhesivo", "cemento", "fragüe", "fragua", "colocacion", "colocación", "calera"],
   },
 ];
 
@@ -120,7 +80,6 @@ export function formatearCategoria(c: CategoriaProducto): string {
   const lineas = [`🧱 *${c.nombre}*`, `   ${c.descripcion}`];
   if (c.formatos?.length) lineas.push(`   📐 Formatos: ${c.formatos.join(", ")} cm`);
   if (c.marcas?.length) lineas.push(`   🏷️ Marcas: ${c.marcas.join(", ")}`);
-  if (c.precioReferencial) lineas.push(`   💲 ${c.precioReferencial}`);
   return lineas.join("\n");
 }
 

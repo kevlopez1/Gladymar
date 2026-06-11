@@ -18,15 +18,20 @@ export const COMPANY_INFO = {
     "Pionera en lograr formatos grandes de hasta 90x90 cm, únicos en Bolivia.",
     "Gladymar Plus: la tienda de acabados finos más grande de Latinoamérica, ubicada en Santa Cruz.",
   ],
-  marcasPropias: ["Kaiser", "Eleganza", "Capri"],
+  marcasPropias: ["Porcelanato by Gladymar", "Eleganza", "Capri", "Platinum", "Terraforte"],
   marcasRepresentadas: [
-    "Portobello",
-    "Aparici",
-    "Briggs (griferías y sanitarios)",
-    "Edesa (griferías y sanitarios)",
-    "Pinturas Coral",
+    "Eliane",
+    "Portinari",
+    "Ceusa",
+    "Embramaco",
+    "Castelatto",
+    "Deca (griferías y sanitarios)",
+    "Fani",
+    "Artema",
+    "Atrim (perfiles)",
+    "La Calera (adhesivos)",
   ],
-  garantias: "Griferías marca Briggs y Edesa con hasta 5 años de garantía.",
+  garantias: "Productos con garantía; consultá las condiciones con un asesor.",
 };
 
 /**

@@ -19,7 +19,7 @@ export const TEMAS: Record<string, Tema> = {
     id: "roomvo",
     titulo: "Roomvo – Simulador de ambientes",
     contenido:
-      "Estamos preparando *Roomvo*, nuestro simulador para que veas cómo lucen nuestros productos en tu propio espacio (subes una foto y pruebas pisos y revestimientos). ✨\n" +
+      "Estamos preparando *Roomvo*, nuestro simulador para que veas cómo lucen nuestros productos en tu propio espacio (subís una foto y probás pisos y revestimientos). ✨\n" +
       "Estará disponible muy pronto en https://gladymar.com.bo. Mientras tanto, con gusto te conecto con un asesor o te invito a visitar nuestro showroom.",
     confirmado: false,
   },
@@ -28,7 +28,7 @@ export const TEMAS: Record<string, Tema> = {
     id: "catalogo",
     titulo: "Catálogo de productos",
     contenido:
-      "Puedes explorar nuestro catálogo y portafolio aquí:\n" +
+      "Podés explorar nuestro catálogo y portafolio acá:\n" +
       "• Portafolio: https://gladymar.com.bo/portafolio/\n" +
       "• Sitio web: https://gladymar.com.bo",
     confirmado: true,
@@ -56,12 +56,12 @@ export const TEMAS: Record<string, Tema> = {
     titulo: "Tipo de pegamento recomendado",
     contenido:
       "Recomendaciones de colocado de Gladymar:\n" +
-      "• Usa un *pegamento/adhesivo impermeable* para evitar desprendimientos por mala adherencia.\n" +
-      "• Aplícalo con *llana dentada de 8 mm*.\n" +
+      "• Usá un *pegamento/adhesivo impermeable* para evitar desprendimientos por mala adherencia.\n" +
+      "• Aplicalo con *llana dentada de 8 mm*.\n" +
       "• El contrapiso/carpeta debe estar *bien nivelado, resistente e impermeabilizado* (hidrofugado), para evitar eflorescencias (salitre).\n" +
-      "• Antes de colocar, abre *4 o más cajas* y toma una pieza de cada una, para uniformar el tono.\n" +
-      "• Respeta las juntas (de colocación, dilatación y unión).\n\n" +
-      "Gladymar cuenta con adhesivos y complementos. Para el producto y rendimiento exactos según tus m² y formato, confírmalo con un asesor.",
+      "• Antes de colocar, abrí *4 o más cajas* y tomá una pieza de cada una, para uniformar el tono.\n" +
+      "• Respetá las juntas (de colocación, dilatación y unión).\n\n" +
+      "Gladymar cuenta con adhesivos y complementos. Para el producto y rendimiento exactos según tus m² y formato, confirmalo con un asesor.",
     confirmado: true,
   },
 
@@ -72,9 +72,9 @@ export const TEMAS: Record<string, Tema> = {
       "Puntos clave para una colocación correcta (según Gladymar):\n" +
       "• Pegamento *impermeable* + *llana dentada de 8 mm*.\n" +
       "• Contrapiso nivelado, resistente e *impermeabilizado* (evita salitre/eflorescencias).\n" +
-      "• Abre *4+ cajas* y mezcla piezas para uniformar el tono.\n" +
-      "• Respeta las juntas (colocación, dilatación y unión).\n\n" +
-      "Contamos con el *Tríptico de Colocación* completo. Si quieres, te lo compartimos; un asesor también puede facilitártelo.",
+      "• Abrí *4+ cajas* y mezclá piezas para uniformar el tono.\n" +
+      "• Respetá las juntas (colocación, dilatación y unión).\n\n" +
+      "Contamos con el *Tríptico de Colocación* completo. Si querés, te lo compartimos; un asesor también puede facilitártelo.",
     confirmado: true,
   },
 
@@ -83,9 +83,9 @@ export const TEMAS: Record<string, Tema> = {
     titulo: "Soluciones a problemas frecuentes",
     contenido:
       "Casos comunes y su causa habitual:\n" +
-      "• *Piezas que se desprenden*: suele ser pegamento no impermeable o superficie mal preparada. Usa adhesivo impermeable sobre un contrapiso firme.\n" +
+      "• *Piezas que se desprenden*: suele ser pegamento no impermeable o superficie mal preparada. Usá adhesivo impermeable sobre un contrapiso firme.\n" +
       "• *Manchas blancas / salitre (eflorescencia)*: falta de impermeabilización del contrapiso o carpeta.\n" +
-      "• *Diferencia de tono entre piezas*: coloca mezclando piezas de varias cajas (4+) y verifica lote/calibre.\n" +
+      "• *Diferencia de tono entre piezas*: colocá mezclando piezas de varias cajas (4+) y verificá lote/calibre.\n" +
       "• *Suena hueco al pisar*: falta de pegamento o mala colocación.\n\n" +
       "Para un caso puntual, lo mejor es registrar el reclamo o agendar una *visita técnica*.",
     confirmado: true,

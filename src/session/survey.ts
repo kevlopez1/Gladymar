@@ -68,11 +68,11 @@ export function buildSurveyMessage(url: string): string {
   return [
     "*Gladymar* ✨",
     "",
-    "Gracias por escribirnos. Nos encantaría conocer tu experiencia.",
+    "¡Gracias por escribirnos! Nos encantaría saber cómo te fue.",
     "",
-    "Te tomará solo un momento:",
+    "Contanos en esta encuesta cortita:",
     url,
     "",
-    "_Tu opinión nos ayuda a seguir mejorando. Más que cerámicas, fabricamos emociones._",
+    "_Tu opinión nos ayuda a mejorar. Más que cerámicas, fabricamos emociones._",
   ].join("\n");
 }

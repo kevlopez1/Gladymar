@@ -7,6 +7,7 @@
  */
 import type Anthropic from "@anthropic-ai/sdk";
 import { buscarCategorias, formatearCategoria } from "../knowledge/productos.js";
+import { buscarCatalogo, formatearProductoCat } from "../knowledge/catalogo.js";
 import {
   sucursalesPorCiudad,
   formatearSucursal,
@@ -50,13 +51,13 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "buscar_productos",
     description:
-      "Busca categorías de productos de Gladymar por palabra clave (ej. 'porcelanato', 'piso', 'baño', 'pegamento'). Devuelve descripción, formatos, marcas y precio referencial. Úsala para catálogo y asesoramiento de productos.",
+      "Busca y SUGIERE productos reales del catálogo de Gladymar según el contexto. Pasa términos concretos (ej. 'porcelanato 60x60 gris', 'piso exterior', 'efecto madera 20x120', 'grifería cocina', 'inodoro'). Devuelve productos específicos del catálogo para sugerir el ideal. Sin consulta, devuelve las categorías.",
     input_schema: {
       type: "object",
       properties: {
         consulta: {
           type: "string",
-          description: "Palabra clave o tema del producto. Vacío para listar todas las categorías.",
+          description: "Lo que busca el cliente: producto, ambiente, uso (interior/exterior), formato, color o efecto. Vacío para listar categorías.",
         },
       },
       required: [],
@@ -155,8 +156,21 @@ export function executeTool(name: string, input: Record<string, unknown>): ToolE
     }
 
     case "buscar_productos": {
-      const consulta = typeof input.consulta === "string" ? input.consulta : undefined;
-      return { content: buscarCategorias(consulta).map(formatearCategoria).join("\n\n") };
+      const consulta = typeof input.consulta === "string" ? input.consulta.trim() : "";
+      // Con una consulta concreta, sugiere productos REALES del catálogo.
+      if (consulta) {
+        const productos = buscarCatalogo(consulta, 6);
+        if (productos.length) {
+          return {
+            content:
+              "Algunas opciones de nuestro catálogo:\n\n" +
+              productos.map(formatearProductoCat).join("\n") +
+              "\n\n_El precio y la disponibilidad te los confirma un asesor._",
+          };
+        }
+      }
+      // Sin resultados o sin consulta: muestra las categorías.
+      return { content: buscarCategorias(consulta || undefined).map(formatearCategoria).join("\n\n") };
     }
 
     case "buscar_sucursales": {
