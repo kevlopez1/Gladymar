@@ -51,6 +51,14 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "gladymar-whatsapp-agent" });
 });
 
+// Páginas legales (requeridas por Meta para publicar la app en modo Live).
+app.get("/privacidad", (_req, res) => {
+  res.sendFile(path.join(process.cwd(), "public", "privacidad.html"));
+});
+app.get("/terminos", (_req, res) => {
+  res.sendFile(path.join(process.cwd(), "public", "terminos.html"));
+});
+
 // Endpoint del demo web: chatea con el mismo cerebro del agente (sin WhatsApp).
 app.post("/api/chat", async (req, res) => {
   const { sessionId, message } = req.body ?? {};
