@@ -7,6 +7,7 @@
  */
 import express from "express";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { config, isWhatsAppConfigured } from "./config.js";
 import { GladymarAgent } from "./agent/brain.js";
 import { InMemorySessionStore } from "./session/store.js";
@@ -57,6 +58,19 @@ app.get("/privacidad", (_req, res) => {
 });
 app.get("/terminos", (_req, res) => {
   res.sendFile(path.join(process.cwd(), "public", "terminos.html"));
+});
+
+// Página de conexión por coexistencia (Embedded Signup): inyecta App ID y Config ID desde el entorno.
+app.get("/conectar", (_req, res) => {
+  try {
+    const html = readFileSync(path.join(process.cwd(), "public", "conectar.html"), "utf8")
+      .replace(/__META_APP_ID__/g, process.env.META_APP_ID || "")
+      .replace(/__COEXISTENCE_CONFIG_ID__/g, process.env.COEXISTENCE_CONFIG_ID || "");
+    res.set("Content-Type", "text/html; charset=utf-8").send(html);
+  } catch (err) {
+    console.error("No se pudo servir /conectar:", err);
+    res.sendStatus(500);
+  }
 });
 
 // Endpoint del demo web: chatea con el mismo cerebro del agente (sin WhatsApp).

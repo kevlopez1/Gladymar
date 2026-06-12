@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Conectar WhatsApp — Gladymar</title>
+  <style>
+    :root { --acento:#0a4d2c; --tinta:#1a1a1a; --suave:#5b5b5b; --linea:#e6e6e6; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:#f3f4f6; color:var(--tinta);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      line-height:1.55; display:flex; min-height:100vh; align-items:center; justify-content:center; padding:20px; }
+    .card { background:#fff; max-width:480px; width:100%; border-radius:16px; padding:28px 24px;
+      box-shadow:0 10px 40px rgba(0,0,0,.08); }
+    h1 { font-size:20px; margin:0 0 4px; color:var(--acento); }
+    p { font-size:14px; color:var(--suave); margin:8px 0; }
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      width:100%; border:0; border-radius:10px; background:#1877f2; color:#fff;
+      font-size:16px; font-weight:600; padding:14px 16px; margin-top:16px; cursor:pointer; }
+    .btn:disabled { background:#9bbcef; cursor:not-allowed; }
+    .steps { font-size:13px; color:var(--tinta); background:#f8faf8; border:1px solid var(--linea);
+      border-radius:10px; padding:14px 16px; margin-top:16px; }
+    .steps ol { margin:6px 0 0; padding-left:18px; }
+    .steps li { margin:5px 0; }
+    #result { margin-top:16px; font-size:13px; white-space:pre-wrap; word-break:break-all;
+      background:#0a4d2c0d; border:1px solid #0a4d2c33; border-radius:10px; padding:12px 14px; display:none; }
+    #result.show { display:block; }
+    .warn { background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; border-radius:10px; padding:14px 16px; font-size:13px; }
+    code { background:#eef2ff; padding:1px 5px; border-radius:5px; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Conectar WhatsApp · Gladymar</h1>
+    <p>Esta página conecta tu <b>WhatsApp Business</b> con el agente (coexistencia). Vas a escanear un código QR desde tu app de WhatsApp.</p>
+
+    <div id="config-missing" class="warn" style="display:none;">
+      ⚠️ Falta configurar esta página. En Railway hay que cargar las variables
+      <code>META_APP_ID</code> y <code>COEXISTENCE_CONFIG_ID</code>. Pedíselas a tu asistente.
+    </div>
+
+    <div id="app">
+      <div class="steps">
+        <b>Cómo va a funcionar:</b>
+        <ol>
+          <li>Tocá <b>“Conectar mi WhatsApp”</b>.</li>
+          <li>Iniciá sesión con tu cuenta de Facebook (la del negocio).</li>
+          <li>Te va a mostrar un <b>código QR</b>.</li>
+          <li>En tu celular, abrí <b>WhatsApp Business → Ajustes → Dispositivos vinculados</b> y escaneá ese QR.</li>
+          <li>Listo: el agente queda conectado a tu número.</li>
+        </ol>
+      </div>
+      <button id="connect" class="btn">Conectar mi WhatsApp</button>
+      <div id="result"></div>
+    </div>
+  </div>
+
+  <script>
+    const META_APP_ID = "__META_APP_ID__";
+    const COEXISTENCE_CONFIG_ID = "__COEXISTENCE_CONFIG_ID__";
+
+    if (!META_APP_ID || META_APP_ID.indexOf("__") === 0 || !COEXISTENCE_CONFIG_ID || COEXISTENCE_CONFIG_ID.indexOf("__") === 0) {
+      document.getElementById("config-missing").style.display = "block";
+      document.getElementById("app").style.display = "none";
+    }
+
+    const resultEl = document.getElementById("result");
+    function show(msg) { resultEl.textContent = msg; resultEl.classList.add("show"); }
+
+    // Captura el resultado del flujo (waba_id + phone_number_id) para verificar la conexión.
+    window.addEventListener("message", (event) => {
+      if (!event.origin.endsWith("facebook.com")) return;
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "WA_EMBEDDED_SIGNUP") {
+          if (data.event === "FINISH" || data.event === "FINISH_ONLY_WABA") {
+            const { phone_number_id, waba_id } = data.data || {};
+            show("✅ ¡Conectado!\nWABA ID: " + (waba_id || "-") + "\nPhone number ID: " + (phone_number_id || "-") + "\n\nMandale esta info a tu asistente para confirmar.");
+          } else if (data.event === "CANCEL") {
+            show("Se canceló la conexión. Podés volver a intentarlo.");
+          }
+        }
+      } catch (e) { /* mensaje no relacionado */ }
+    });
+
+    window.fbAsyncInit = function () {
+      FB.init({ appId: META_APP_ID, autoLogAppEvents: true, xfbml: true, version: "v21.0" });
+    };
+
+    function launchSignup() {
+      if (typeof FB === "undefined") { show("Cargando… probá de nuevo en unos segundos."); return; }
+      FB.login(function (response) {
+        if (response.authResponse && response.authResponse.code) {
+          show("Conexión en proceso. Si escaneaste el QR, ya quedó vinculado. Avisale a tu asistente.");
+        }
+      }, {
+        config_id: COEXISTENCE_CONFIG_ID,
+        response_type: "code",
+        override_default_response_type: true,
+        extras: { setup: {}, featureType: "", sessionInfoVersion: "3" }
+      });
+    }
+
+    document.getElementById("connect").addEventListener("click", launchSignup);
+  </script>
+  <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+</body>
+</html>
