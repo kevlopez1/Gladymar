@@ -147,7 +147,7 @@ function sleep(ms: number): Promise<void> {
 function splitBlocks(text: string): string[] {
   const parts = text.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
   if (parts.length <= 1) return [text.trim()];
-  if (parts.length > 3) return [parts[0], parts[1], parts.slice(2).join("\n\n")];
+  if (parts.length > 4) return [parts[0], parts[1], parts[2], parts.slice(3).join("\n\n")];
   return parts;
 }
 

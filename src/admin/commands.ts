@@ -41,7 +41,7 @@ function menu(admin: Admin): AdminReply {
   const opciones = admin.role === "gerente" ? [...base, ...gm] : base;
   const ambito = admin.role === "gerente" ? "Nacional 🇧🇴" : admin.region;
   return {
-    text: `*Panel Gladymar* — ${admin.nombre}\nÁmbito: *${ambito}*\n\n¿Qué deseas ver?`,
+    text: `*Panel Gladymar* · ${admin.nombre}\nÁmbito: *${ambito}*\n\n¿Qué deseas ver?`,
     options: opciones,
     optionsButton: "Ver comandos",
     optionsTitle: "Comandos disponibles",
@@ -50,7 +50,7 @@ function menu(admin: Admin): AdminReply {
 
 function fmtItem(r: SolicitudReg): string {
   const p = r.prioridad === "critica" ? " 🔴" : r.prioridad === "alta" ? " 🟠" : "";
-  return `• *${r.nombre || "Cliente"}* — ${r.ciudad || "?"}${p}\n   ${r.detalle}  _(${r.fecha})_`;
+  return `• *${r.nombre || "Cliente"}* · ${r.ciudad || "?"}${p}\n   ${r.detalle}  _(${r.fecha})_`;
 }
 
 function listLeads(ciudad?: string): string {
@@ -70,14 +70,14 @@ function resumen(ciudad?: string): string {
   const t = ciudad ? `*${ciudad}*` : "*Nacional*";
   const conv = ciudad ? "" : `Conversaciones hoy: *${totalConversaciones()}*\n`;
   return (
-    `📊 *Resumen de hoy* — ${t}\n\n${conv}` +
+    `📊 *Resumen de hoy* · ${t}\n\n${conv}` +
     `Leads/cotizaciones: *${k.leads}*\n` +
     `Reclamos: *${k.reclamos}* (prioritarios: ${k.reclamosPrioritarios})\n` +
     `Seguimientos: *${k.seguimientos}*`
   );
 }
 function reportes(): string {
-  let out = `📈 *Reporte global* — Bolivia\n\nConversaciones hoy: *${totalConversaciones()}*\n`;
+  let out = `📈 *Reporte global* · Bolivia\n\nConversaciones hoy: *${totalConversaciones()}*\n`;
   for (const c of ciudadesAdmin()) {
     const k = getKpis(c);
     if (k.leads || k.reclamos || k.seguimientos) {

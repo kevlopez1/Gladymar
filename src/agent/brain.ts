@@ -43,6 +43,23 @@ function extractDocument(text: string): { text: string; document?: { name: strin
   return { text: cleaned, document: { name: parts[0] || "Documento.pdf", info: parts[1] || undefined } };
 }
 
+/**
+ * Quita los guiones usados como separadores/incisos/viñetas (al cliente no le
+ * gustan). No toca guiones internos de palabras ni formatos tipo "60x60".
+ */
+function quitarGuiones(text: string): string {
+  return text
+    .replace(/^[ \t]*[-–—]+[ \t]+/gm, "") // viñeta al inicio de línea
+    .replace(/[ \t]*[—–][ \t]*/g, ", ") // guión largo/medio como separador -> coma
+    .replace(/[ \t]+-[ \t]+/g, ", ") // guión simple con espacios a ambos lados -> coma
+    .replace(/\s*,\s*,\s*/g, ", ") // comas duplicadas
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*([.!?:;)])/g, "$1") // coma pegada a puntuación
+    .replace(/\(\s*,\s*/g, "(")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+$/gm, "");
+}
+
 interface ParsedOptions {
   text: string;
   options: string[];
@@ -152,11 +169,12 @@ export class GladymarAgent {
     const parsed = extractOptions(withDoc.text);
 
     // Blindaje: nunca dejar marcadores (bien o mal formados) en el texto al cliente.
-    const safeText = parsed.text
-      .replace(/\[\[\s*(OPCIONES|DOCUMENTO)[\s\S]*$/i, "") // marcador sin cerrar al final
-      .replace(/\[\[[^\]]*\]\]/g, "") // cualquier marcador residual
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
+    const safeText = quitarGuiones(
+      parsed.text
+        .replace(/\[\[\s*(OPCIONES|DOCUMENTO)[\s\S]*$/i, "") // marcador sin cerrar al final
+        .replace(/\[\[[^\]]*\]\]/g, "") // cualquier marcador residual
+        .replace(/\n{3,}/g, "\n\n"),
+    ).trim();
 
     return {
       text: safeText,
