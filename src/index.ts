@@ -156,6 +156,54 @@ function typingMs(text: string): number {
   return Math.min(2600, 700 + text.length * 18);
 }
 
+// ── Agrupado de mensajes (anti-spam) ────────────────────────────────────────
+// Si un cliente manda varios mensajes seguidos, los juntamos y respondemos UNA
+// sola vez (evita respuestas repetidas). Si llega un mensaje mientras estamos
+// respondiendo, queda en cola y se procesa después.
+const DEBOUNCE_MS = 2500;
+interface BufferCliente { textos: string[]; timer: NodeJS.Timeout | null; messageId: string; name?: string }
+const buffers = new Map<string, BufferCliente>();
+const enCurso = new Set<string>();
+
+function programarCliente(msg: { from: string; text: string; messageId: string; name?: string }): void {
+  let buf = buffers.get(msg.from);
+  if (!buf) {
+    buf = { textos: [], timer: null, messageId: msg.messageId, name: msg.name };
+    buffers.set(msg.from, buf);
+    void markReadAndTyping(msg.messageId); // "escribiendo…" ni bien llega el primero
+  }
+  buf.textos.push(msg.text);
+  buf.messageId = msg.messageId;
+  if (msg.name) buf.name = msg.name;
+  survey.onActivity(msg.from);
+  if (buf.timer) clearTimeout(buf.timer);
+  buf.timer = setTimeout(() => void vaciarCliente(msg.from), DEBOUNCE_MS);
+  if (typeof buf.timer.unref === "function") buf.timer.unref();
+}
+
+async function vaciarCliente(from: string): Promise<void> {
+  // Si ya hay un turno en proceso para este usuario, reintentamos en un momento.
+  if (enCurso.has(from)) {
+    const buf = buffers.get(from);
+    if (buf) {
+      buf.timer = setTimeout(() => void vaciarCliente(from), 800);
+      if (typeof buf.timer.unref === "function") buf.timer.unref();
+    }
+    return;
+  }
+  const buf = buffers.get(from);
+  if (!buf) return;
+  buffers.delete(from);
+  const text = buf.textos.join("\n").trim();
+  if (!text) return;
+  enCurso.add(from);
+  try {
+    await procesarTurnoCliente(from, text, buf.messageId, buf.name);
+  } finally {
+    enCurso.delete(from);
+  }
+}
+
 async function handleIncoming(msg: {
   from: string;
   text: string;
@@ -180,36 +228,37 @@ async function handleIncoming(msg: {
     return;
   }
 
-  // Cliente: marca leído + "escribiendo…", reinicia encuesta y suma a KPIs.
-  void markReadAndTyping(msg.messageId);
+  // Cliente: agrupamos los mensajes seguidos para responder una sola vez.
+  programarCliente(msg);
+}
+
+async function procesarTurnoCliente(from: string, text: string, messageId: string, name?: string): Promise<void> {
+  // Marca leído + "escribiendo…" y suma a KPIs.
+  void markReadAndTyping(messageId);
   const tEscribiendo = Date.now();
-  survey.onActivity(msg.from);
   bumpConversacion();
 
   try {
-    const reply = await agent.handleMessage(msg.from, msg.text);
+    const reply = await agent.handleMessage(from, text);
 
-    // Respuestas en bloques: divide en 2-3 mensajes con pausas humanas.
-    // Mostramos "escribiendo…" antes de cada bloque (y un mínimo antes del primero).
+    // Respuestas en bloques: muestra "escribiendo…" antes de cada bloque (y un mínimo antes del primero).
     // El último bloque, si hay opciones, se envía como LISTA interactiva (igual que el demo).
     const bloques = splitBlocks(reply.text);
     for (let i = 0; i < bloques.length; i++) {
       const esUltimo = i === bloques.length - 1;
 
       if (i === 0) {
-        // Garantiza que el "escribiendo…" se vea un mínimo antes del primer mensaje.
         const transcurrido = Date.now() - tEscribiendo;
         if (transcurrido < 1200) await sleep(1200 - transcurrido);
       } else {
-        // Reactiva "escribiendo…" entre mensajes, con una pausa natural de tipeo.
-        void markReadAndTyping(msg.messageId);
+        void markReadAndTyping(messageId);
         await sleep(typingMs(bloques[i]));
       }
 
       if (esUltimo && reply.options.length) {
         try {
           await sendInteractiveList(
-            msg.from,
+            from,
             bloques[i] || "Selecciona una opción:",
             reply.optionsButton || "Ver opciones",
             reply.optionsTitle || "Opciones",
@@ -218,12 +267,12 @@ async function handleIncoming(msg: {
         } catch (err) {
           console.error("Lista interactiva falló; envío como texto:", err);
           await sendText(
-            msg.from,
+            from,
             `${bloques[i]}\n\n${reply.options.map((o, j) => `*${j + 1}.* ${o}`).join("\n")}`,
           );
         }
       } else {
-        await sendText(msg.from, bloques[i]);
+        await sendText(from, bloques[i]);
       }
     }
 
@@ -231,27 +280,27 @@ async function handleIncoming(msg: {
     if (reply.attachManual && config.assets.manualUrl) {
       try {
         await sendDocument(
-          msg.from,
+          from,
           config.assets.manualUrl,
           "Gladymar - Manual de Asentamiento.pdf",
           "Manual de Asentamiento (Tríptico de Colocación) ◆ Gladymar",
         );
       } catch (err) {
-        console.error(`No se pudo adjuntar el manual a ${msg.from}:`, err);
+        console.error(`No se pudo adjuntar el manual a ${from}:`, err);
       }
     }
 
     if (reply.escalated) {
-      console.log(`🔔 Derivación a humano para ${msg.from}`);
+      console.log(`🔔 Derivación a humano para ${from}`);
     }
-    console.log(`🤖 -> ${msg.from}: ${reply.text.slice(0, 120)}...`);
+    console.log(`🤖 -> ${from}: ${reply.text.slice(0, 120)}...`);
 
     // Registra la interacción en Google Sheets (no bloquea ni interrumpe si falla).
     void sheets.log({
       fecha: nowBolivia(),
-      telefono: msg.from,
-      nombre: msg.name,
-      mensaje: msg.text,
+      telefono: from,
+      nombre: name,
+      mensaje: text,
       respuesta: reply.text,
       tipo_solicitud: reply.solicitud?.tipo,
       prioridad: reply.solicitud?.prioridad,
@@ -259,10 +308,10 @@ async function handleIncoming(msg: {
       escalado: reply.escalated,
     });
   } catch (err) {
-    console.error(`Error atendiendo a ${msg.from}:`, err);
+    console.error(`Error atendiendo a ${from}:`, err);
     try {
       await sendText(
-        msg.from,
+        from,
         "Disculpe, tuvimos un inconveniente técnico. Por favor intente nuevamente en unos minutos. 🙏",
       );
     } catch {

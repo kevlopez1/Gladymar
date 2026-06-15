@@ -14,6 +14,8 @@ export interface Sucursal {
   telefono?: string;
   whatsapp?: string;
   horario?: string;
+  /** Si true, el WhatsApp de esta sucursal es el del administrador regional del departamento. */
+  admin?: boolean;
 }
 
 export const SUCURSALES: Sucursal[] = [
@@ -25,6 +27,7 @@ export const SUCURSALES: Sucursal[] = [
     telefono: "3441616",
     whatsapp: "67703821",
     horario: "Lun-Vie 09:00-18:30, Sáb 09:00-13:00",
+    admin: true,
   },
   {
     ciudad: "Santa Cruz",
@@ -57,6 +60,7 @@ export const SUCURSALES: Sucursal[] = [
     telefono: "2774454",
     whatsapp: "71557028",
     horario: "Lun-Vie 08:30-18:30, Sáb 08:30-12:30",
+    admin: true,
   },
   {
     ciudad: "La Paz",
@@ -82,6 +86,7 @@ export const SUCURSALES: Sucursal[] = [
     telefono: "4361466",
     whatsapp: "67408846",
     horario: "Lun-Vie 08:30-18:30, Sáb 09:00-13:00",
+    admin: true,
   },
   {
     ciudad: "Cochabamba",
@@ -99,6 +104,7 @@ export const SUCURSALES: Sucursal[] = [
     telefono: "6422828",
     whatsapp: "67900508",
     horario: "Lun-Vie 08:30-12:30 y 14:30-18:30, Sáb 08:30-12:30",
+    admin: true,
   },
   // ── Tarija ──
   {
@@ -108,6 +114,7 @@ export const SUCURSALES: Sucursal[] = [
     telefono: "6650517",
     whatsapp: "72987241",
     horario: "Lun-Vie 08:30-12:30 y 14:30-18:30, Sáb 08:30-12:30",
+    admin: true,
   },
   // ── Oruro ──
   {
@@ -116,6 +123,7 @@ export const SUCURSALES: Sucursal[] = [
     direccion: "C/ Pagador No. 5599 esq. C/ Caro",
     whatsapp: "72303568",
     horario: "Lun-Vie 08:00-18:00, Sáb 09:00-13:00",
+    admin: true,
   },
   // ── Potosí ──
   {
@@ -124,6 +132,7 @@ export const SUCURSALES: Sucursal[] = [
     direccion: "C/ La Paz esq. Lucas Laime",
     whatsapp: "69612800",
     horario: "Lun-Vie 08:00-18:00, Sáb 09:00-13:00",
+    admin: true,
   },
 ];
 

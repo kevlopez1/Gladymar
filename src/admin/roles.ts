@@ -42,7 +42,7 @@ export function toIntlBolivia(num: string): string {
 /** Mapa teléfono (internacional) -> Admin (para enrutar en WhatsApp real). */
 export const ADMIN_POR_TELEFONO: Record<string, Admin> = {};
 for (const s of SUCURSALES) {
-  if (s.whatsapp) {
+  if (s.whatsapp && s.admin) {
     const tel = toIntlBolivia(s.whatsapp);
     const nombre = ADMIN_REGIONAL_NOMBRE[s.ciudad] || `Administrador ${s.ciudad}`;
     ADMIN_POR_TELEFONO[tel] = {
