@@ -151,6 +151,11 @@ function splitBlocks(text: string): string[] {
   return parts;
 }
 
+/** Tiempo del indicador "escribiendo…" simulando tipeo humano (según el largo, con tope). */
+function typingMs(text: string): number {
+  return Math.min(2600, 700 + text.length * 18);
+}
+
 async function handleIncoming(msg: {
   from: string;
   text: string;
@@ -177,6 +182,7 @@ async function handleIncoming(msg: {
 
   // Cliente: marca leído + "escribiendo…", reinicia encuesta y suma a KPIs.
   void markReadAndTyping(msg.messageId);
+  const tEscribiendo = Date.now();
   survey.onActivity(msg.from);
   bumpConversacion();
 
@@ -184,10 +190,22 @@ async function handleIncoming(msg: {
     const reply = await agent.handleMessage(msg.from, msg.text);
 
     // Respuestas en bloques: divide en 2-3 mensajes con pausas humanas.
+    // Mostramos "escribiendo…" antes de cada bloque (y un mínimo antes del primero).
     // El último bloque, si hay opciones, se envía como LISTA interactiva (igual que el demo).
     const bloques = splitBlocks(reply.text);
     for (let i = 0; i < bloques.length; i++) {
       const esUltimo = i === bloques.length - 1;
+
+      if (i === 0) {
+        // Garantiza que el "escribiendo…" se vea un mínimo antes del primer mensaje.
+        const transcurrido = Date.now() - tEscribiendo;
+        if (transcurrido < 1200) await sleep(1200 - transcurrido);
+      } else {
+        // Reactiva "escribiendo…" entre mensajes, con una pausa natural de tipeo.
+        void markReadAndTyping(msg.messageId);
+        await sleep(typingMs(bloques[i]));
+      }
+
       if (esUltimo && reply.options.length) {
         try {
           await sendInteractiveList(
@@ -207,7 +225,6 @@ async function handleIncoming(msg: {
       } else {
         await sendText(msg.from, bloques[i]);
       }
-      if (!esUltimo) await sleep(800);
     }
 
     // Adjunta el Manual de Asentamiento (PDF) si el cliente lo pidió y hay enlace configurado.

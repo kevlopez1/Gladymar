@@ -140,7 +140,7 @@ export async function markReadAndTyping(messageId: string): Promise<void> {
 async function postStatus(body: Record<string, unknown>): Promise<void> {
   const url = `${BASE}/${config.whatsapp.phoneNumberId}/messages`;
   try {
-    await fetch(url, {
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${config.whatsapp.accessToken}`,
@@ -148,7 +148,12 @@ async function postStatus(body: Record<string, unknown>): Promise<void> {
       },
       body: JSON.stringify({ messaging_product: "whatsapp", ...body }),
     });
-  } catch {
-    // No es crítico; ignoramos errores de estado/typing.
+    // No es crítico, pero si Meta rechaza el estado/typing lo registramos para diagnóstico.
+    if (!res.ok) {
+      const detail = await res.text();
+      console.warn(`⌨️  Estado/typing no aplicado (${res.status}): ${detail}`);
+    }
+  } catch (err) {
+    console.warn("⌨️  Estado/typing falló (red):", err);
   }
 }
