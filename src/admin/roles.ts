@@ -29,13 +29,24 @@ export const ADMIN_REGIONAL_NOMBRE: Record<string, string> = {
   "Oruro": "Gustavo Villegas",
 };
 
-/** Mapa teléfono -> Admin (para enrutar en WhatsApp real). */
+/**
+ * Normaliza un número al formato internacional de Bolivia (591 + número), tal
+ * como llega de WhatsApp. Los teléfonos de sucursal están cargados con 8 dígitos
+ * locales; acá les anteponemos "591" para que coincidan con el remitente real.
+ */
+export function toIntlBolivia(num: string): string {
+  const d = (num || "").replace(/\D/g, "");
+  return d.startsWith("591") ? d : `591${d}`;
+}
+
+/** Mapa teléfono (internacional) -> Admin (para enrutar en WhatsApp real). */
 export const ADMIN_POR_TELEFONO: Record<string, Admin> = {};
 for (const s of SUCURSALES) {
   if (s.whatsapp) {
+    const tel = toIntlBolivia(s.whatsapp);
     const nombre = ADMIN_REGIONAL_NOMBRE[s.ciudad] || `Administrador ${s.ciudad}`;
-    ADMIN_POR_TELEFONO[s.whatsapp] = {
-      id: s.whatsapp,
+    ADMIN_POR_TELEFONO[tel] = {
+      id: tel,
       nombre,
       role: "regional",
       region: s.ciudad,
@@ -43,11 +54,12 @@ for (const s of SUCURSALES) {
   }
 }
 // El Gerente General tiene prioridad (acceso nacional).
-ADMIN_POR_TELEFONO[ADMIN_TELEFONO] = { id: ADMIN_TELEFONO, nombre: "Gerente General", role: "gerente" };
+const gerenteTel = toIntlBolivia(ADMIN_TELEFONO);
+ADMIN_POR_TELEFONO[gerenteTel] = { id: gerenteTel, nombre: "Gerente General", role: "gerente" };
 
-/** Devuelve el admin asociado a un número, si existe. */
+/** Devuelve el admin asociado a un número, si existe (normaliza el remitente). */
 export function getAdminByPhone(telefono: string): Admin | undefined {
-  return ADMIN_POR_TELEFONO[telefono];
+  return ADMIN_POR_TELEFONO[toIntlBolivia(telefono)];
 }
 
 /** Construye un Admin para el demo: "gerente" = Gerente General; una ciudad = su administrador regional. */
