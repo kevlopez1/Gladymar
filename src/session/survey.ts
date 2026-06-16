@@ -35,7 +35,9 @@ export class SurveyScheduler {
   onActivity(userId: string): void {
     if (this.delayMs <= 0) return; // encuesta desactivada
 
-    this.sent.delete(userId);
+    // La encuesta se envía UNA sola vez por cliente: si ya se envió, no re-armar
+    // (evita el spam de encuestas durante una conversación con pausas).
+    if (this.sent.has(userId)) return;
 
     const existing = this.timers.get(userId);
     if (existing) clearTimeout(existing);

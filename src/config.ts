@@ -44,7 +44,7 @@ export const config = {
     url: optional("SURVEY_URL", "https://gladymar.com.bo/encuesta/"),
     // Minutos de inactividad tras los cuales se considera "terminada" la
     // conversación y se envía la encuesta (0 = desactivar).
-    delayMinutes: Number(optional("SURVEY_DELAY_MINUTES", "5")),
+    delayMinutes: Number(optional("SURVEY_DELAY_MINUTES", "30")),
   },
 
   assets: {
