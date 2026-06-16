@@ -38,14 +38,14 @@ export const CATEGORIAS: CategoriaProducto[] = [
     id: "griferia",
     nombre: "Griferías",
     descripcion: "Griferías para cocina, baño y ducha de primeras marcas.",
-    marcas: ["Deca", "Fani", "Artema"],
+    marcas: ["Deca", "Fani"],
     palabrasClave: ["griferia", "grifería", "grifo", "mezclador", "ducha", "lavaplatos", "cocina", "monocomando"],
   },
   {
     id: "sanitarios",
     nombre: "Sanitarios",
     descripcion: "Inodoros, lavamanos y piezas sanitarias.",
-    marcas: ["Deca"],
+    marcas: ["Deca", "Fani"],
     palabrasClave: ["sanitario", "sanitarios", "inodoro", "lavamanos", "lavabo", "baño", "bano", "tanque"],
   },
   {

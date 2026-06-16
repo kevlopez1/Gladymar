@@ -208,7 +208,7 @@ function programarCliente(msg: { from: string; text: string; messageId: string; 
   buf.textos.push(msg.text);
   buf.messageId = msg.messageId;
   if (msg.name) buf.name = msg.name;
-  survey.onActivity(msg.from);
+  // Encuesta de satisfacción desactivada por pedido de Gladymar.
   if (buf.timer) clearTimeout(buf.timer);
   buf.timer = setTimeout(() => void vaciarCliente(msg.from), DEBOUNCE_MS);
   if (typeof buf.timer.unref === "function") buf.timer.unref();
@@ -251,10 +251,23 @@ async function handleIncoming(msg: {
     void markAsRead(msg.messageId);
     try {
       const r = handleAdminCommand(`wa:${msg.from}`, admin, msg.text);
-      const out = r.options?.length
-        ? `${r.text}\n\n${r.options.map((o, i) => `*${i + 1}.* ${o}`).join("\n")}`
-        : r.text;
-      await sendText(msg.from, out);
+      // Si hay opciones, las mandamos como LISTA interactiva (tappable, como el cliente).
+      if (r.options?.length) {
+        try {
+          await sendInteractiveList(
+            msg.from,
+            r.text,
+            r.optionsButton || "Ver comandos",
+            r.optionsTitle || "Panel",
+            r.options,
+          );
+        } catch (err) {
+          console.error("Lista admin falló; envío como texto:", err);
+          await sendText(msg.from, `${r.text}\n\n${r.options.map((o, i) => `*${i + 1}.* ${o}`).join("\n")}`);
+        }
+      } else {
+        await sendText(msg.from, r.text);
+      }
     } catch (err) {
       console.error(`Error en panel admin para ${msg.from}:`, err);
     }

@@ -104,6 +104,13 @@ export function handleAdminCommand(sessionId: string, admin: Admin, raw: string)
     }
   }
 
+  // Atajo numérico: si responde con un número, lo mapeamos a la opción del menú.
+  if (/^\d+$/.test(text)) {
+    const opciones = menu(admin).options || [];
+    const sel = opciones[parseInt(text, 10) - 1];
+    if (sel) return handleAdminCommand(sessionId, admin, sel);
+  }
+
   if (!text || /(menu|menú|ayuda|hola|inicio|volver|comandos)/.test(text)) return menu(admin);
   if (/(lead|cotiz)/.test(text)) return { text: listLeads(region), ...VOLVER };
   if (/reclamo/.test(text)) return { text: listReclamos(region), ...VOLVER };

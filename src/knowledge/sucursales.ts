@@ -151,11 +151,14 @@ export function sucursalesPorCiudad(ciudad?: string): Sucursal[] {
   return filtradas.length > 0 ? filtradas : SUCURSALES;
 }
 
-/** Formatea una sucursal para mostrarla al cliente. */
+/** Formatea una sucursal para mostrarla al cliente (WhatsApp como link, sin fijos). */
 export function formatearSucursal(s: Sucursal): string {
-  const lineas = [`◆ *${s.ciudad} – ${s.nombre}*`, `   ${s.direccion}`];
-  if (s.telefono) lineas.push(`   Teléfono: ${s.telefono}`);
-  if (s.whatsapp) lineas.push(`   WhatsApp: ${s.whatsapp}`);
+  const lineas = [`◆ *${s.ciudad} · ${s.nombre}*`, `   ${s.direccion}`];
+  if (s.whatsapp) {
+    const d = s.whatsapp.replace(/\D/g, "");
+    const intl = d.startsWith("591") ? d : `591${d}`;
+    lineas.push(`   WhatsApp: https://wa.me/${intl}`);
+  }
   if (s.horario) lineas.push(`   ${s.horario}`);
   return lineas.join("\n");
 }
