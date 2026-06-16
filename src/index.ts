@@ -9,13 +9,13 @@ import express from "express";
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import { config, isWhatsAppConfigured } from "./config.js";
-import { GladymarAgent } from "./agent/brain.js";
+import { GladymarAgent, type AgentReply } from "./agent/brain.js";
 import { InMemorySessionStore } from "./session/store.js";
 import { sendText, sendDocument, sendInteractiveList, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
-import { getAdminByPhone, adminFromRole } from "./admin/roles.js";
+import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, ADMIN_TELEFONO } from "./admin/roles.js";
 import { handleAdminCommand } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
 
@@ -156,6 +156,39 @@ function typingMs(text: string): number {
   return Math.min(2600, 700 + text.length * 18);
 }
 
+/**
+ * Aviso automático (handoff) al asesor de la ciudad del cliente cuando se cierra
+ * una solicitud (lead/cotización/reclamo/etc.). Le manda los datos para que el
+ * asesor contacte al cliente directo. Si no hay asesor para esa ciudad, avisa al
+ * Gerente General. Nota: WhatsApp solo permite el envío libre dentro de la
+ * ventana de 24h del asesor; si está activo (consultando su panel), llega bien.
+ */
+async function notificarAsesor(
+  from: string,
+  name: string | undefined,
+  sol: NonNullable<AgentReply["solicitud"]>,
+): Promise<void> {
+  const ciudad = sol.ciudad || "";
+  const destino = adminTelefonoPorCiudad(ciudad) || ADMIN_TELEFONO;
+  const prio = sol.prioridad === "critica" ? "  🔴 CRÍTICA" : sol.prioridad === "alta" ? "  🟠 ALTA" : "";
+  const nombre = sol.nombre || name || "Cliente";
+  const lineas = [
+    `🔔 *Nuevo cliente${ciudad ? " · " + ciudad : ""}*${prio}`,
+    `👤 ${nombre}`,
+    `📱 ${from}  (wa.me/${from})`,
+    `🗂️ ${sol.tipo}`,
+    sol.detalle ? `🗒️ ${sol.detalle}` : "",
+    "",
+    "Escribile para continuar la atención. 💬",
+  ].filter(Boolean);
+  try {
+    await sendText(destino, lineas.join("\n"));
+    console.log(`📤 Handoff -> asesor ${destino} (cliente ${from}, ${ciudad || "sin ciudad"})`);
+  } catch (err) {
+    console.error(`No se pudo avisar al asesor ${destino}:`, err);
+  }
+}
+
 // ── Agrupado de mensajes (anti-spam) ────────────────────────────────────────
 // Si un cliente manda varios mensajes seguidos, los juntamos y respondemos UNA
 // sola vez (evita respuestas repetidas). Si llega un mensaje mientras estamos
@@ -288,6 +321,11 @@ async function procesarTurnoCliente(from: string, text: string, messageId: strin
       } catch (err) {
         console.error(`No se pudo adjuntar el manual a ${from}:`, err);
       }
+    }
+
+    // Handoff: si se registró una solicitud, avisamos al asesor de su ciudad.
+    if (reply.solicitud) {
+      void notificarAsesor(from, name, reply.solicitud);
     }
 
     if (reply.escalated) {
