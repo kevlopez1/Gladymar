@@ -14,6 +14,7 @@ export interface SolicitudReg {
   prioridad: string;
   nombre?: string;
   ciudad?: string;
+  telefono?: string;
   detalle: string;
   fecha: string;
 }
@@ -27,13 +28,13 @@ export function totalConversaciones(): number {
 }
 
 const registros: SolicitudReg[] = [
-  { tipo: "reclamo", prioridad: "critica", nombre: "Luis Rojas", ciudad: "Santa Cruz", detalle: "Diferencia de tono entre piezas de porcelanato", fecha: "hoy 08:55" },
-  { tipo: "cotizacion", prioridad: "alta", nombre: "María Áñez", ciudad: "Santa Cruz", detalle: "Porcelanato 60x60, ~120 m², construcción nueva", fecha: "hoy 10:15" },
-  { tipo: "reclamo", prioridad: "alta", nombre: "Patricia Vaca", ciudad: "Santa Cruz", detalle: "Piso suena hueco tras la colocación", fecha: "ayer 17:20" },
-  { tipo: "cotizacion", prioridad: "normal", nombre: "Jorge Téllez", ciudad: "La Paz", detalle: "Cerámica para baño, remodelación", fecha: "hoy 11:02" },
-  { tipo: "seguimiento_pedido", prioridad: "normal", nombre: "Carlos Méndez", ciudad: "La Paz", detalle: "Estado de entrega pedido #4821", fecha: "hoy 12:10" },
-  { tipo: "cotizacion", prioridad: "normal", nombre: "Andrea Soliz", ciudad: "Cochabamba", detalle: "Griferías Briggs para cocina", fecha: "hoy 09:40" },
-  { tipo: "cotizacion", prioridad: "alta", nombre: "Estudio Arq. Vargas", ciudad: "Cochabamba", detalle: "Proyecto >1000 m², porcelanato importado", fecha: "hoy 13:05" },
+  { tipo: "reclamo", prioridad: "critica", nombre: "Luis Rojas", ciudad: "Santa Cruz", telefono: "59172114455", detalle: "Diferencia de tono entre piezas de porcelanato", fecha: "hoy 08:55" },
+  { tipo: "cotizacion", prioridad: "alta", nombre: "María Áñez", ciudad: "Santa Cruz", telefono: "59170099887", detalle: "Porcelanato 60x60, ~120 m², construcción nueva", fecha: "hoy 10:15" },
+  { tipo: "reclamo", prioridad: "alta", nombre: "Patricia Vaca", ciudad: "Santa Cruz", telefono: "59176654321", detalle: "Piso suena hueco tras la colocación", fecha: "ayer 17:20" },
+  { tipo: "cotizacion", prioridad: "normal", nombre: "Jorge Téllez", ciudad: "La Paz", telefono: "59171223344", detalle: "Cerámica para baño, remodelación", fecha: "hoy 11:02" },
+  { tipo: "seguimiento_pedido", prioridad: "normal", nombre: "Carlos Méndez", ciudad: "La Paz", telefono: "59168890011", detalle: "Estado de entrega pedido #4821", fecha: "hoy 12:10" },
+  { tipo: "cotizacion", prioridad: "normal", nombre: "Andrea Soliz", ciudad: "Cochabamba", telefono: "59177001122", detalle: "Griferías Deca para cocina", fecha: "hoy 09:40" },
+  { tipo: "cotizacion", prioridad: "alta", nombre: "Estudio Arq. Vargas", ciudad: "Cochabamba", telefono: "59170556677", detalle: "Proyecto >1000 m², porcelanato importado", fecha: "hoy 13:05" },
 ];
 
 function norm(s?: string): string {
@@ -51,6 +52,7 @@ export function recordSolicitud(r: {
   prioridad?: string;
   nombre?: string;
   ciudad?: string;
+  telefono?: string;
   detalle: string;
 }): void {
   registros.unshift({
@@ -58,6 +60,7 @@ export function recordSolicitud(r: {
     prioridad: r.prioridad || "normal",
     nombre: r.nombre,
     ciudad: r.ciudad,
+    telefono: r.telefono,
     detalle: r.detalle,
     fecha: nowBolivia(),
   });

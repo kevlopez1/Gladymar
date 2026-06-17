@@ -148,7 +148,11 @@ export interface ToolExecution {
 /**
  * Ejecuta una herramienta por nombre con los argumentos provistos por Claude.
  */
-export function executeTool(name: string, input: Record<string, unknown>): ToolExecution {
+export function executeTool(
+  name: string,
+  input: Record<string, unknown>,
+  telefonoCliente?: string,
+): ToolExecution {
   switch (name) {
     case "mostrar_menu": {
       const seccion = typeof input.seccion === "string" ? input.seccion.trim() : "";
@@ -187,26 +191,28 @@ export function executeTool(name: string, input: Record<string, unknown>): ToolE
     }
 
     case "registrar_solicitud":
-      return registrarSolicitud(input);
+      return registrarSolicitud(input, telefonoCliente);
 
     default:
       return { content: `Error: herramienta desconocida "${name}".` };
   }
 }
 
-function registrarSolicitud(input: Record<string, unknown>): ToolExecution {
+function registrarSolicitud(input: Record<string, unknown>, telefonoCliente?: string): ToolExecution {
   const tipo = typeof input.tipo === "string" ? input.tipo : "otro";
   const prioridad = typeof input.prioridad === "string" ? input.prioridad : "normal";
   const ciudad = typeof input.ciudad === "string" ? input.ciudad : undefined;
   const detalle = typeof input.detalle === "string" ? input.detalle : "consulta general";
   const nombre = typeof input.nombre === "string" ? input.nombre : undefined;
-  const telefono = typeof input.telefono === "string" ? input.telefono : undefined;
+  // El teléfono del cliente es el del WhatsApp desde el que escribe (telefonoCliente);
+  // si además lo mencionó en el chat, igual priorizamos el real del WhatsApp.
+  const telefono = telefonoCliente || (typeof input.telefono === "string" ? input.telefono : undefined);
 
   const marca = prioridad === "critica" ? "🔴 CRÍTICA" : prioridad === "alta" ? "🟠 ALTA" : "";
   console.log(`📝 Solicitud [${tipo}] ${marca} ${ciudad ? `(${ciudad}) ` : ""}${nombre ? `de ${nombre} ` : ""}- ${detalle}`);
 
   // Guarda la solicitud para que el panel de administradores la vea.
-  recordSolicitud({ tipo, prioridad, nombre, ciudad, detalle });
+  recordSolicitud({ tipo, prioridad, nombre, ciudad, telefono, detalle });
 
   const contactoSucursal = (): string => {
     const conWa = sucursalesPorCiudad(ciudad).filter((s) => s.whatsapp);

@@ -126,6 +126,9 @@ export class GladymarAgent {
     let solicitud: AgentReply["solicitud"];
     let rounds = 0;
 
+    // Teléfono real del cliente = su WhatsApp (userId), solo si son dígitos (no demo).
+    const telefonoCliente = /^\d{6,}$/.test(userId) ? userId : undefined;
+
     let response = await this.create(messages);
 
     while (response.stop_reason === "tool_use" && rounds < MAX_TOOL_ROUNDS) {
@@ -136,7 +139,7 @@ export class GladymarAgent {
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
       for (const block of response.content) {
         if (block.type === "tool_use") {
-          const result = executeTool(block.name, block.input as Record<string, unknown>);
+          const result = executeTool(block.name, block.input as Record<string, unknown>, telefonoCliente);
           if (result.escalated) escalated = true;
           if (result.attachManual) attachManual = true;
           if (result.solicitud) solicitud = result.solicitud;

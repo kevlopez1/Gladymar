@@ -50,7 +50,9 @@ function menu(admin: Admin): AdminReply {
 
 function fmtItem(r: SolicitudReg): string {
   const p = r.prioridad === "critica" ? " 🔴" : r.prioridad === "alta" ? " 🟠" : "";
-  return `• *${r.nombre || "Cliente"}* · ${r.ciudad || "?"}${p}\n   ${r.detalle}  _(${r.fecha})_`;
+  const dig = (r.telefono || "").replace(/\D/g, "");
+  const tel = dig ? `\n   📱 wa.me/${dig}` : "";
+  return `• *${r.nombre || "Cliente"}* · ${r.ciudad || "?"}${p}${tel}\n   ${r.detalle}  _(${r.fecha})_`;
 }
 
 function listLeads(ciudad?: string): string {
