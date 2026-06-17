@@ -65,6 +65,15 @@ for (const [ciudad, num] of Object.entries(ADMIN_REGIONAL_TELEFONO)) {
 const gerenteTel = toIntlBolivia(ADMIN_TELEFONO);
 ADMIN_POR_TELEFONO[gerenteTel] = { id: gerenteTel, nombre: "Gerente General", role: "gerente" };
 
+// Administradores adicionales con acceso nacional (desarrollo / soporte Prime).
+const ADMINS_EXTRA: { telefono: string; nombre: string }[] = [
+  { telefono: "74234380", nombre: "Soporte Prime" },
+];
+for (const a of ADMINS_EXTRA) {
+  const t = toIntlBolivia(a.telefono);
+  ADMIN_POR_TELEFONO[t] = { id: t, nombre: a.nombre, role: "gerente" };
+}
+
 function normCiudad(s: string): string {
   return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
