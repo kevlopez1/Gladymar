@@ -156,6 +156,23 @@ function typingMs(text: string): number {
   return Math.min(2600, 700 + text.length * 18);
 }
 
+/** Parte un texto largo en trozos de <= max caracteres, respetando saltos de línea. */
+function splitLong(text: string, max: number): string[] {
+  if (text.length <= max) return [text];
+  const partes: string[] = [];
+  let actual = "";
+  for (const linea of text.split("\n")) {
+    if (actual && (actual + "\n" + linea).length > max) {
+      partes.push(actual);
+      actual = linea;
+    } else {
+      actual = actual ? actual + "\n" + linea : linea;
+    }
+  }
+  if (actual) partes.push(actual);
+  return partes;
+}
+
 /**
  * Aviso automático (handoff) al asesor de la ciudad del cliente cuando se cierra
  * una solicitud (lead/cotización/reclamo/etc.). Le manda los datos para que el
@@ -251,22 +268,30 @@ async function handleIncoming(msg: {
     void markAsRead(msg.messageId);
     try {
       const r = handleAdminCommand(`wa:${msg.from}`, admin, msg.text);
-      // Si hay opciones, las mandamos como LISTA interactiva (tappable, como el cliente).
-      if (r.options?.length) {
+      const corto = r.text.length < 900;
+      if (r.options?.length && corto) {
+        // Menú corto: lista interactiva tappable.
         try {
-          await sendInteractiveList(
-            msg.from,
-            r.text,
-            r.optionsButton || "Ver comandos",
-            r.optionsTitle || "Panel",
-            r.options,
-          );
+          await sendInteractiveList(msg.from, r.text, r.optionsButton || "Ver comandos", r.optionsTitle || "Panel", r.options);
         } catch (err) {
           console.error("Lista admin falló; envío como texto:", err);
           await sendText(msg.from, `${r.text}\n\n${r.options.map((o, i) => `*${i + 1}.* ${o}`).join("\n")}`);
         }
       } else {
-        await sendText(msg.from, r.text);
+        // Texto largo (listas de leads/reclamos): partir en varios mensajes para que NO se corte.
+        const partes = splitLong(r.text, 3500);
+        for (let i = 0; i < partes.length; i++) {
+          await sendText(msg.from, partes[i]);
+          if (i < partes.length - 1) await sleep(400);
+        }
+        // Menú al final para volver.
+        if (r.options?.length) {
+          try {
+            await sendInteractiveList(msg.from, "¿Algo más?", r.optionsButton || "Menú", r.optionsTitle || "Panel", r.options);
+          } catch {
+            /* si falla la lista, no es crítico */
+          }
+        }
       }
     } catch (err) {
       console.error(`Error en panel admin para ${msg.from}:`, err);

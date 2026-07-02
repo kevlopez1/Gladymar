@@ -46,6 +46,17 @@ function scope(list: SolicitudReg[], ciudad?: string): SolicitudReg[] {
   return list.filter((r) => norm(r.ciudad).includes(q));
 }
 
+/** Fecha de hoy (parte de día) en formato de nowBolivia, ej. "2/7/2026". */
+function hoyStr(): string {
+  return new Date().toLocaleString("es-BO", { timeZone: "America/La_Paz", hour12: false }).split(",")[0].trim();
+}
+/** ¿La fecha del registro corresponde a HOY? (soporta "hoy …"/"ayer …" de la demo y el formato real). */
+export function esDeHoy(fecha: string): boolean {
+  if (/hoy/i.test(fecha)) return true;
+  if (/ayer/i.test(fecha)) return false;
+  return fecha.split(",")[0].trim() === hoyStr();
+}
+
 /** Registra una nueva solicitud (la llama el agente al derivar). */
 export function recordSolicitud(r: {
   tipo: string;

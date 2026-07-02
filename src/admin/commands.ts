@@ -6,12 +6,13 @@
  * ver cualquier región.
  */
 import type { Admin } from "./roles.js";
-import { ciudadesAdmin } from "./roles.js";
+import { ciudadesAdmin, ADMIN_REGIONAL_NOMBRE } from "./roles.js";
 import {
   getLeads,
   getReclamos,
   getKpis,
   totalConversaciones,
+  esDeHoy,
   type SolicitudReg,
 } from "./data.js";
 
@@ -36,7 +37,7 @@ function norm(s: string): string {
 }
 
 function menu(admin: Admin): AdminReply {
-  const base = ["Leads y cotizaciones", "Reclamos prioritarios", "Resumen del día"];
+  const base = ["Leads del día", "Reclamos prioritarios", "Resumen del día"];
   const gm = ["Reportes globales", "Enviar comunicado", "Ver una región"];
   const opciones = admin.role === "gerente" ? [...base, ...gm] : base;
   const ambito = admin.role === "gerente" ? "Nacional 🇧🇴" : admin.region;
@@ -48,24 +49,35 @@ function menu(admin: Admin): AdminReply {
   };
 }
 
+/** Asesor al que se deriva automáticamente un lead según su ciudad. */
+function asesorDe(ciudad?: string): string {
+  if (!ciudad) return "Gerencia (sin ciudad)";
+  const q = norm(ciudad);
+  for (const [c, nombre] of Object.entries(ADMIN_REGIONAL_NOMBRE)) {
+    const cn = norm(c);
+    if (cn === q || q.includes(cn) || cn.includes(q)) return nombre;
+  }
+  return "Gerencia (ciudad sin asesor)";
+}
+
 function fmtItem(r: SolicitudReg): string {
   const p = r.prioridad === "critica" ? " 🔴" : r.prioridad === "alta" ? " 🟠" : "";
   const dig = (r.telefono || "").replace(/\D/g, "");
   const tel = dig ? `\n   📱 wa.me/${dig}` : "";
-  return `• *${r.nombre || "Cliente"}* · ${r.ciudad || "?"}${p}${tel}\n   ${r.detalle}  _(${r.fecha})_`;
+  return `• *${r.nombre || "Cliente"}* · ${r.ciudad || "?"}${p}${tel}\n   ${r.detalle}  _(${r.fecha})_\n   ➡️ Derivado a: *${asesorDe(r.ciudad)}*`;
 }
 
 function listLeads(ciudad?: string): string {
-  const l = getLeads(ciudad).slice(0, 8);
+  const l = getLeads(ciudad).filter((r) => esDeHoy(r.fecha));
   const t = ciudad ? `en *${ciudad}*` : "a nivel *nacional*";
-  if (!l.length) return `No hay leads ${t} por ahora.`;
-  return `🧾 *Leads y cotizaciones* (${t})\n\n` + l.map(fmtItem).join("\n");
+  if (!l.length) return `No hay leads del día ${t} por ahora.`;
+  return `🧾 *Leads del día* (${t}) — *${l.length}*\n\n` + l.map(fmtItem).join("\n\n");
 }
 function listReclamos(ciudad?: string): string {
-  const l = getReclamos(ciudad).slice(0, 8);
+  const l = getReclamos(ciudad);
   const t = ciudad ? `en *${ciudad}*` : "a nivel *nacional*";
   if (!l.length) return `No hay reclamos ${t}. 👌`;
-  return `🚨 *Reclamos prioritarios* (${t})\n\n` + l.map(fmtItem).join("\n");
+  return `🚨 *Reclamos prioritarios* (${t}) — *${l.length}*\n\n` + l.map(fmtItem).join("\n\n");
 }
 function resumen(ciudad?: string): string {
   const k = getKpis(ciudad);
