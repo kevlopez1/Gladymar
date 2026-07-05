@@ -55,9 +55,12 @@ app.get("/health", (_req, res) => {
 });
 
 // Migración única del histórico del Google Sheet al CRM de Prime.
-// Se abre UNA vez: /admin/backfill-crm?key=TU_CLAVE  (BACKFILL_KEY en el entorno).
+// Se abre: /admin/backfill-crm?key=TU_CLAVE  (BACKFILL_KEY en el entorno).
+// Arranca en segundo plano y responde al instante; refrescá la URL para ver el avance.
 // Requiere que la hoja esté compartida como "cualquiera con el link: Lector".
-app.get("/admin/backfill-crm", async (req, res) => {
+const backfill = { running: false, total: 0, ok: 0, fail: 0, skip: 0, startedAt: "", finishedAt: "", error: "" };
+
+app.get("/admin/backfill-crm", (req, res) => {
   const key = String(req.query.key || "");
   if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
     res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
@@ -67,31 +70,43 @@ app.get("/admin/backfill-crm", async (req, res) => {
     res.status(400).json({ error: "Falta CRM_INGEST_TOKEN (el CRM está desactivado)." });
     return;
   }
+  if (backfill.running) {
+    res.json({ estado: "EN CURSO", ...backfill });
+    return;
+  }
+  // Si ya se ejecutó, mostramos el resultado y NO re-ejecutamos (para no duplicar).
+  if (backfill.finishedAt && req.query.force !== "1") {
+    res.json({ estado: "FINALIZADO (ya se ejecutó)", ...backfill, nota: "Para volver a ejecutar agregá &force=1 a la URL." });
+    return;
+  }
+  // Arranca en segundo plano y responde de inmediato.
+  Object.assign(backfill, { running: true, total: 0, ok: 0, fail: 0, skip: 0, startedAt: nowBolivia(), finishedAt: "", error: "" });
+  void ejecutarBackfill();
+  res.json({ estado: "INICIADO", mensaje: "Sincronización en marcha. Refrescá esta misma URL en ~30 seg para ver el avance y el resultado." });
+});
+
+async function ejecutarBackfill(): Promise<void> {
   try {
     const url = `https://docs.google.com/spreadsheets/d/${config.crm.backfillSheetId}/export?format=csv`;
     const r = await fetch(url);
     const csv = await r.text();
     if (!r.ok || csv.trimStart().startsWith("<")) {
-      res.status(502).json({
-        error: "No pude leer la hoja como CSV. Compartila como 'Cualquiera con el enlace: Lector' e intentá de nuevo.",
-      });
+      backfill.error = "No pude leer la hoja como CSV. Compartila como 'Cualquiera con el enlace: Lector'.";
+      backfill.running = false;
+      backfill.finishedAt = nowBolivia();
       return;
     }
     const filas = parseCSV(csv);
-    if (filas.length < 2) {
-      res.json({ total: 0, ok: 0, fail: 0, skip: 0, nota: "Hoja vacía o sin filas de datos." });
-      return;
-    }
+    backfill.total = Math.max(0, filas.length - 1);
     const enc = filas[0].map((h) => h.toLowerCase());
     const idx = (n: string) => enc.findIndex((h) => h.includes(n));
     const iTel = idx("tel"), iNom = idx("nombre"), iMsg = idx("mensaje"), iResp = idx("respuesta"), iTipo = idx("tipo"), iDet = idx("detalle");
-    let ok = 0, fail = 0, skip = 0;
     for (let k = 1; k < filas.length; k++) {
       const f = filas[k];
       const tel = (iTel >= 0 ? f[iTel] || "" : "").replace(/\D/g, "");
       const message = iMsg >= 0 ? f[iMsg] || "" : "";
       const response = iResp >= 0 ? f[iResp] || "" : "";
-      if (!tel || (!message && !response)) { skip++; continue; }
+      if (!tel || (!message && !response)) { backfill.skip++; continue; }
       const result = await crm.send({
         external_id: tel,
         name: iNom >= 0 ? f[iNom] : undefined,
@@ -100,18 +115,20 @@ app.get("/admin/backfill-crm", async (req, res) => {
         stage: iTipo >= 0 ? stageDeTipo((f[iTipo] || "").trim()) : undefined,
         interest: iDet >= 0 ? f[iDet] : undefined,
       });
-      if (result === "ok") ok++;
-      else if (result === "fail") fail++;
-      else skip++;
-      await sleep(80);
+      if (result === "ok") backfill.ok++;
+      else if (result === "fail") backfill.fail++;
+      else backfill.skip++;
+      await sleep(60);
     }
-    console.log(`🔁 Backfill CRM: total=${filas.length - 1} ok=${ok} fail=${fail} skip=${skip}`);
-    res.json({ total: filas.length - 1, ok, fail, skip });
+    console.log(`🔁 Backfill CRM: total=${backfill.total} ok=${backfill.ok} fail=${backfill.fail} skip=${backfill.skip}`);
   } catch (err) {
+    backfill.error = String(err);
     console.error("Backfill CRM error:", err);
-    res.status(500).json({ error: String(err) });
+  } finally {
+    backfill.running = false;
+    backfill.finishedAt = nowBolivia();
   }
-});
+}
 
 // Páginas legales (requeridas por Meta para publicar la app en modo Live).
 app.get("/privacidad", (_req, res) => {
