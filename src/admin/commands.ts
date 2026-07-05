@@ -38,7 +38,7 @@ function norm(s: string): string {
 
 function menu(admin: Admin): AdminReply {
   const base = ["Leads del día", "Reclamos prioritarios", "Resumen del día"];
-  const gm = ["Reportes globales", "Enviar comunicado", "Ver una región"];
+  const gm = ["Reportes globales", "Enviar comunicado", "Ver una región", "🧪 Probar como cliente"];
   const opciones = admin.role === "gerente" ? [...base, ...gm] : base;
   const ambito = admin.role === "gerente" ? "Nacional 🇧🇴" : admin.region;
   return {

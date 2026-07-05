@@ -216,6 +216,36 @@ const DEBOUNCE_MS = 2500;
 interface BufferCliente { textos: string[]; timer: NodeJS.Timeout | null; messageId: string; name?: string }
 const buffers = new Map<string, BufferCliente>();
 const enCurso = new Set<string>();
+// Admins que están "probando como cliente" (modo demo): sus mensajes van al agente.
+const testCliente = new Set<string>();
+
+/** Envía una respuesta del panel admin (menú corto como lista tappable; listas largas partidas). */
+async function enviarPanel(
+  to: string,
+  r: { text: string; options?: string[]; optionsButton?: string; optionsTitle?: string },
+): Promise<void> {
+  const corto = r.text.length < 900;
+  if (r.options?.length && corto) {
+    try {
+      await sendInteractiveList(to, r.text, r.optionsButton || "Ver comandos", r.optionsTitle || "Panel", r.options);
+    } catch (err) {
+      console.error("Lista admin falló; envío como texto:", err);
+      await sendText(to, `${r.text}\n\n${r.options.map((o, i) => `*${i + 1}.* ${o}`).join("\n")}`);
+    }
+  } else {
+    for (const parte of splitLong(r.text, 3500)) {
+      await sendText(to, parte);
+      await sleep(300);
+    }
+    if (r.options?.length) {
+      try {
+        await sendInteractiveList(to, "¿Algo más?", r.optionsButton || "Menú", r.optionsTitle || "Panel", r.options);
+      } catch {
+        /* no crítico */
+      }
+    }
+  }
+}
 
 function programarCliente(msg: { from: string; text: string; messageId: string; name?: string }): void {
   let buf = buffers.get(msg.from);
@@ -267,34 +297,40 @@ async function handleIncoming(msg: {
   // Si el número es de un administrador, va al panel admin (no al agente cliente).
   const admin = getAdminByPhone(msg.from);
   if (admin) {
+    const t = msg.text.toLowerCase().trim();
+
+    // Salir del modo "probar como cliente" → volver al panel.
+    if (testCliente.has(msg.from) && /\bsalir\b|volver al panel|^panel$|^admin$/.test(t)) {
+      testCliente.delete(msg.from);
+      agent.reset(`test:${msg.from}`);
+      void markAsRead(msg.messageId);
+      await sendText(msg.from, "✅ Volviste al *panel de administrador*.");
+      await enviarPanel(msg.from, handleAdminCommand(`wa:${msg.from}`, admin, "menu"));
+      return;
+    }
+
+    // Entrar al modo "probar como cliente" (demo).
+    if (!testCliente.has(msg.from) && /probar/.test(t) && /(cliente|crm|agente|sistema|demo)/.test(t)) {
+      testCliente.add(msg.from);
+      agent.reset(`test:${msg.from}`);
+      void markAsRead(msg.messageId);
+      await sendText(
+        msg.from,
+        "🧪 *Modo prueba activado.*\n\nAhora te atiendo como si fueras un *cliente*. Escribí como uno más: por ejemplo *\"Hola\"*, pedí el catálogo, pedí una cotización, consultá sucursales...\n\nEsto es solo una demostración: *no* cuenta como lead ni avisa a ningún asesor.\n\nCuando quieras volver al panel, escribí *salir*.",
+      );
+      return;
+    }
+
+    // Si el admin está en modo prueba, sus mensajes van al agente (como cliente).
+    if (testCliente.has(msg.from)) {
+      await procesarTurnoCliente(msg.from, msg.text, msg.messageId, admin.nombre, { prueba: true });
+      return;
+    }
+
+    // Panel de administrador normal.
     void markAsRead(msg.messageId);
     try {
-      const r = handleAdminCommand(`wa:${msg.from}`, admin, msg.text);
-      const corto = r.text.length < 900;
-      if (r.options?.length && corto) {
-        // Menú corto: lista interactiva tappable.
-        try {
-          await sendInteractiveList(msg.from, r.text, r.optionsButton || "Ver comandos", r.optionsTitle || "Panel", r.options);
-        } catch (err) {
-          console.error("Lista admin falló; envío como texto:", err);
-          await sendText(msg.from, `${r.text}\n\n${r.options.map((o, i) => `*${i + 1}.* ${o}`).join("\n")}`);
-        }
-      } else {
-        // Texto largo (listas de leads/reclamos): partir en varios mensajes para que NO se corte.
-        const partes = splitLong(r.text, 3500);
-        for (let i = 0; i < partes.length; i++) {
-          await sendText(msg.from, partes[i]);
-          if (i < partes.length - 1) await sleep(400);
-        }
-        // Menú al final para volver.
-        if (r.options?.length) {
-          try {
-            await sendInteractiveList(msg.from, "¿Algo más?", r.optionsButton || "Menú", r.optionsTitle || "Panel", r.options);
-          } catch {
-            /* si falla la lista, no es crítico */
-          }
-        }
-      }
+      await enviarPanel(msg.from, handleAdminCommand(`wa:${msg.from}`, admin, msg.text));
     } catch (err) {
       console.error(`Error en panel admin para ${msg.from}:`, err);
     }
@@ -305,14 +341,25 @@ async function handleIncoming(msg: {
   programarCliente(msg);
 }
 
-async function procesarTurnoCliente(from: string, text: string, messageId: string, name?: string): Promise<void> {
+async function procesarTurnoCliente(
+  from: string,
+  text: string,
+  messageId: string,
+  name?: string,
+  opts?: { prueba?: boolean },
+): Promise<void> {
+  // En modo prueba (un admin probando como cliente) usamos una sesión aparte
+  // y NO registramos nada real (ni KPIs, ni lead, ni CRM/Sheets).
+  const prueba = opts?.prueba === true;
+  const sessionId = prueba ? `test:${from}` : from;
+
   // Marca leído + "escribiendo…" y suma a KPIs.
   void markReadAndTyping(messageId);
   const tEscribiendo = Date.now();
-  bumpConversacion();
+  if (!prueba) bumpConversacion();
 
   try {
-    const reply = await agent.handleMessage(from, text);
+    const reply = await agent.handleMessage(sessionId, text);
 
     // Respuestas en bloques: muestra "escribiendo…" antes de cada bloque (y un mínimo antes del primero).
     // El último bloque, si hay opciones, se envía como LISTA interactiva (igual que el demo).
@@ -363,39 +410,42 @@ async function procesarTurnoCliente(from: string, text: string, messageId: strin
       }
     }
 
-    // Handoff: si se registró una solicitud, avisamos al asesor de su ciudad.
-    if (reply.solicitud) {
-      void notificarAsesor(from, name, reply.solicitud);
+    console.log(`🤖 -> ${prueba ? "[PRUEBA] " : ""}${from}: ${reply.text.slice(0, 120)}...`);
+
+    // En modo prueba no registramos nada real (ni handoff, ni Sheets, ni CRM).
+    if (!prueba) {
+      // Handoff: si se registró una solicitud, avisamos al asesor de su ciudad.
+      if (reply.solicitud) {
+        void notificarAsesor(from, name, reply.solicitud);
+      }
+      if (reply.escalated) {
+        console.log(`🔔 Derivación a humano para ${from}`);
+      }
+
+      // Registra la interacción en Google Sheets (no bloquea ni interrumpe si falla).
+      void sheets.log({
+        fecha: nowBolivia(),
+        telefono: from,
+        nombre: name,
+        mensaje: text,
+        respuesta: reply.text,
+        tipo_solicitud: reply.solicitud?.tipo,
+        prioridad: reply.solicitud?.prioridad,
+        detalle: reply.solicitud?.detalle,
+        escalado: reply.escalated,
+      });
+
+      // Envía la interacción al CRM de Prime en tiempo real (best-effort, sin bloquear).
+      void crm.send({
+        external_id: from,
+        name: reply.solicitud?.nombre || name,
+        city: reply.solicitud?.ciudad,
+        stage: stageDeTipo(reply.solicitud?.tipo),
+        interest: reply.solicitud?.detalle,
+        message: text,
+        response: reply.text,
+      });
     }
-
-    if (reply.escalated) {
-      console.log(`🔔 Derivación a humano para ${from}`);
-    }
-    console.log(`🤖 -> ${from}: ${reply.text.slice(0, 120)}...`);
-
-    // Registra la interacción en Google Sheets (no bloquea ni interrumpe si falla).
-    void sheets.log({
-      fecha: nowBolivia(),
-      telefono: from,
-      nombre: name,
-      mensaje: text,
-      respuesta: reply.text,
-      tipo_solicitud: reply.solicitud?.tipo,
-      prioridad: reply.solicitud?.prioridad,
-      detalle: reply.solicitud?.detalle,
-      escalado: reply.escalated,
-    });
-
-    // Envía la interacción al CRM de Prime en tiempo real (best-effort, sin bloquear).
-    void crm.send({
-      external_id: from,
-      name: reply.solicitud?.nombre || name,
-      city: reply.solicitud?.ciudad,
-      stage: stageDeTipo(reply.solicitud?.tipo),
-      interest: reply.solicitud?.detalle,
-      message: text,
-      response: reply.text,
-    });
   } catch (err) {
     console.error(`Error atendiendo a ${from}:`, err);
     try {
