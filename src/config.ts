@@ -65,6 +65,11 @@ export const config = {
     // El token es secreto: va en CRM_INGEST_TOKEN (no se hardcodea). Vacío => desactivado.
     ingestUrl: optional("CRM_INGEST_URL", "https://www.primebusiness.live/api/crm/ingest"),
     ingestToken: optional("CRM_INGEST_TOKEN", ""),
+    // Migración única del histórico (endpoint /admin/backfill-crm?key=...).
+    // Clave secreta para protegerlo; vacío => endpoint desactivado.
+    backfillKey: optional("BACKFILL_KEY", ""),
+    // ID del Google Sheet con el historial (para leerlo por CSV export).
+    backfillSheetId: optional("BACKFILL_SHEET_ID", "11UafcrSOl7YZ7G3cYfrrUvKBzM_irS7RXsq-Avdw8eE"),
   },
 };
 

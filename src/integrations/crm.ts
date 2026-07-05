@@ -32,12 +32,13 @@ export class CrmIngest {
 
   /**
    * Envía una interacción al CRM. No lanza errores: un fallo de ingest jamás
-   * debe interrumpir la atención al cliente.
+   * debe interrumpir la atención al cliente. Devuelve el resultado para poder
+   * contar en migraciones (los callers en vivo simplemente lo ignoran con `void`).
    */
-  async send(p: CrmPayload): Promise<void> {
-    if (!this.enabled) return;
+  async send(p: CrmPayload): Promise<"ok" | "skip" | "fail"> {
+    if (!this.enabled) return "skip";
     // Requisito del CRM: external_id + (message o response).
-    if (!p.external_id || (!p.message && !p.response)) return;
+    if (!p.external_id || (!p.message && !p.response)) return "skip";
 
     const body: Record<string, unknown> = { external_id: p.external_id };
     for (const k of ["name", "city", "segment", "stage", "interest", "message", "response"] as const) {
@@ -56,9 +57,12 @@ export class CrmIngest {
       });
       if (!res.ok) {
         console.warn(`CRM ingest falló (${res.status}): ${await res.text()}`);
+        return "fail";
       }
+      return "ok";
     } catch (err) {
       console.warn("CRM ingest error (red):", err);
+      return "fail";
     }
   }
 }

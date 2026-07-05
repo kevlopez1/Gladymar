@@ -54,6 +54,65 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "gladymar-whatsapp-agent" });
 });
 
+// Migración única del histórico del Google Sheet al CRM de Prime.
+// Se abre UNA vez: /admin/backfill-crm?key=TU_CLAVE  (BACKFILL_KEY en el entorno).
+// Requiere que la hoja esté compartida como "cualquiera con el link: Lector".
+app.get("/admin/backfill-crm", async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  if (!config.crm.ingestToken) {
+    res.status(400).json({ error: "Falta CRM_INGEST_TOKEN (el CRM está desactivado)." });
+    return;
+  }
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/${config.crm.backfillSheetId}/export?format=csv`;
+    const r = await fetch(url);
+    const csv = await r.text();
+    if (!r.ok || csv.trimStart().startsWith("<")) {
+      res.status(502).json({
+        error: "No pude leer la hoja como CSV. Compartila como 'Cualquiera con el enlace: Lector' e intentá de nuevo.",
+      });
+      return;
+    }
+    const filas = parseCSV(csv);
+    if (filas.length < 2) {
+      res.json({ total: 0, ok: 0, fail: 0, skip: 0, nota: "Hoja vacía o sin filas de datos." });
+      return;
+    }
+    const enc = filas[0].map((h) => h.toLowerCase());
+    const idx = (n: string) => enc.findIndex((h) => h.includes(n));
+    const iTel = idx("tel"), iNom = idx("nombre"), iMsg = idx("mensaje"), iResp = idx("respuesta"), iTipo = idx("tipo"), iDet = idx("detalle");
+    let ok = 0, fail = 0, skip = 0;
+    for (let k = 1; k < filas.length; k++) {
+      const f = filas[k];
+      const tel = (iTel >= 0 ? f[iTel] || "" : "").replace(/\D/g, "");
+      const message = iMsg >= 0 ? f[iMsg] || "" : "";
+      const response = iResp >= 0 ? f[iResp] || "" : "";
+      if (!tel || (!message && !response)) { skip++; continue; }
+      const result = await crm.send({
+        external_id: tel,
+        name: iNom >= 0 ? f[iNom] : undefined,
+        message,
+        response,
+        stage: iTipo >= 0 ? stageDeTipo((f[iTipo] || "").trim()) : undefined,
+        interest: iDet >= 0 ? f[iDet] : undefined,
+      });
+      if (result === "ok") ok++;
+      else if (result === "fail") fail++;
+      else skip++;
+      await sleep(80);
+    }
+    console.log(`🔁 Backfill CRM: total=${filas.length - 1} ok=${ok} fail=${fail} skip=${skip}`);
+    res.json({ total: filas.length - 1, ok, fail, skip });
+  } catch (err) {
+    console.error("Backfill CRM error:", err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // Páginas legales (requeridas por Meta para publicar la app en modo Live).
 app.get("/privacidad", (_req, res) => {
   res.sendFile(path.join(process.cwd(), "public", "privacidad.html"));
@@ -173,6 +232,34 @@ function splitLong(text: string, max: number): string[] {
   }
   if (actual) partes.push(actual);
   return partes;
+}
+
+/** Parser CSV robusto (soporta comillas, comas y saltos de línea dentro de un campo). */
+function parseCSV(text: string): string[][] {
+  const filas: string[][] = [];
+  let fila: string[] = [];
+  let campo = "";
+  let comillas = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (comillas) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { campo += '"'; i++; } else comillas = false;
+      } else campo += c;
+    } else if (c === '"') {
+      comillas = true;
+    } else if (c === ",") {
+      fila.push(campo); campo = "";
+    } else if (c === "\r") {
+      /* ignora */
+    } else if (c === "\n") {
+      fila.push(campo); filas.push(fila); fila = []; campo = "";
+    } else {
+      campo += c;
+    }
+  }
+  if (campo !== "" || fila.length) { fila.push(campo); filas.push(fila); }
+  return filas;
 }
 
 /**
