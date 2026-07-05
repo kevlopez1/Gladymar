@@ -59,6 +59,13 @@ export const config = {
     // Vacío => registro desactivado (solo consola). Ver README.
     webhookUrl: optional("SHEETS_WEBHOOK_URL", ""),
   },
+
+  crm: {
+    // CRM de Prime: cada interacción se envía en tiempo real (best-effort).
+    // El token es secreto: va en CRM_INGEST_TOKEN (no se hardcodea). Vacío => desactivado.
+    ingestUrl: optional("CRM_INGEST_URL", "https://www.primebusiness.live/api/crm/ingest"),
+    ingestToken: optional("CRM_INGEST_TOKEN", ""),
+  },
 };
 
 /**

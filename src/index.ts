@@ -15,11 +15,13 @@ import { sendText, sendDocument, sendInteractiveList, markAsRead, markReadAndTyp
 import { verifyWebhook, parseIncomingMessages } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
+import { CrmIngest, stageDeTipo } from "./integrations/crm.js";
 import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, ADMIN_TELEFONO } from "./admin/roles.js";
 import { handleAdminCommand } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
 
 const sheets = new SheetsLogger(config.sheets.webhookUrl);
+const crm = new CrmIngest(config.crm.ingestUrl, config.crm.ingestToken);
 
 const store = new InMemorySessionStore(config.session.ttlMinutes);
 const agent = new GladymarAgent({
@@ -382,6 +384,17 @@ async function procesarTurnoCliente(from: string, text: string, messageId: strin
       prioridad: reply.solicitud?.prioridad,
       detalle: reply.solicitud?.detalle,
       escalado: reply.escalated,
+    });
+
+    // Envía la interacción al CRM de Prime en tiempo real (best-effort, sin bloquear).
+    void crm.send({
+      external_id: from,
+      name: reply.solicitud?.nombre || name,
+      city: reply.solicitud?.ciudad,
+      stage: stageDeTipo(reply.solicitud?.tipo),
+      interest: reply.solicitud?.detalle,
+      message: text,
+      response: reply.text,
     });
   } catch (err) {
     console.error(`Error atendiendo a ${from}:`, err);
