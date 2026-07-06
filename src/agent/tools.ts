@@ -17,6 +17,7 @@ import { menuPrincipal, submenu } from "../knowledge/menu.js";
 import { infoTema, temasDisponibles } from "../knowledge/temas.js";
 import { AREAS } from "../knowledge/contactos.js";
 import { recordSolicitud } from "../admin/data.js";
+import { construirCotizacion, bs, type Cotizacion } from "./cotizacion.js";
 
 const TIPOS_SOLICITUD = [
   "contactar_asesor",
@@ -125,6 +126,32 @@ export const TOOLS: Anthropic.Tool[] = [
       required: ["tipo", "detalle"],
     },
   },
+  {
+    name: "generar_cotizacion",
+    description:
+      "Genera una COTIZACIÓN en documento PDF (con el logo de Gladymar) y se la envía al cliente. Úsala SOLO cuando el cliente ya definió qué productos quiere y las cantidades (m² o unidades). Los precios son REFERENCIALES/estimados: aclaráselo al cliente y que un asesor confirma el precio final. Pasá el nombre del cliente y la lista de ítems.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre: { type: "string", description: "Nombre del cliente." },
+        ciudad: { type: "string", description: "Ciudad del cliente, si se conoce." },
+        items: {
+          type: "array",
+          description: "Productos a cotizar.",
+          items: {
+            type: "object",
+            properties: {
+              producto: { type: "string", description: "Descripción del producto (ej. 'Porcelanato Algarrobo 20x120')." },
+              cantidad: { type: "number", description: "Cantidad (m² o unidades)." },
+              unidad: { type: "string", description: "Unidad: 'm²' o 'unidad'. Opcional." },
+            },
+            required: ["producto", "cantidad"],
+          },
+        },
+      },
+      required: ["items"],
+    },
+  },
 ];
 
 /** Resultado de ejecutar una herramienta: texto que vuelve a Claude. */
@@ -143,6 +170,8 @@ export interface ToolExecution {
     ciudad?: string;
     telefono?: string;
   };
+  /** Cotización generada en este turno (la capa de WhatsApp genera el PDF y lo envía). */
+  cotizacion?: Cotizacion;
 }
 
 /**
@@ -193,6 +222,34 @@ export function executeTool(
     case "registrar_solicitud":
       return registrarSolicitud(input, telefonoCliente);
 
+    case "generar_cotizacion": {
+      const nombre = typeof input.nombre === "string" && input.nombre.trim() ? input.nombre.trim() : "Cliente";
+      const ciudad = typeof input.ciudad === "string" ? input.ciudad : undefined;
+      const raw = Array.isArray(input.items) ? input.items : [];
+      const items = raw
+        .map((x) => {
+          const o = (x ?? {}) as Record<string, unknown>;
+          return {
+            producto: String(o.producto ?? "").trim(),
+            cantidad: Number(o.cantidad) || 1,
+            unidad: typeof o.unidad === "string" ? o.unidad : undefined,
+          };
+        })
+        .filter((i) => i.producto);
+      if (!items.length) {
+        return { content: "No hay ítems para cotizar. Pídele al cliente qué productos y cantidades desea." };
+      }
+      const cot = construirCotizacion(nombre, ciudad, items);
+      const resumen = cot.items.map((i) => `• ${i.descripcion}: ${i.cantidad} ${i.unidad} × ${bs(i.precioUnit)} = ${bs(i.subtotal)}`).join("\n");
+      console.log(`🧾 Cotización ${cot.numero} para ${nombre} — Total ${bs(cot.total)}`);
+      return {
+        content:
+          `Cotización *${cot.numero}* generada. Se le está enviando el PDF al cliente.\n${resumen}\nTOTAL: ${bs(cot.total)}\n\n` +
+          "Al responder, confirmá que le enviaste la cotización y aclarale que los precios son *referenciales* y que un asesor confirma el precio y la disponibilidad final.",
+        cotizacion: cot,
+      };
+    }
+
     default:
       return { content: `Error: herramienta desconocida "${name}".` };
   }
@@ -240,7 +297,7 @@ function registrarSolicitud(input: Record<string, unknown>, telefonoCliente?: st
     case "seguimiento_pedido":
       content =
         `Solicitud registrada (${detalle}). ` +
-        (tipo === "cotizacion" ? "Recuerda: la cotización la realiza un asesor, no este canal. " : "") +
+        (tipo === "cotizacion" ? "Un asesor confirma el precio y la disponibilidad final. " : "") +
         contactoSucursal();
       break;
     case "reclamo": {

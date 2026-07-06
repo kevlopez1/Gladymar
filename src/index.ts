@@ -10,6 +10,7 @@ import path from "node:path";
 import { readFileSync } from "node:fs";
 import { config, isWhatsAppConfigured } from "./config.js";
 import { GladymarAgent, type AgentReply } from "./agent/brain.js";
+import { generarCotizacionPDF } from "./agent/cotizacionPdf.js";
 import { InMemorySessionStore } from "./session/store.js";
 import { sendText, sendDocument, sendInteractiveList, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages } from "./whatsapp/webhook.js";
@@ -511,6 +512,18 @@ async function procesarTurnoCliente(
         );
       } catch (err) {
         console.error(`No se pudo adjuntar el manual a ${from}:`, err);
+      }
+    }
+
+    // Cotización: si el agente generó una, armamos el PDF y se lo enviamos al cliente.
+    // (Funciona también en modo prueba, para que el Gerente vea la cotización en el demo.)
+    if (reply.cotizacion) {
+      try {
+        const rel = await generarCotizacionPDF(reply.cotizacion);
+        const url = `${config.publicBaseUrl.replace(/\/$/, "")}/${rel}`;
+        await sendDocument(from, url, `Cotización ${reply.cotizacion.numero}.pdf`, "Cotización referencial ◆ Gladymar");
+      } catch (err) {
+        console.error(`No se pudo generar/enviar la cotización a ${from}:`, err);
       }
     }
 

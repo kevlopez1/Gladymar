@@ -10,6 +10,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { buildSystemPrompt } from "./systemPrompt.js";
 import { TOOLS, executeTool } from "./tools.js";
+import type { Cotizacion } from "./cotizacion.js";
 import type { SessionStore, ChatMessage } from "../session/store.js";
 
 const MAX_TOKENS = 1024; // respuestas de chat: cortas
@@ -30,6 +31,8 @@ export interface AgentReply {
   document?: { name: string; info?: string };
   /** Solicitud registrada en este turno (para el log en Google Sheets), si hubo. */
   solicitud?: { tipo: string; prioridad: string; detalle: string; nombre?: string; ciudad?: string; telefono?: string };
+  /** Cotización generada en este turno: la capa de WhatsApp genera el PDF y lo envía. */
+  cotizacion?: Cotizacion;
 }
 
 /**
@@ -124,6 +127,7 @@ export class GladymarAgent {
     let escalated = false;
     let attachManual = false;
     let solicitud: AgentReply["solicitud"];
+    let cotizacion: AgentReply["cotizacion"];
     let rounds = 0;
 
     // Teléfono real del cliente = su WhatsApp (userId), solo si son dígitos (no demo).
@@ -143,6 +147,7 @@ export class GladymarAgent {
           if (result.escalated) escalated = true;
           if (result.attachManual) attachManual = true;
           if (result.solicitud) solicitud = result.solicitud;
+          if (result.cotizacion) cotizacion = result.cotizacion;
           toolResults.push({
             type: "tool_result",
             tool_use_id: block.id,
@@ -188,6 +193,7 @@ export class GladymarAgent {
       escalated,
       attachManual,
       solicitud,
+      cotizacion,
     };
   }
 

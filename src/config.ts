@@ -21,6 +21,10 @@ function optional(name: string, fallback: string): string {
 export const config = {
   port: Number(optional("PORT", "3000")),
 
+  // URL pública del servicio (para armar enlaces a documentos que enviamos por WhatsApp,
+  // ej. cotizaciones PDF). Debe ser HTTPS y accesible por Meta.
+  publicBaseUrl: optional("PUBLIC_BASE_URL", "https://gladymar-production.up.railway.app"),
+
   anthropic: {
     apiKey: required("ANTHROPIC_API_KEY"),
     model: optional("ANTHROPIC_MODEL", "claude-sonnet-4-6"),

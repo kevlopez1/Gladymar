@@ -6,3 +6,6 @@ dist/
 npm-debug.log*
 .DS_Store
 coverage/
+
+# PDFs de cotizaciones generados en runtime
+public/cotizaciones/
