@@ -1,5 +1,5 @@
 /**
- * Genera el PDF de una cotización (con el logo de Gladymar).
+ * Genera el PDF de una cotización (diseño premium, con el logo de Gladymar).
  */
 import PDFDocument from "pdfkit";
 import fs from "node:fs";
@@ -7,12 +7,14 @@ import path from "node:path";
 import { bs, type Cotizacion } from "./cotizacion.js";
 
 const ROJO = "#d8232a";
+const ROJO2 = "#b51d23";
+const TINTA = "#161a1f";
 const GRIS = "#6b7280";
-const TINTA = "#1b1f24";
+const GRIS2 = "#9aa0ac";
+const LINEA = "#eceef1";
+const CREMA = "#f7f8fa";
 
-/**
- * Genera el PDF en public/cotizaciones/ y devuelve la ruta relativa (para servirla).
- */
+/** Genera el PDF en public/cotizaciones/ y devuelve la ruta relativa (para servirla). */
 export function generarCotizacionPDF(cot: Cotizacion): Promise<string> {
   const dir = path.join(process.cwd(), "public", "cotizaciones");
   fs.mkdirSync(dir, { recursive: true });
@@ -20,64 +22,95 @@ export function generarCotizacionPDF(cot: Cotizacion): Promise<string> {
   const abs = path.join(process.cwd(), "public", rel);
 
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: 46 });
+    const doc = new PDFDocument({ size: "A4", margin: 0 });
     const stream = fs.createWriteStream(abs);
     doc.pipe(stream);
     const W = doc.page.width;
-    const L = 46;
-    const R = W - 46;
+    const H = doc.page.height;
+    const M = 50;
+    const R = W - M;
 
+    // Barra superior de acento
+    doc.rect(0, 0, W, 6).fill(ROJO);
+
+    // ── Encabezado ──
     const logo = path.join(process.cwd(), "public", "gladymar-logo.png");
-    try { if (fs.existsSync(logo)) doc.image(logo, L, 40, { width: 54 }); } catch { /* sin logo */ }
-    doc.fillColor(TINTA).font("Helvetica-Bold").fontSize(22).text("COTIZACIÓN", L + 66, 46);
-    doc.fillColor(GRIS).font("Helvetica").fontSize(10).text("Cerámica Gladymar S.A.", L + 66, 72);
-    doc.font("Helvetica-Bold").fillColor(ROJO).fontSize(11).text(cot.numero, R - 160, 48, { width: 160, align: "right" });
-    doc.font("Helvetica").fillColor(GRIS).fontSize(9).text(`Fecha: ${cot.fecha}`, R - 160, 66, { width: 160, align: "right" });
-    doc.text("Válida por 15 días", R - 160, 78, { width: 160, align: "right" });
+    try { if (fs.existsSync(logo)) doc.image(logo, M, 34, { width: 50 }); } catch { /* sin logo */ }
+    doc.fillColor(TINTA).font("Helvetica-Bold").fontSize(24).text("COTIZACIÓN", M + 62, 38);
+    doc.fillColor(GRIS).font("Helvetica").fontSize(9.5).text("Cerámica Gladymar S.A.", M + 62, 68);
+    doc.fillColor(GRIS2).fontSize(8.5).text("Acabados y porcelanato · gladymar.com.bo", M + 62, 81);
 
-    doc.moveTo(L, 100).lineTo(R, 100).strokeColor("#e5e7eb").lineWidth(1).stroke();
+    // Badge N° / fecha (derecha)
+    const bw = 150, bx = R - bw, by = 34;
+    doc.roundedRect(bx, by, bw, 58, 8).fill(CREMA);
+    doc.fillColor(GRIS2).font("Helvetica-Bold").fontSize(8).text("N° COTIZACIÓN", bx + 12, by + 10);
+    doc.fillColor(ROJO).font("Helvetica-Bold").fontSize(12).text(cot.numero, bx + 12, by + 22);
+    doc.fillColor(GRIS).font("Helvetica").fontSize(8).text(`Fecha: ${cot.fecha}`, bx + 12, by + 40);
+    doc.text("Válida por 15 días", bx + 78, by + 40);
 
-    doc.fillColor(GRIS).font("Helvetica").fontSize(9).text("CLIENTE", L, 112);
-    doc.fillColor(TINTA).font("Helvetica-Bold").fontSize(13).text(cot.cliente, L, 124);
-    if (cot.ciudad) doc.fillColor(GRIS).font("Helvetica").fontSize(10).text(cot.ciudad, L, 142);
+    // ── Cliente ──
+    let y = 118;
+    doc.roundedRect(M, y, R - M, 46, 8).fill(CREMA);
+    doc.fillColor(GRIS2).font("Helvetica-Bold").fontSize(8).text("PREPARADO PARA", M + 14, y + 10);
+    doc.fillColor(TINTA).font("Helvetica-Bold").fontSize(14).text(cot.cliente, M + 14, y + 22);
+    if (cot.ciudad) doc.fillColor(GRIS).font("Helvetica").fontSize(10).text(cot.ciudad, R - 160, y + 24, { width: 146, align: "right" });
 
-    let y = 172;
-    const cX = { desc: L, cant: R - 250, uni: R - 190, pu: R - 130, sub: R };
-    doc.rect(L, y - 6, R - L, 22).fill(ROJO);
-    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(9);
-    doc.text("DESCRIPCIÓN", cX.desc + 6, y);
-    doc.text("CANT.", cX.cant, y, { width: 50, align: "right" });
-    doc.text("UNIDAD", cX.uni + 6, y, { width: 55, align: "left" });
-    doc.text("P. UNIT.", cX.pu - 40, y, { width: 70, align: "right" });
-    doc.text("SUBTOTAL", cX.sub - 90, y, { width: 90, align: "right" });
+    // ── Tabla ──
+    y += 66;
+    const subX = R - 14;
+    const cDesc = M + 14;
+    const cCant = subX - 268; // ancho 40, derecha
+    const cUni = subX - 214;  // ancho 46, izquierda
+    const cPu = subX - 168;   // ancho 70, derecha
+    const cSub = subX - 90;   // ancho 90, derecha
+    const wDesc = cCant - 12 - cDesc;
+    doc.roundedRect(M, y, R - M, 24, 5).fill(ROJO);
+    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(8.5);
+    doc.text("DESCRIPCIÓN", cDesc, y + 8);
+    doc.text("CANT.", cCant, y + 8, { width: 40, align: "right" });
+    doc.text("UNIDAD", cUni, y + 8, { width: 46, align: "left" });
+    doc.text("P. UNIT.", cPu, y + 8, { width: 70, align: "right" });
+    doc.text("SUBTOTAL", cSub, y + 8, { width: 90, align: "right" });
     y += 24;
 
     doc.font("Helvetica").fontSize(9.5);
-    for (const it of cot.items) {
-      const h = Math.max(18, doc.heightOfString(it.descripcion, { width: cX.cant - cX.desc - 12 }) + 6);
-      doc.fillColor(TINTA).text(it.descripcion, cX.desc + 6, y, { width: cX.cant - cX.desc - 12 });
-      doc.fillColor(TINTA).text(String(it.cantidad), cX.cant, y, { width: 50, align: "right" });
-      doc.fillColor(GRIS).text(it.unidad, cX.uni + 6, y, { width: 55, align: "left" });
-      doc.fillColor(TINTA).text(bs(it.precioUnit), cX.pu - 40, y, { width: 70, align: "right" });
-      doc.font("Helvetica-Bold").text(bs(it.subtotal), cX.sub - 90, y, { width: 90, align: "right" });
-      doc.font("Helvetica");
-      y += h;
-      doc.moveTo(L, y - 3).lineTo(R, y - 3).strokeColor("#eef0f2").lineWidth(0.5).stroke();
-    }
+    cot.items.forEach((it, i) => {
+      const alto = Math.max(22, doc.heightOfString(it.descripcion, { width: wDesc }) + 10);
+      if (i % 2 === 1) doc.rect(M, y, R - M, alto).fill(CREMA);
+      const ty = y + 6;
+      doc.fillColor(TINTA).font("Helvetica").text(it.descripcion, cDesc, ty, { width: wDesc });
+      doc.fillColor(TINTA).text(String(it.cantidad), cCant, ty, { width: 40, align: "right" });
+      doc.fillColor(GRIS).text(it.unidad, cUni, ty, { width: 46, align: "left" });
+      doc.fillColor(TINTA).text(bs(it.precioUnit), cPu, ty, { width: 70, align: "right" });
+      doc.fillColor(TINTA).font("Helvetica-Bold").text(bs(it.subtotal), cSub, ty, { width: 90, align: "right" });
+      y += alto;
+      doc.moveTo(M, y).lineTo(R, y).strokeColor(LINEA).lineWidth(0.6).stroke();
+    });
 
-    y += 8;
-    doc.rect(R - 220, y, 220, 30).fill("#f6f7f8");
-    doc.fillColor(GRIS).font("Helvetica-Bold").fontSize(11).text("TOTAL", R - 214, y + 9);
-    doc.fillColor(ROJO).font("Helvetica-Bold").fontSize(15).text(bs(cot.total), R - 150, y + 6, { width: 144, align: "right" });
+    // ── Totales ──
+    y += 16;
+    const tW = 230, tX = R - tW;
+    doc.fillColor(GRIS).font("Helvetica").fontSize(10).text("Subtotal", tX, y, { width: tW - 6, align: "left" });
+    doc.fillColor(TINTA).font("Helvetica").text(bs(cot.total), tX, y, { width: tW, align: "right" });
+    y += 20;
+    doc.roundedRect(tX, y, tW, 36, 8).fill(ROJO);
+    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(11).text("TOTAL", tX + 14, y + 12);
+    doc.font("Helvetica-Bold").fontSize(16).text(bs(cot.total), tX + 14, y + 9, { width: tW - 28, align: "right" });
 
-    y += 50;
-    doc.fillColor(GRIS).font("Helvetica-Oblique").fontSize(8.5).text(
-      "Precios REFERENCIALES / estimados, sujetos a confirmación del asesor de Gladymar. No constituye factura ni documento fiscal. Disponibilidad y condiciones finales a confirmar por un asesor.",
-      L, y, { width: R - L, align: "left" },
+    // ── Condiciones ──
+    y += 62;
+    doc.fillColor(TINTA).font("Helvetica-Bold").fontSize(9).text("Condiciones", M, y);
+    doc.fillColor(GRIS).font("Helvetica").fontSize(8.5).text(
+      "• Precios REFERENCIALES / estimados, sujetos a confirmación del asesor de Gladymar.\n" +
+      "• Este documento no constituye factura ni documento fiscal.\n" +
+      "• Disponibilidad, tiempos de entrega y condiciones finales a confirmar por un asesor.",
+      M, y + 14, { width: R - M, lineGap: 2 },
     );
 
-    doc.fillColor(ROJO).font("Helvetica-Bold").fontSize(9).text("Más que cerámicas, fabricamos emociones.", L, doc.page.height - 60, { width: R - L, align: "center" });
-    doc.fillColor(GRIS).font("Helvetica").fontSize(8).text("Cerámica Gladymar S.A. · gladymar.com.bo", L, doc.page.height - 46, { width: R - L, align: "center" });
+    // ── Pie ──
+    doc.rect(0, H - 44, W, 44).fill(TINTA);
+    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(9).text("Más que cerámicas, fabricamos emociones.", M, H - 32, { width: R - M, align: "center" });
+    doc.fillColor(GRIS2).font("Helvetica").fontSize(7.5).text("Cerámica Gladymar S.A. · Grupo Roda · gladymar.com.bo", M, H - 19, { width: R - M, align: "center" });
 
     doc.end();
     stream.on("finish", () => resolve(rel));
