@@ -164,13 +164,17 @@ async function ejecutarBackfill(): Promise<void> {
       const message = iMsg >= 0 ? f[iMsg] || "" : "";
       const response = iResp >= 0 ? f[iResp] || "" : "";
       if (!tel || (!message && !response)) { backfill.skip++; continue; }
+      const detalle = iDet >= 0 ? f[iDet] : undefined;
+      // Recuperar la ciudad desde el TEXTO de la conversación (única fuente real).
+      const ciudad = detectarCiudad(`${message} ${detalle || ""}`);
       const result = await crm.send({
         external_id: tel,
         name: iNom >= 0 ? f[iNom] : undefined,
+        city: ciudad,
         message,
         response,
         stage: iTipo >= 0 ? stageDeTipo((f[iTipo] || "").trim()) : undefined,
-        interest: iDet >= 0 ? f[iDet] : undefined,
+        interest: detalle,
       });
       if (result === "ok") backfill.ok++;
       else if (result === "fail") backfill.fail++;
