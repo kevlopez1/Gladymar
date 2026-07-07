@@ -103,6 +103,53 @@ app.get("/admin/backfill-crm", (req, res) => {
   res.json({ estado: "INICIADO", mensaje: "Sincronización en marcha. Refrescá esta misma URL en ~30 seg para ver el avance y el resultado." });
 });
 
+// Total REAL de clientes: lee el Sheet, cuenta contactos ÚNICOS (por número) y
+// los desglosa por ciudad. Se abre: /admin/stats?key=TU_CLAVE
+app.get("/admin/stats", async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/${config.crm.backfillSheetId}/export?format=csv`;
+    const r = await fetch(url);
+    const csv = await r.text();
+    if (!r.ok || csv.trimStart().startsWith("<")) {
+      res.status(400).json({ error: "No pude leer la hoja como CSV. Compartila como 'Cualquiera con el enlace: Lector'." });
+      return;
+    }
+    const filas = parseCSV(csv);
+    const enc = filas[0].map((h) => h.toLowerCase());
+    const idx = (n: string) => enc.findIndex((h) => h.includes(n));
+    const iTel = idx("tel"), iMsg = idx("mensaje"), iDet = idx("detalle");
+    const ciudadDe = new Map<string, string>(); // telefono -> ciudad (primera detectada)
+    const contactos = new Set<string>();
+    for (let k = 1; k < filas.length; k++) {
+      const f = filas[k];
+      const tel = (iTel >= 0 ? f[iTel] || "" : "").replace(/\D/g, "");
+      if (!tel) continue;
+      contactos.add(tel);
+      if (!ciudadDe.has(tel)) {
+        const cd = detectarCiudad(`${iMsg >= 0 ? f[iMsg] || "" : ""} ${iDet >= 0 ? f[iDet] || "" : ""}`);
+        if (cd) ciudadDe.set(tel, cd);
+      }
+    }
+    const porCiudad: Record<string, number> = {};
+    for (const c of ciudadDe.values()) porCiudad[c] = (porCiudad[c] || 0) + 1;
+    const sinCiudad = contactos.size - ciudadDe.size;
+    res.json({
+      conversaciones: Math.max(0, filas.length - 1),
+      contactosUnicos: contactos.size,
+      conCiudad: ciudadDe.size,
+      sinCiudad,
+      porCiudad: Object.fromEntries(Object.entries(porCiudad).sort((a, b) => b[1] - a[1])),
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // Padrón de administradores: lo consume el CRM para marcarlos como "Administrador"
 // (y no contarlos como un lead/cliente más). Se abre: /admin/roster?key=TU_CLAVE
 app.get("/admin/roster", (req, res) => {
