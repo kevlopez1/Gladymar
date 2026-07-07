@@ -20,9 +20,26 @@ import { CrmIngest, stageDeTipo } from "./integrations/crm.js";
 import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, ADMIN_TELEFONO, adminRoster } from "./admin/roles.js";
 import { handleAdminCommand } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
+import { ciudadesConSucursal } from "./knowledge/sucursales.js";
 
 const sheets = new SheetsLogger(config.sheets.webhookUrl);
 const crm = new CrmIngest(config.crm.ingestUrl, config.crm.ingestToken);
+
+// Ciudad conocida por usuario (para mandarla SIEMPRE al CRM, aunque no haya
+// solicitud). La agente pregunta la ciudad al inicio; acá la recordamos.
+const ciudadPorUsuario = new Map<string, string>();
+const CIUDADES = ciudadesConSucursal();
+
+/** Detecta la ciudad mencionada en un texto (contra las ciudades con sucursal). */
+function detectarCiudad(text: string): string | undefined {
+  const t = (text || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  for (const c of CIUDADES) {
+    const cn = c.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    if (new RegExp(`\\b${cn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(t)) return c;
+  }
+  if (/\bsanta\s*cruz\b|\bsta\.?\s*cruz\b/.test(t)) return "Santa Cruz";
+  return undefined;
+}
 
 const store = new InMemorySessionStore(config.session.ttlMinutes);
 const agent = new GladymarAgent({
@@ -506,6 +523,12 @@ async function procesarTurnoCliente(
   const tEscribiendo = Date.now();
   if (!prueba) bumpConversacion();
 
+  // Recordá la ciudad si el cliente la menciona (para mandarla siempre al CRM).
+  if (!prueba) {
+    const cd = detectarCiudad(text);
+    if (cd) ciudadPorUsuario.set(from, cd);
+  }
+
   try {
     const reply = await agent.handleMessage(sessionId, text);
 
@@ -599,10 +622,16 @@ async function procesarTurnoCliente(
       // Si el remitente es un administrador, se marca como tal (para que el CRM
       // no lo cuente como un lead/cliente más, sino como "Administrador").
       const adminRemitente = getAdminByPhone(from);
+      // Ciudad: la de la solicitud, o la que recordamos de la conversación.
+      const ciudadSolicitud = reply.solicitud?.ciudad;
+      if (ciudadSolicitud) {
+        const cd = detectarCiudad(ciudadSolicitud) || ciudadSolicitud;
+        ciudadPorUsuario.set(from, cd);
+      }
       void crm.send({
         external_id: from,
         name: adminRemitente?.nombre || reply.solicitud?.nombre || name,
-        city: reply.solicitud?.ciudad || adminRemitente?.region,
+        city: reply.solicitud?.ciudad || ciudadPorUsuario.get(from) || adminRemitente?.region,
         segment: adminRemitente ? "Administrador" : undefined,
         stage: stageDeTipo(reply.solicitud?.tipo),
         interest: reply.solicitud?.detalle,
