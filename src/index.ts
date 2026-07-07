@@ -212,16 +212,22 @@ async function ejecutarBackfill(): Promise<void> {
       const response = iResp >= 0 ? f[iResp] || "" : "";
       if (!tel || (!message && !response)) { backfill.skip++; continue; }
       const detalle = iDet >= 0 ? f[iDet] : undefined;
+      // Si el número es de un administrador/asesor del roster: se marca como
+      // admin y NO como lead (sin stage/interest), para limpiar contaminaciones.
+      const adminFila = getAdminByPhone(tel);
       // Recuperar la ciudad desde el TEXTO de la conversación (única fuente real).
       const ciudad = detectarCiudad(`${message} ${detalle || ""}`);
       const result = await crm.send({
         external_id: tel,
-        name: iNom >= 0 ? f[iNom] : undefined,
-        city: ciudad,
+        name: adminFila?.nombre || (iNom >= 0 ? f[iNom] : undefined),
+        city: adminFila?.region || ciudad,
+        segment: adminFila ? "Administrador" : undefined,
         message,
         response,
-        stage: iTipo >= 0 ? stageDeTipo((f[iTipo] || "").trim()) : undefined,
-        interest: detalle,
+        stage: adminFila ? undefined : (iTipo >= 0 ? stageDeTipo((f[iTipo] || "").trim()) : undefined),
+        interest: adminFila ? undefined : detalle,
+        is_admin: Boolean(adminFila),
+        role: adminFila?.role,
       });
       if (result === "ok") backfill.ok++;
       else if (result === "fail") backfill.fail++;
@@ -670,8 +676,15 @@ async function procesarTurnoCliente(
 
     // En modo prueba no registramos nada real (ni handoff, ni Sheets, ni CRM).
     if (!prueba) {
+      // ¿El remitente es un administrador/asesor del roster? Si lo es, sus chats
+      // NUNCA se califican como lead ni avisan a otros asesores: solo se marca
+      // como administrador en el CRM. (Un asesor puede hablar de "un cliente X"
+      // desde su WhatsApp; eso no debe convertirse en un lead con datos cruzados.)
+      const adminRemitente = getAdminByPhone(from);
+
       // Handoff: si se registró una solicitud, avisamos al asesor de su ciudad.
-      if (reply.solicitud) {
+      // Pero NUNCA para números del roster (evita avisos de lead con datos ajenos).
+      if (reply.solicitud && !adminRemitente) {
         void notificarAsesor(from, name, reply.solicitud);
       }
       if (reply.escalated) {
@@ -682,32 +695,31 @@ async function procesarTurnoCliente(
       void sheets.log({
         fecha: nowBolivia(),
         telefono: from,
-        nombre: name,
+        nombre: adminRemitente?.nombre || name,
         mensaje: text,
         respuesta: reply.text,
-        tipo_solicitud: reply.solicitud?.tipo,
-        prioridad: reply.solicitud?.prioridad,
-        detalle: reply.solicitud?.detalle,
+        tipo_solicitud: adminRemitente ? undefined : reply.solicitud?.tipo,
+        prioridad: adminRemitente ? undefined : reply.solicitud?.prioridad,
+        detalle: adminRemitente ? undefined : reply.solicitud?.detalle,
         escalado: reply.escalated,
       });
 
       // Envía la interacción al CRM de Prime en tiempo real (best-effort, sin bloquear).
-      // Si el remitente es un administrador, se marca como tal (para que el CRM
-      // no lo cuente como un lead/cliente más, sino como "Administrador").
-      const adminRemitente = getAdminByPhone(from);
-      // Ciudad: la de la solicitud, o la que recordamos de la conversación.
+      // El payload se arma ATÓMICAMENTE con datos de ESTA conversación (locales),
+      // nunca de estado compartido. Si es admin: solo marca is_admin, SIN campos de
+      // lead (stage/interest), para que el CRM no lo trate como cliente calificado.
       const ciudadSolicitud = reply.solicitud?.ciudad;
-      if (ciudadSolicitud) {
+      if (ciudadSolicitud && !adminRemitente) {
         const cd = detectarCiudad(ciudadSolicitud) || ciudadSolicitud;
         ciudadPorUsuario.set(from, cd);
       }
       void crm.send({
         external_id: from,
         name: adminRemitente?.nombre || reply.solicitud?.nombre || name,
-        city: reply.solicitud?.ciudad || ciudadPorUsuario.get(from) || adminRemitente?.region,
+        city: adminRemitente?.region || reply.solicitud?.ciudad || ciudadPorUsuario.get(from),
         segment: adminRemitente ? "Administrador" : undefined,
-        stage: stageDeTipo(reply.solicitud?.tipo),
-        interest: reply.solicitud?.detalle,
+        stage: adminRemitente ? undefined : stageDeTipo(reply.solicitud?.tipo),
+        interest: adminRemitente ? undefined : reply.solicitud?.detalle,
         message: text,
         response: reply.text,
         is_admin: Boolean(adminRemitente),

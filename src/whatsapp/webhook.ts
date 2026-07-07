@@ -40,22 +40,30 @@ export function parseIncomingMessages(body: unknown): IncomingMessage[] {
       const value = change.value;
       if (!value?.messages) continue;
 
-      const contactName = value.contacts?.[0]?.profile?.name;
+      // CRÍTICO (anti-contaminación): un webhook puede traer mensajes de VARIOS
+      // contactos. El nombre de perfil se debe emparejar por `wa_id` con CADA
+      // remitente, nunca tomar `contacts[0]` para todos (mezclaría datos entre
+      // conversaciones distintas). Construimos un mapa wa_id -> nombre.
+      const nombrePorWaId = new Map<string, string>();
+      for (const c of value.contacts ?? []) {
+        if (c.wa_id && c.profile?.name) nombrePorWaId.set(c.wa_id, c.profile.name);
+      }
 
       for (const msg of value.messages) {
+        const name = nombrePorWaId.get(msg.from); // el nombre de ESTE remitente, no de otro
         if (msg.type === "text" && msg.text?.body) {
           result.push({
             from: msg.from,
             text: msg.text.body,
             messageId: msg.id,
-            name: contactName,
+            name,
           });
         } else if (msg.type === "interactive" && msg.interactive) {
           // El cliente tocó una opción de lista o un botón: usamos su id como texto.
           const reply = msg.interactive.list_reply ?? msg.interactive.button_reply;
           const text = reply?.id || reply?.title;
           if (text) {
-            result.push({ from: msg.from, text, messageId: msg.id, name: contactName });
+            result.push({ from: msg.from, text, messageId: msg.id, name });
           }
         }
         // Otros tipos (imagen, audio, ubicación) podrían manejarse aquí.
@@ -72,7 +80,7 @@ interface WebhookPayload {
   entry?: Array<{
     changes?: Array<{
       value?: {
-        contacts?: Array<{ profile?: { name?: string } }>;
+        contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>;
         messages?: Array<{
           from: string;
           id: string;
