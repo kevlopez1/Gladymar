@@ -552,9 +552,11 @@ async function procesarTurnoCliente(
 
       if (esUltimo && reply.options.length) {
         try {
+          // Nunca una lista "pelada": si no vino texto, usamos una guía cálida.
+          const cuerpo = (bloques[i] || "").trim() || `${reply.optionsTitle || "Contame"} 😊 ¿Cuál preferís?`;
           await sendInteractiveList(
             from,
-            bloques[i] || "Selecciona una opción:",
+            cuerpo,
             reply.optionsButton || "Ver opciones",
             reply.optionsTitle || "Opciones",
             reply.options,
