@@ -282,12 +282,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Divide la respuesta en 2-3 bloques por párrafos (para enviarlos como mensajes separados). */
+/** Divide la respuesta en máximo 2 bloques (para no saturar con "muchos mensajes"). */
 function splitBlocks(text: string): string[] {
   const parts = text.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
   if (parts.length <= 1) return [text.trim()];
-  if (parts.length > 4) return [parts[0], parts[1], parts[2], parts.slice(3).join("\n\n")];
-  return parts;
+  if (parts.length === 2) return parts;
+  // 3+ párrafos: los agrupamos en 2 globos como mucho.
+  const corte = Math.ceil(parts.length / 2);
+  return [parts.slice(0, corte).join("\n\n"), parts.slice(corte).join("\n\n")];
 }
 
 /** Tiempo del indicador "escribiendo…" simulando tipeo humano (según el largo, con tope). */
