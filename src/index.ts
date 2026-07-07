@@ -587,7 +587,8 @@ async function procesarTurnoCliente(
   }
 
   try {
-    const reply = await agent.handleMessage(sessionId, text);
+    // La cotización en PDF solo está habilitada para admins (modo prueba).
+    const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF: prueba });
 
     // Respuestas en bloques: muestra "escribiendo…" antes de cada bloque (y un mínimo antes del primero).
     // El último bloque, si hay opciones, se envía como LISTA interactiva (igual que el demo).
@@ -640,9 +641,9 @@ async function procesarTurnoCliente(
       }
     }
 
-    // Cotización: si el agente generó una, armamos el PDF y se lo enviamos al cliente.
-    // (Funciona también en modo prueba, para que el Gerente vea la cotización en el demo.)
-    if (reply.cotizacion) {
+    // Cotización en PDF: SOLO para admins (modo prueba). Un cliente real nunca
+    // recibe el documento (la herramienta ni siquiera está disponible para él).
+    if (reply.cotizacion && prueba) {
       try {
         const rel = await generarCotizacionPDF(reply.cotizacion);
         const url = `${config.publicBaseUrl.replace(/\/$/, "")}/${rel}`;

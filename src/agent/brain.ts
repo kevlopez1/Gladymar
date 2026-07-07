@@ -96,10 +96,23 @@ function extractOptions(text: string): ParsedOptions {
   };
 }
 
+/**
+ * Instrucción extra para conversaciones de CLIENTE real: NO se generan
+ * cotizaciones en PDF (esa función queda reservada a admins en modo prueba).
+ */
+const OVERRIDE_SIN_PDF =
+  "# MODO CLIENTE (sin cotización en PDF)\n" +
+  "En esta conversación NO generás cotizaciones en PDF: esa función está reservada y la herramienta no está disponible. " +
+  "Ignorá cualquier instrucción anterior que diga 'generá el PDF de la cotización'. " +
+  "Si el cliente pide precios o una cotización, ayudalo a definir producto y cantidades y derivá a un asesor con `registrar_solicitud` (tipo 'cotizacion'), " +
+  "diciéndole con calidez que un asesor de su ciudad le pasará la cotización con los precios y la disponibilidad final. " +
+  "NUNCA prometas ni menciones un documento/PDF.";
+
 export class GladymarAgent {
   private readonly client: Anthropic;
   private readonly model: string;
   private readonly system: Anthropic.TextBlockParam[];
+  private readonly systemSinPDF: Anthropic.TextBlockParam[];
 
   constructor(opts: { apiKey: string; model: string; store: SessionStore }) {
     this.client = new Anthropic({ apiKey: opts.apiKey });
@@ -113,6 +126,8 @@ export class GladymarAgent {
         cache_control: { type: "ephemeral" },
       },
     ];
+    // Variante para cliente real: mismo prefijo cacheado + override sin PDF.
+    this.systemSinPDF = [this.system[0], { type: "text", text: OVERRIDE_SIN_PDF }];
   }
 
   private readonly store: SessionStore;
@@ -120,7 +135,13 @@ export class GladymarAgent {
   /**
    * Procesa un mensaje entrante de un usuario y devuelve la respuesta del agente.
    */
-  async handleMessage(userId: string, userText: string): Promise<AgentReply> {
+  async handleMessage(
+    userId: string,
+    userText: string,
+    opts?: { cotizacionPDF?: boolean },
+  ): Promise<AgentReply> {
+    // La cotización en PDF solo está habilitada para admins (modo prueba).
+    const permitirPDF = opts?.cotizacionPDF === true;
     const messages: ChatMessage[] = [...this.store.get(userId)];
     messages.push({ role: "user", content: userText });
 
@@ -133,7 +154,7 @@ export class GladymarAgent {
     // Teléfono real del cliente = su WhatsApp (userId), solo si son dígitos (no demo).
     const telefonoCliente = /^\d{6,}$/.test(userId) ? userId : undefined;
 
-    let response = await this.create(messages);
+    let response = await this.create(messages, permitirPDF);
 
     while (response.stop_reason === "tool_use" && rounds < MAX_TOOL_ROUNDS) {
       rounds++;
@@ -157,7 +178,7 @@ export class GladymarAgent {
       }
 
       messages.push({ role: "user", content: toolResults });
-      response = await this.create(messages);
+      response = await this.create(messages, permitirPDF);
     }
 
     // Texto final: concatenamos los bloques de texto de la respuesta.
@@ -202,12 +223,15 @@ export class GladymarAgent {
     this.store.reset(userId);
   }
 
-  private create(messages: ChatMessage[]): Promise<Anthropic.Message> {
+  private create(messages: ChatMessage[], permitirPDF = false): Promise<Anthropic.Message> {
+    // Cliente real: quitamos la herramienta de cotización en PDF y usamos el
+    // system con override. Admin en modo prueba: herramientas completas.
+    const tools = permitirPDF ? TOOLS : TOOLS.filter((t) => t.name !== "generar_cotizacion");
     return this.client.messages.create({
       model: this.model,
       max_tokens: MAX_TOKENS,
-      system: this.system,
-      tools: TOOLS,
+      system: permitirPDF ? this.system : this.systemSinPDF,
+      tools,
       messages,
     });
   }
