@@ -292,13 +292,18 @@ function registrarSolicitud(input: Record<string, unknown>, telefonoCliente?: st
 
   let content: string;
   switch (tipo) {
-    case "contactar_asesor":
     case "cotizacion":
-    case "seguimiento_pedido":
+      // La cotización se entrega con `generar_cotizacion` (PDF). Este registro es
+      // SOLO seguimiento interno silencioso: no le digas al cliente "te conecto
+      // con un asesor" en lugar de darle su cotización.
       content =
-        `Solicitud registrada (${detalle}). ` +
-        (tipo === "cotizacion" ? "Un asesor confirma el precio y la disponibilidad final. " : "") +
-        contactoSucursal();
+        `Lead de cotización registrado en segundo plano (${detalle}). ` +
+        "El cliente ya recibe su cotización en PDF con precios referenciales. " +
+        "Respondé sobre SU cotización (no lo derives): aclarале que los precios son referenciales y que un asesor confirma el precio y la disponibilidad final.";
+      break;
+    case "contactar_asesor":
+    case "seguimiento_pedido":
+      content = `Solicitud registrada (${detalle}). ` + contactoSucursal();
       break;
     case "reclamo": {
       const suc = sucursalesPorCiudad(ciudad).filter((s) => s.whatsapp)[0];
