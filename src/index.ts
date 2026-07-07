@@ -17,7 +17,7 @@ import { verifyWebhook, parseIncomingMessages } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
 import { CrmIngest, stageDeTipo } from "./integrations/crm.js";
-import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, ADMIN_TELEFONO } from "./admin/roles.js";
+import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, ADMIN_TELEFONO, adminRoster } from "./admin/roles.js";
 import { handleAdminCommand } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
 
@@ -84,6 +84,45 @@ app.get("/admin/backfill-crm", (req, res) => {
   Object.assign(backfill, { running: true, total: 0, ok: 0, fail: 0, skip: 0, startedAt: nowBolivia(), finishedAt: "", error: "" });
   void ejecutarBackfill();
   res.json({ estado: "INICIADO", mensaje: "Sincronización en marcha. Refrescá esta misma URL en ~30 seg para ver el avance y el resultado." });
+});
+
+// Padrón de administradores: lo consume el CRM para marcarlos como "Administrador"
+// (y no contarlos como un lead/cliente más). Se abre: /admin/roster?key=TU_CLAVE
+app.get("/admin/roster", (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  res.json({ admins: adminRoster() });
+});
+
+// Marca en el CRM a TODOS los administradores como is_admin (para los que ya
+// están cargados del histórico). Se abre: /admin/tag-admins-crm?key=TU_CLAVE
+app.get("/admin/tag-admins-crm", async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  if (!config.crm.ingestToken) {
+    res.status(400).json({ error: "Falta CRM_INGEST_TOKEN (el CRM está desactivado)." });
+    return;
+  }
+  const roster = adminRoster();
+  let ok = 0, fail = 0;
+  for (const a of roster) {
+    const r = await crm.send({
+      external_id: a.external_id,
+      name: a.nombre,
+      segment: "Administrador",
+      city: a.ciudad,
+      is_admin: true,
+      role: a.role,
+    });
+    if (r === "ok") ok++; else fail++;
+  }
+  res.json({ estado: "LISTO", total: roster.length, ok, fail });
 });
 
 async function ejecutarBackfill(): Promise<void> {
@@ -557,14 +596,20 @@ async function procesarTurnoCliente(
       });
 
       // Envía la interacción al CRM de Prime en tiempo real (best-effort, sin bloquear).
+      // Si el remitente es un administrador, se marca como tal (para que el CRM
+      // no lo cuente como un lead/cliente más, sino como "Administrador").
+      const adminRemitente = getAdminByPhone(from);
       void crm.send({
         external_id: from,
-        name: reply.solicitud?.nombre || name,
-        city: reply.solicitud?.ciudad,
+        name: adminRemitente?.nombre || reply.solicitud?.nombre || name,
+        city: reply.solicitud?.ciudad || adminRemitente?.region,
+        segment: adminRemitente ? "Administrador" : undefined,
         stage: stageDeTipo(reply.solicitud?.tipo),
         interest: reply.solicitud?.detalle,
         message: text,
         response: reply.text,
+        is_admin: Boolean(adminRemitente),
+        role: adminRemitente?.role,
       });
     }
   } catch (err) {

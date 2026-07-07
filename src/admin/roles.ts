@@ -94,6 +94,25 @@ export function adminTelefonoPorCiudad(ciudad: string): string | undefined {
   return undefined;
 }
 
+/** True si el número (en cualquier formato) pertenece a un administrador. */
+export function esAdmin(telefono: string): boolean {
+  return Boolean(ADMIN_POR_TELEFONO[toIntlBolivia(telefono)]);
+}
+
+/**
+ * Padrón canónico de administradores (para que el CRM los reconozca y los
+ * marque como "Administrador" en vez de tratarlos como un cliente más).
+ * external_id va en formato internacional, igual que llega de WhatsApp.
+ */
+export function adminRoster(): { external_id: string; nombre: string; role: string; ciudad?: string }[] {
+  return Object.values(ADMIN_POR_TELEFONO).map((a) => ({
+    external_id: a.id,
+    nombre: a.nombre,
+    role: a.role,
+    ciudad: a.region,
+  }));
+}
+
 /** Construye un Admin para el demo: "gerente" = Gerente General; una ciudad = su administrador regional. */
 export function adminFromRole(role: string): Admin {
   if (role === "gerente") return { id: "gerente", nombre: "Gerente General", role: "gerente" };

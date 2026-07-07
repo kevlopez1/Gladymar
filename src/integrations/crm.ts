@@ -15,6 +15,10 @@ export interface CrmPayload {
   interest?: string;
   message?: string;
   response?: string;
+  /** Marca de administrador (para que el CRM no lo trate como un cliente/lead más). */
+  is_admin?: boolean;
+  /** Rol del contacto cuando es administrador (ej. "gerente", "regional"). */
+  role?: string;
 }
 
 export class CrmIngest {
@@ -37,14 +41,16 @@ export class CrmIngest {
    */
   async send(p: CrmPayload): Promise<"ok" | "skip" | "fail"> {
     if (!this.enabled) return "skip";
-    // Requisito del CRM: external_id + (message o response).
-    if (!p.external_id || (!p.message && !p.response)) return "skip";
+    // Requisito del CRM: external_id + (message o response). Excepción: un envío
+    // que sólo marca el rol de administrador (is_admin) también es válido.
+    if (!p.external_id || (!p.message && !p.response && !p.is_admin)) return "skip";
 
     const body: Record<string, unknown> = { external_id: p.external_id };
-    for (const k of ["name", "city", "segment", "stage", "interest", "message", "response"] as const) {
+    for (const k of ["name", "city", "segment", "stage", "interest", "message", "response", "role"] as const) {
       const v = p[k];
       if (v != null && String(v).trim() !== "") body[k] = v;
     }
+    if (p.is_admin) body.is_admin = true;
 
     try {
       const res = await fetch(this.url, {
