@@ -379,7 +379,9 @@ async function notificarAsesor(
 // Si un cliente manda varios mensajes seguidos, los juntamos y respondemos UNA
 // sola vez (evita respuestas repetidas). Si llega un mensaje mientras estamos
 // respondiendo, queda en cola y se procesa después.
-const DEBOUNCE_MS = 2500;
+// Ventana de espera para agrupar: damos tiempo a que el cliente termine de
+// escribir varios mensajes seguidos antes de responder (evita "bombardear").
+const DEBOUNCE_MS = 5000;
 interface BufferCliente { textos: string[]; timer: NodeJS.Timeout | null; messageId: string; name?: string; prueba?: boolean }
 const buffers = new Map<string, BufferCliente>();
 const enCurso = new Set<string>();
@@ -419,8 +421,10 @@ function programarCliente(msg: { from: string; text: string; messageId: string; 
   if (!buf) {
     buf = { textos: [], timer: null, messageId: msg.messageId, name: msg.name, prueba };
     buffers.set(msg.from, buf);
-    void markReadAndTyping(msg.messageId); // "escribiendo…" ni bien llega el primero
   }
+  // Marca leído + mantiene "escribiendo…" vivo con CADA mensaje (mientras el
+  // cliente sigue tecleando), no solo con el primero.
+  void markReadAndTyping(msg.messageId);
   buf.textos.push(msg.text);
   buf.messageId = msg.messageId;
   buf.prueba = prueba;
