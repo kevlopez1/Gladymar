@@ -627,6 +627,19 @@ async function procesarTurnoCliente(
       }
     }
 
+    // Sucursales: enviamos el bloque OFICIAL VERBATIM (direcciones/WhatsApp/horarios
+    // exactos del listado, NUNCA lo que el modelo "recuerde"). Anti-alucinación.
+    if (reply.sucursales) {
+      try {
+        for (const parte of splitLong(reply.sucursales, 3500)) {
+          await sleep(500);
+          await sendText(from, parte);
+        }
+      } catch (err) {
+        console.error(`No se pudo enviar sucursales a ${from}:`, err);
+      }
+    }
+
     // Adjunta el Manual de Asentamiento (PDF) si el cliente lo pidió y hay enlace configurado.
     if (reply.attachManual && config.assets.manualUrl) {
       try {

@@ -172,6 +172,9 @@ export interface ToolExecution {
   };
   /** Cotización generada en este turno (la capa de WhatsApp genera el PDF y lo envía). */
   cotizacion?: Cotizacion;
+  /** Bloque EXACTO de sucursales (datos oficiales). La capa de WhatsApp lo envía
+   *  verbatim; el modelo NO debe reescribir direcciones/teléfonos de memoria. */
+  sucursales?: string;
 }
 
 /**
@@ -209,8 +212,16 @@ export function executeTool(
     case "buscar_sucursales": {
       const ciudad = typeof input.ciudad === "string" ? input.ciudad : undefined;
       const lista = sucursalesPorCiudad(ciudad).map(formatearSucursal).join("\n\n");
+      const bloque = `${lista}\n\n_Los enlaces de ubicación (GPS) están disponibles en gladymar.com.bo_`;
+      // El bloque `sucursales` se envía VERBATIM al cliente desde la capa de WhatsApp.
+      // Al modelo le pedimos que NO reescriba ni un dato: los inventaría.
       return {
-        content: `${lista}\n\n_Los enlaces de ubicación (GPS) están disponibles en gladymar.com.bo_`,
+        content:
+          "Estos son los datos OFICIALES de las sucursales y YA se le enviaron al cliente, tal cual. " +
+          "NO los reescribas, NO los resumas y NO agregues ni cambies ninguna dirección, teléfono, WhatsApp u horario. " +
+          "Solo respondé con UNA frase breve y cálida de introducción o cierre (sin datos de contacto). Datos enviados:\n\n" +
+          bloque,
+        sucursales: bloque,
       };
     }
 

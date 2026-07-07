@@ -33,6 +33,8 @@ export interface AgentReply {
   solicitud?: { tipo: string; prioridad: string; detalle: string; nombre?: string; ciudad?: string; telefono?: string };
   /** Cotización generada en este turno: la capa de WhatsApp genera el PDF y lo envía. */
   cotizacion?: Cotizacion;
+  /** Bloque EXACTO de sucursales (datos oficiales) para enviar verbatim. */
+  sucursales?: string;
 }
 
 /**
@@ -61,6 +63,26 @@ function quitarGuiones(text: string): string {
     .replace(/\(\s*,\s*/g, "(")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/[ \t]+$/gm, "");
+}
+
+/**
+ * Blindaje ANTI-ALUCINACIÓN: elimina del texto del modelo cualquier dato de
+ * contacto (teléfono, WhatsApp, fijo "(3)…", "+591…", enlaces wa.me, corridas
+ * largas de dígitos). El agente NUNCA debe emitir contactos de memoria: los
+ * datos oficiales de sucursales se envían aparte, verbatim. Se conserva el sitio
+ * web (gladymar.com.bo), que sí es un dato público válido.
+ */
+function scrubContactos(text: string): string {
+  const lineas = text.split("\n").filter((l) => {
+    const low = l.toLowerCase();
+    if (/\bwa\.me\b|\+\s*591\s*\d|\(\s*\d\s*\)\s*\d/.test(low)) return false; // línea con contacto
+    if (/(tel[eé]fono|whats\s*app|whatsapp|celular|cel\.)\s*:?\s*\+?\d/.test(low)) return false;
+    if (/\b\d[\d\s.\-]{5,}\d\b/.test(low) && !/gladymar\.com\.bo/.test(low)) return false; // corrida de dígitos
+    if (/📍|🏢|☎️|🕐/.test(l)) return false; // línea con pin/dirección/horario
+    if (/(^|\s)(av\.|avenida|c\/|calle\s)|\bkm\s?\d|\besq\.|3er anillo|parque industrial|mz\./.test(low)) return false; // dirección
+    return true;
+  });
+  return lineas.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 interface ParsedOptions {
@@ -149,6 +171,7 @@ export class GladymarAgent {
     let attachManual = false;
     let solicitud: AgentReply["solicitud"];
     let cotizacion: AgentReply["cotizacion"];
+    let sucursales: AgentReply["sucursales"];
     let rounds = 0;
 
     // Teléfono real del cliente = su WhatsApp (userId), solo si son dígitos (no demo).
@@ -169,6 +192,7 @@ export class GladymarAgent {
           if (result.attachManual) attachManual = true;
           if (result.solicitud) solicitud = result.solicitud;
           if (result.cotizacion) cotizacion = result.cotizacion;
+          if (result.sucursales) sucursales = result.sucursales;
           toolResults.push({
             type: "tool_result",
             tool_use_id: block.id,
@@ -198,12 +222,20 @@ export class GladymarAgent {
     const parsed = extractOptions(withDoc.text);
 
     // Blindaje: nunca dejar marcadores (bien o mal formados) en el texto al cliente.
-    const safeText = quitarGuiones(
+    let safeText = quitarGuiones(
       parsed.text
         .replace(/\[\[\s*(OPCIONES|DOCUMENTO)[\s\S]*$/i, "") // marcador sin cerrar al final
         .replace(/\[\[[^\]]*\]\]/g, "") // cualquier marcador residual
         .replace(/\n{3,}/g, "\n\n"),
     ).trim();
+
+    // Blindaje ANTI-ALUCINACIÓN de ubicaciones/contactos: SIEMPRE quitamos del
+    // texto del modelo cualquier teléfono/WhatsApp/fijo que haya podido inventar.
+    // Los datos oficiales de sucursales van aparte en el bloque `sucursales`.
+    safeText = scrubContactos(safeText);
+    if (sucursales && !safeText) {
+      safeText = "¡Claro! 😊 Acá te paso los datos de nuestras sucursales:";
+    }
 
     return {
       text: safeText,
@@ -215,6 +247,7 @@ export class GladymarAgent {
       attachManual,
       solicitud,
       cotizacion,
+      sucursales,
     };
   }
 
