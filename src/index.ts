@@ -318,7 +318,7 @@ async function notificarAsesor(
 // sola vez (evita respuestas repetidas). Si llega un mensaje mientras estamos
 // respondiendo, queda en cola y se procesa después.
 const DEBOUNCE_MS = 2500;
-interface BufferCliente { textos: string[]; timer: NodeJS.Timeout | null; messageId: string; name?: string }
+interface BufferCliente { textos: string[]; timer: NodeJS.Timeout | null; messageId: string; name?: string; prueba?: boolean }
 const buffers = new Map<string, BufferCliente>();
 const enCurso = new Set<string>();
 // Admins que están "probando como cliente" (modo demo): sus mensajes van al agente.
@@ -352,15 +352,16 @@ async function enviarPanel(
   }
 }
 
-function programarCliente(msg: { from: string; text: string; messageId: string; name?: string }): void {
+function programarCliente(msg: { from: string; text: string; messageId: string; name?: string }, prueba = false): void {
   let buf = buffers.get(msg.from);
   if (!buf) {
-    buf = { textos: [], timer: null, messageId: msg.messageId, name: msg.name };
+    buf = { textos: [], timer: null, messageId: msg.messageId, name: msg.name, prueba };
     buffers.set(msg.from, buf);
     void markReadAndTyping(msg.messageId); // "escribiendo…" ni bien llega el primero
   }
   buf.textos.push(msg.text);
   buf.messageId = msg.messageId;
+  buf.prueba = prueba;
   if (msg.name) buf.name = msg.name;
   // Encuesta de satisfacción desactivada por pedido de Gladymar.
   if (buf.timer) clearTimeout(buf.timer);
@@ -385,7 +386,7 @@ async function vaciarCliente(from: string): Promise<void> {
   if (!text) return;
   enCurso.add(from);
   try {
-    await procesarTurnoCliente(from, text, buf.messageId, buf.name);
+    await procesarTurnoCliente(from, text, buf.messageId, buf.name, { prueba: buf.prueba });
   } finally {
     enCurso.delete(from);
   }
@@ -407,6 +408,9 @@ async function handleIncoming(msg: {
     // Salir del modo "probar como cliente" → volver al panel.
     if (testCliente.has(msg.from) && /\bsalir\b|volver al panel|^panel$|^admin$/.test(t)) {
       testCliente.delete(msg.from);
+      const pend = buffers.get(msg.from);
+      if (pend?.timer) clearTimeout(pend.timer);
+      buffers.delete(msg.from);
       agent.reset(`test:${msg.from}`);
       void markAsRead(msg.messageId);
       await sendText(msg.from, "✅ Volviste al *panel de administrador*.");
@@ -426,9 +430,9 @@ async function handleIncoming(msg: {
       return;
     }
 
-    // Si el admin está en modo prueba, sus mensajes van al agente (como cliente).
+    // Si el admin está en modo prueba, sus mensajes van al agente (agrupados, como el cliente).
     if (testCliente.has(msg.from)) {
-      await procesarTurnoCliente(msg.from, msg.text, msg.messageId, admin.nombre, { prueba: true });
+      programarCliente(msg, true);
       return;
     }
 
