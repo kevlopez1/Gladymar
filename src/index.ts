@@ -594,7 +594,7 @@ async function procesarTurnoCliente(
 
   try {
     // La cotización en PDF solo está habilitada para admins (modo prueba).
-    const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF: prueba });
+    const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF: prueba, prueba });
 
     // Respuestas en bloques: muestra "escribiendo…" antes de cada bloque (y un mínimo antes del primero).
     // El último bloque, si hay opciones, se envía como LISTA interactiva (igual que el demo).
