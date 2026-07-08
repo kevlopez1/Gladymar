@@ -184,6 +184,7 @@ export function executeTool(
   name: string,
   input: Record<string, unknown>,
   telefonoCliente?: string,
+  prueba?: boolean,
 ): ToolExecution {
   switch (name) {
     case "mostrar_menu": {
@@ -231,7 +232,7 @@ export function executeTool(
     }
 
     case "registrar_solicitud":
-      return registrarSolicitud(input, telefonoCliente);
+      return registrarSolicitud(input, telefonoCliente, prueba);
 
     case "generar_cotizacion": {
       const nombre = typeof input.nombre === "string" && input.nombre.trim() ? input.nombre.trim() : "Cliente";
@@ -266,7 +267,7 @@ export function executeTool(
   }
 }
 
-function registrarSolicitud(input: Record<string, unknown>, telefonoCliente?: string): ToolExecution {
+function registrarSolicitud(input: Record<string, unknown>, telefonoCliente?: string, prueba?: boolean): ToolExecution {
   const tipo = typeof input.tipo === "string" ? input.tipo : "otro";
   const prioridad = typeof input.prioridad === "string" ? input.prioridad : "normal";
   const ciudad = typeof input.ciudad === "string" ? input.ciudad : undefined;
@@ -280,7 +281,11 @@ function registrarSolicitud(input: Record<string, unknown>, telefonoCliente?: st
   console.log(`📝 Solicitud [${tipo}] ${marca} ${ciudad ? `(${ciudad}) ` : ""}${nombre ? `de ${nombre} ` : ""}- ${detalle}`);
 
   // Guarda la solicitud para que el panel de administradores la vea.
-  recordSolicitud({ tipo, prioridad, nombre, ciudad, telefono, detalle });
+  // En modo prueba ("Probar como cliente") NUNCA se guarda: es una demo, no
+  // debe aparecer como lead real ni contaminar el panel de administradores.
+  if (!prueba) {
+    recordSolicitud({ tipo, prioridad, nombre, ciudad, telefono, detalle });
+  }
 
   const contactoSucursal = (): string => {
     const conWa = sucursalesPorCiudad(ciudad).filter((s) => s.whatsapp);

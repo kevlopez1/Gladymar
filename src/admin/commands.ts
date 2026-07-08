@@ -68,10 +68,15 @@ function fmtItem(r: SolicitudReg): string {
 }
 
 function listLeads(ciudad?: string): string {
-  const l = getLeads(ciudad).filter((r) => esDeHoy(r.fecha));
   const t = ciudad ? `en *${ciudad}*` : "a nivel *nacional*";
-  if (!l.length) return `No hay leads del día ${t} por ahora.`;
-  return `🧾 *Leads del día* (${t}) — *${l.length}*\n\n` + l.map(fmtItem).join("\n\n");
+  try {
+    const l = getLeads(ciudad).filter((r) => esDeHoy(r.fecha));
+    if (!l.length) return `📭 Sin leads nuevos hoy ${t}.`;
+    return `🧾 *Leads del día* (${t}) — *${l.length}*\n\n` + l.map(fmtItem).join("\n\n");
+  } catch (err) {
+    console.error("Error obteniendo leads del día:", err);
+    return `⚠️ No pude cargar los leads del día ${t} por un error interno. Ya quedó registrado en los logs.`;
+  }
 }
 function listReclamos(ciudad?: string): string {
   const l = getReclamos(ciudad);

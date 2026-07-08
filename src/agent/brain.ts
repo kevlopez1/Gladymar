@@ -160,10 +160,11 @@ export class GladymarAgent {
   async handleMessage(
     userId: string,
     userText: string,
-    opts?: { cotizacionPDF?: boolean },
+    opts?: { cotizacionPDF?: boolean; prueba?: boolean },
   ): Promise<AgentReply> {
     // La cotización en PDF solo está habilitada para admins (modo prueba).
     const permitirPDF = opts?.cotizacionPDF === true;
+    const prueba = opts?.prueba === true;
     const messages: ChatMessage[] = [...this.store.get(userId)];
     messages.push({ role: "user", content: userText });
 
@@ -187,7 +188,7 @@ export class GladymarAgent {
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
       for (const block of response.content) {
         if (block.type === "tool_use") {
-          const result = executeTool(block.name, block.input as Record<string, unknown>, telefonoCliente);
+          const result = executeTool(block.name, block.input as Record<string, unknown>, telefonoCliente, prueba);
           if (result.escalated) escalated = true;
           if (result.attachManual) attachManual = true;
           if (result.solicitud) solicitud = result.solicitud;

@@ -3,9 +3,12 @@
  *
  * Guarda en memoria los leads/cotizaciones, reclamos y seguimientos que el
  * agente registra (vía registrar_solicitud), para que los administradores los
- * consulten. Incluye datos de muestra para la demo.
+ * consulten.
  *
- * En producción multi-instancia esto se reemplazaría por una base de datos.
+ * Nota: es un único proceso (una instancia, sin réplicas) para Gladymar, así
+ * que todo lo que hay acá es de Gladymar. Si el proceso se reinicia (redeploy)
+ * la memoria se vacía; para persistir entre despliegues habría que pasar a una
+ * base de datos real.
  */
 import { nowBolivia } from "../integrations/sheets.js";
 
@@ -17,6 +20,8 @@ export interface SolicitudReg {
   telefono?: string;
   detalle: string;
   fecha: string;
+  /** Timestamp real (epoch ms) para filtrar y ordenar con precisión. */
+  creadoEn: number;
 }
 
 let conversaciones = 38; // base de demostración; sube con cada cliente atendido
@@ -27,15 +32,10 @@ export function totalConversaciones(): number {
   return conversaciones;
 }
 
-const registros: SolicitudReg[] = [
-  { tipo: "reclamo", prioridad: "critica", nombre: "Luis Rojas", ciudad: "Santa Cruz", telefono: "59172114455", detalle: "Diferencia de tono entre piezas de porcelanato", fecha: "hoy 08:55" },
-  { tipo: "cotizacion", prioridad: "alta", nombre: "María Áñez", ciudad: "Santa Cruz", telefono: "59170099887", detalle: "Porcelanato 60x60, ~120 m², construcción nueva", fecha: "hoy 10:15" },
-  { tipo: "reclamo", prioridad: "alta", nombre: "Patricia Vaca", ciudad: "Santa Cruz", telefono: "59176654321", detalle: "Piso suena hueco tras la colocación", fecha: "ayer 17:20" },
-  { tipo: "cotizacion", prioridad: "normal", nombre: "Jorge Téllez", ciudad: "La Paz", telefono: "59171223344", detalle: "Cerámica para baño, remodelación", fecha: "hoy 11:02" },
-  { tipo: "seguimiento_pedido", prioridad: "normal", nombre: "Carlos Méndez", ciudad: "La Paz", telefono: "59168890011", detalle: "Estado de entrega pedido #4821", fecha: "hoy 12:10" },
-  { tipo: "cotizacion", prioridad: "normal", nombre: "Andrea Soliz", ciudad: "Cochabamba", telefono: "59177001122", detalle: "Griferías Deca para cocina", fecha: "hoy 09:40" },
-  { tipo: "cotizacion", prioridad: "alta", nombre: "Estudio Arq. Vargas", ciudad: "Cochabamba", telefono: "59170556677", detalle: "Proyecto >1000 m², porcelanato importado", fecha: "hoy 13:05" },
-];
+// Sin datos de muestra: arranca vacío y se llena solo con solicitudes reales
+// que el agente registra vía `recordSolicitud` (ver registrar_solicitud en
+// agent/tools.ts).
+const registros: SolicitudReg[] = [];
 
 function norm(s?: string): string {
   return (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -50,14 +50,20 @@ function scope(list: SolicitudReg[], ciudad?: string): SolicitudReg[] {
 function hoyStr(): string {
   return new Date().toLocaleString("es-BO", { timeZone: "America/La_Paz", hour12: false }).split(",")[0].trim();
 }
-/** ¿La fecha del registro corresponde a HOY? (soporta "hoy …"/"ayer …" de la demo y el formato real). */
+/** ¿La fecha del registro corresponde a HOY, en zona horaria Bolivia? */
 export function esDeHoy(fecha: string): boolean {
-  if (/hoy/i.test(fecha)) return true;
-  if (/ayer/i.test(fecha)) return false;
   return fecha.split(",")[0].trim() === hoyStr();
 }
 
-/** Registra una nueva solicitud (la llama el agente al derivar). */
+/** Ordena del más reciente al más antiguo (created_at DESC). */
+function porRecencia(list: SolicitudReg[]): SolicitudReg[] {
+  return [...list].sort((a, b) => b.creadoEn - a.creadoEn);
+}
+
+/**
+ * Registra una nueva solicitud (la llama el agente al derivar). Nunca lanza:
+ * un fallo acá no debe interrumpir la atención al cliente, solo se loguea.
+ */
 export function recordSolicitud(r: {
   tipo: string;
   prioridad?: string;
@@ -66,25 +72,30 @@ export function recordSolicitud(r: {
   telefono?: string;
   detalle: string;
 }): void {
-  registros.unshift({
-    tipo: r.tipo,
-    prioridad: r.prioridad || "normal",
-    nombre: r.nombre,
-    ciudad: r.ciudad,
-    telefono: r.telefono,
-    detalle: r.detalle,
-    fecha: nowBolivia(),
-  });
+  try {
+    registros.unshift({
+      tipo: r.tipo,
+      prioridad: r.prioridad || "normal",
+      nombre: r.nombre,
+      ciudad: r.ciudad,
+      telefono: r.telefono,
+      detalle: r.detalle,
+      fecha: nowBolivia(),
+      creadoEn: Date.now(),
+    });
+  } catch (err) {
+    console.error("No se pudo registrar la solicitud para el panel de administradores:", err);
+  }
 }
 
 export function getLeads(ciudad?: string): SolicitudReg[] {
-  return scope(registros.filter((r) => r.tipo === "cotizacion" || r.tipo === "contactar_asesor"), ciudad);
+  return porRecencia(scope(registros.filter((r) => r.tipo === "cotizacion" || r.tipo === "contactar_asesor"), ciudad));
 }
 export function getReclamos(ciudad?: string): SolicitudReg[] {
-  return scope(registros.filter((r) => r.tipo === "reclamo"), ciudad);
+  return porRecencia(scope(registros.filter((r) => r.tipo === "reclamo"), ciudad));
 }
 export function getSeguimientos(ciudad?: string): SolicitudReg[] {
-  return scope(registros.filter((r) => r.tipo === "seguimiento_pedido"), ciudad);
+  return porRecencia(scope(registros.filter((r) => r.tipo === "seguimiento_pedido"), ciudad));
 }
 
 export interface Kpis {
