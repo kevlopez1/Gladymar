@@ -700,10 +700,13 @@ async function procesarTurnoCliente(
       }
 
       // Registra la interacción en Google Sheets (no bloquea ni interrumpe si falla).
+      // Misma ciudad que se le manda al CRM: la de la solicitud, o la recordada
+      // de la conversación (el cliente la da en el saludo inicial).
       void sheets.log({
         fecha: nowBolivia(),
         telefono: from,
         nombre: adminRemitente?.nombre || name,
+        ciudad: adminRemitente?.region || reply.solicitud?.ciudad || ciudadPorUsuario.get(from),
         mensaje: text,
         respuesta: reply.text,
         tipo_solicitud: adminRemitente ? undefined : reply.solicitud?.tipo,
