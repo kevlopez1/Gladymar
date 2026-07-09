@@ -324,7 +324,7 @@ app.post("/webhook", async (req, res) => {
   try {
     const messages = parseIncomingMessages(req.body);
     for (const msg of messages) {
-      void handleIncoming(msg);
+      handleIncoming(msg).catch((err) => console.error(`Error atendiendo a ${msg.from}:`, err));
     }
   } catch (err) {
     console.error("Error procesando webhook:", err);
@@ -532,8 +532,12 @@ async function handleIncoming(msg: {
       buffers.delete(msg.from);
       agent.reset(`test:${msg.from}`);
       void markAsRead(msg.messageId);
-      await sendText(msg.from, "✅ Volviste al *panel de administrador*.");
-      await enviarPanel(msg.from, handleAdminCommand(`wa:${msg.from}`, admin, "menu"));
+      try {
+        await sendText(msg.from, "✅ Volviste al *panel de administrador*.");
+        await enviarPanel(msg.from, handleAdminCommand(`wa:${msg.from}`, admin, "menu"));
+      } catch (err) {
+        console.error(`Error volviendo al panel admin para ${msg.from}:`, err);
+      }
       return;
     }
 
@@ -542,10 +546,14 @@ async function handleIncoming(msg: {
       testCliente.add(msg.from);
       agent.reset(`test:${msg.from}`);
       void markAsRead(msg.messageId);
-      await sendText(
-        msg.from,
-        "🧪 *Modo prueba activado.*\n\nAhora te atiendo como si fueras un *cliente*. Escribí como uno más: por ejemplo *\"Hola\"*, pedí el catálogo, pedí una cotización, consultá sucursales...\n\nEsto es solo una demostración: *no* cuenta como lead ni avisa a ningún asesor.\n\nCuando quieras volver al panel, escribí *salir*.",
-      );
+      try {
+        await sendText(
+          msg.from,
+          "🧪 *Modo prueba activado.*\n\nAhora te atiendo como si fueras un *cliente*. Escribí como uno más: por ejemplo *\"Hola\"*, pedí el catálogo, pedí una cotización, consultá sucursales...\n\nEsto es solo una demostración: *no* cuenta como lead ni avisa a ningún asesor.\n\nCuando quieras volver al panel, escribí *salir*.",
+        );
+      } catch (err) {
+        console.error(`Error activando modo prueba para ${msg.from}:`, err);
+      }
       return;
     }
 
@@ -738,6 +746,16 @@ async function procesarTurnoCliente(
     }
   }
 }
+
+// Red de seguridad global: un error no capturado en cualquier punto (ej. una
+// promesa "en segundo plano" que nadie esperó) NUNCA debe tumbar el proceso
+// completo y afectar a TODOS los clientes. Solo se loguea.
+process.on("unhandledRejection", (reason) => {
+  console.error("⚠️  Promesa rechazada sin capturar (unhandledRejection):", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("⚠️  Excepción no capturada (uncaughtException):", err);
+});
 
 app.listen(config.port, () => {
   console.log(`✅ Agente de Gladymar escuchando en el puerto ${config.port}`);
