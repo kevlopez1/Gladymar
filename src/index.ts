@@ -768,4 +768,9 @@ app.listen(config.port, () => {
   if (!isWhatsAppConfigured()) {
     console.log("   ⚠️  WhatsApp no configurado: el demo web funciona; el webhook real requiere credenciales.");
   }
+  // Diagnóstico temporal: confirmar qué webhook de Sheets quedó activo tras el
+  // deploy, sin exponer la URL completa (solo si está activo y su sufijo).
+  console.log(
+    `   Sheets: ${sheets.enabled ? `activo (...${config.sheets.webhookUrl.slice(-25)})` : "inactivo (SHEETS_WEBHOOK_URL vacío)"}`,
+  );
 });
