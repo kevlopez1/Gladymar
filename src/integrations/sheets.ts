@@ -14,6 +14,8 @@ export interface InteractionLog {
   telefono: string;
   /** Nombre de perfil, si está disponible. */
   nombre?: string;
+  /** Ciudad del cliente, si se conoce (la misma que recibe el CRM). */
+  ciudad?: string;
   /** Mensaje del cliente. */
   mensaje: string;
   /** Respuesta del agente. */

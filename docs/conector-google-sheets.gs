@@ -14,7 +14,7 @@ function doPost(e) {
   // Encabezados (una sola vez, si la hoja está vacía).
   if (sheet.getLastRow() === 0) {
     sheet.appendRow([
-      "Fecha", "Teléfono", "Nombre", "Mensaje", "Respuesta",
+      "Fecha", "Teléfono", "Nombre", "Ciudad", "Mensaje", "Respuesta",
       "Tipo de solicitud", "Prioridad", "Detalle", "Derivado a asesor"
     ]);
   }
@@ -23,6 +23,7 @@ function doPost(e) {
     d.fecha || "",
     d.telefono || "",
     d.nombre || "",
+    d.ciudad || "",
     d.mensaje || "",
     d.respuesta || "",
     d.tipo_solicitud || "",
