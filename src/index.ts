@@ -290,20 +290,25 @@ app.post("/api/chat", async (req, res) => {
 });
 
 // Endpoint del panel de administradores (determinista, sin IA).
-app.post("/api/admin", (req, res) => {
+app.post("/api/admin", async (req, res) => {
   const { sessionId, role, message } = req.body ?? {};
   if (typeof sessionId !== "string" || typeof role !== "string" || typeof message !== "string") {
     res.status(400).json({ error: "Se requieren 'sessionId', 'role' y 'message'." });
     return;
   }
   const admin = adminFromRole(role);
-  const reply = handleAdminCommand(`adm:${sessionId}`, admin, message);
-  res.json({
-    reply: reply.text,
-    options: reply.options ?? [],
-    optionsButton: reply.optionsButton,
-    optionsTitle: reply.optionsTitle,
-  });
+  try {
+    const reply = await handleAdminCommand(`adm:${sessionId}`, admin, message);
+    res.json({
+      reply: reply.text,
+      options: reply.options ?? [],
+      optionsButton: reply.optionsButton,
+      optionsTitle: reply.optionsTitle,
+    });
+  } catch (err) {
+    console.error("Error en /api/admin:", err);
+    res.status(500).json({ error: "Error procesando el comando." });
+  }
 });
 
 // Verificación del webhook (handshake con Meta)
@@ -534,7 +539,7 @@ async function handleIncoming(msg: {
       void markAsRead(msg.messageId);
       try {
         await sendText(msg.from, "✅ Volviste al *panel de administrador*.");
-        await enviarPanel(msg.from, handleAdminCommand(`wa:${msg.from}`, admin, "menu"));
+        await enviarPanel(msg.from, await handleAdminCommand(`wa:${msg.from}`, admin, "menu"));
       } catch (err) {
         console.error(`Error volviendo al panel admin para ${msg.from}:`, err);
       }
@@ -566,7 +571,7 @@ async function handleIncoming(msg: {
     // Panel de administrador normal.
     void markAsRead(msg.messageId);
     try {
-      await enviarPanel(msg.from, handleAdminCommand(`wa:${msg.from}`, admin, msg.text));
+      await enviarPanel(msg.from, await handleAdminCommand(`wa:${msg.from}`, admin, msg.text));
     } catch (err) {
       console.error(`Error en panel admin para ${msg.from}:`, err);
     }

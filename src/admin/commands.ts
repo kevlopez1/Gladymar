@@ -15,6 +15,7 @@ import {
   esDeHoy,
   type SolicitudReg,
 } from "./data.js";
+import { obtenerStatsHoy } from "../integrations/sheetsStats.js";
 
 export interface AdminReply {
   text: string;
@@ -84,10 +85,17 @@ function listReclamos(ciudad?: string): string {
   if (!l.length) return `No hay reclamos ${t}. 👌`;
   return `🚨 *Reclamos prioritarios* (${t}) — *${l.length}*\n\n` + l.map(fmtItem).join("\n\n");
 }
-function resumen(ciudad?: string): string {
+/** Línea de "Conversaciones hoy": datos reales del Sheet; si no se puede leer, el contador en memoria como respaldo. */
+async function lineaConversacionesHoy(): Promise<string> {
+  const stats = await obtenerStatsHoy();
+  if (stats) return `Conversaciones hoy: *${stats.conversacionesHoy}* (${stats.contactosUnicosHoy} clientes distintos)\n`;
+  return `Conversaciones hoy: *${totalConversaciones()}*\n`;
+}
+
+async function resumen(ciudad?: string): Promise<string> {
   const k = getKpis(ciudad);
   const t = ciudad ? `*${ciudad}*` : "*Nacional*";
-  const conv = ciudad ? "" : `Conversaciones hoy: *${totalConversaciones()}*\n`;
+  const conv = ciudad ? "" : await lineaConversacionesHoy();
   return (
     `📊 *Resumen de hoy* · ${t}\n\n${conv}` +
     `Leads/cotizaciones: *${k.leads}*\n` +
@@ -95,18 +103,32 @@ function resumen(ciudad?: string): string {
     `Seguimientos: *${k.seguimientos}*`
   );
 }
-function reportes(): string {
-  let out = `📈 *Reporte global* · Bolivia\n\nConversaciones hoy: *${totalConversaciones()}*\n`;
+async function reportes(): Promise<string> {
+  const stats = await obtenerStatsHoy();
+  let out = `📈 *Reporte global* · Bolivia\n\n${await lineaConversacionesHoy()}`;
+
+  if (stats && Object.keys(stats.porCiudadHoy).length) {
+    out += `\n*Clientes distintos hoy por ciudad:*\n`;
+    out += Object.entries(stats.porCiudadHoy)
+      .sort((a, b) => b[1] - a[1])
+      .map(([ciudad, n]) => `${ciudad}: ${n}`)
+      .join("\n");
+    out += "\n";
+  }
+
+  let porCiudadKpis = "";
   for (const c of ciudadesAdmin()) {
     const k = getKpis(c);
     if (k.leads || k.reclamos || k.seguimientos) {
-      out += `\n*${c}*: ${k.leads} leads · ${k.reclamos} reclamos · ${k.seguimientos} seguim.`;
+      porCiudadKpis += `\n*${c}*: ${k.leads} leads · ${k.reclamos} reclamos · ${k.seguimientos} seguim.`;
     }
   }
+  if (porCiudadKpis) out += `\n*Leads/reclamos registrados en esta sesión:*${porCiudadKpis}`;
+
   return out;
 }
 
-export function handleAdminCommand(sessionId: string, admin: Admin, raw: string): AdminReply {
+export async function handleAdminCommand(sessionId: string, admin: Admin, raw: string): Promise<AdminReply> {
   const text = norm(raw);
   const region = admin.role === "gerente" ? undefined : admin.region;
 
@@ -133,10 +155,10 @@ export function handleAdminCommand(sessionId: string, admin: Admin, raw: string)
   if (!text || /(menu|menú|ayuda|hola|inicio|volver|comandos)/.test(text)) return menu(admin);
   if (/(lead|cotiz)/.test(text)) return { text: listLeads(region), ...VOLVER };
   if (/reclamo/.test(text)) return { text: listReclamos(region), ...VOLVER };
-  if (/(resumen|kpi|del dia)/.test(text)) return { text: resumen(region), ...VOLVER };
+  if (/(resumen|kpi|del dia)/.test(text)) return { text: await resumen(region), ...VOLVER };
 
   if (admin.role === "gerente") {
-    if (/(reporte|global)/.test(text)) return { text: reportes(), ...VOLVER };
+    if (/(reporte|global)/.test(text)) return { text: await reportes(), ...VOLVER };
     if (/(comunicado|broadcast|aviso)/.test(text)) {
       pendiente.set(sessionId, { accion: "comunicado" });
       return { text: "✍️ Escribe el *comunicado* que deseas enviar a los asesores:" };
