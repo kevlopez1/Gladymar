@@ -24,7 +24,10 @@ export interface SolicitudReg {
   creadoEn: number;
 }
 
-let conversaciones = 38; // base de demostración; sube con cada cliente atendido
+// Contador en memoria (se resetea con cada redeploy). Se usa solo como
+// respaldo cuando no se puede leer el conteo real desde Google Sheets
+// (ver integrations/sheetsStats.ts).
+let conversaciones = 0;
 export function bumpConversacion(): void {
   conversaciones += 1;
 }
