@@ -1,16 +1,14 @@
 /**
  * Almacén de solicitudes para el panel de administradores.
  *
- * Guarda en memoria los leads/cotizaciones, reclamos y seguimientos que el
- * agente registra (vía registrar_solicitud), para que los administradores los
- * consulten.
- *
- * Nota: es un único proceso (una instancia, sin réplicas) para Gladymar, así
- * que todo lo que hay acá es de Gladymar. Si el proceso se reinicia (redeploy)
- * la memoria se vacía; para persistir entre despliegues habría que pasar a una
- * base de datos real.
+ * Guarda los leads/cotizaciones, reclamos y seguimientos que el agente
+ * registra (vía registrar_solicitud), para que los administradores los
+ * consulten. La fuente de verdad es Postgres (ver ../db/index.ts), que
+ * sobrevive a los redeploys; el arreglo en memoria queda solo como respaldo
+ * si la base de datos no está configurada o no responde.
  */
 import { nowBolivia } from "../integrations/sheets.js";
+import { insertarSolicitud, obtenerSolicitudes } from "../db/index.js";
 
 export interface SolicitudReg {
   tipo: string;
@@ -35,9 +33,7 @@ export function totalConversaciones(): number {
   return conversaciones;
 }
 
-// Sin datos de muestra: arranca vacío y se llena solo con solicitudes reales
-// que el agente registra vía `recordSolicitud` (ver registrar_solicitud en
-// agent/tools.ts).
+// Respaldo en memoria: solo se usa si Postgres no está configurada o falla.
 const registros: SolicitudReg[] = [];
 
 function norm(s?: string): string {
@@ -66,6 +62,8 @@ function porRecencia(list: SolicitudReg[]): SolicitudReg[] {
 /**
  * Registra una nueva solicitud (la llama el agente al derivar). Nunca lanza:
  * un fallo acá no debe interrumpir la atención al cliente, solo se loguea.
+ * Se guarda en memoria de inmediato (respaldo) y en Postgres en segundo
+ * plano (persistente, no bloquea la respuesta al cliente).
  */
 export function recordSolicitud(r: {
   tipo: string;
@@ -75,30 +73,49 @@ export function recordSolicitud(r: {
   telefono?: string;
   detalle: string;
 }): void {
+  const nuevo: SolicitudReg = {
+    tipo: r.tipo,
+    prioridad: r.prioridad || "normal",
+    nombre: r.nombre,
+    ciudad: r.ciudad,
+    telefono: r.telefono,
+    detalle: r.detalle,
+    fecha: nowBolivia(),
+    creadoEn: Date.now(),
+  };
   try {
-    registros.unshift({
-      tipo: r.tipo,
-      prioridad: r.prioridad || "normal",
-      nombre: r.nombre,
-      ciudad: r.ciudad,
-      telefono: r.telefono,
-      detalle: r.detalle,
-      fecha: nowBolivia(),
-      creadoEn: Date.now(),
-    });
+    registros.unshift(nuevo);
   } catch (err) {
-    console.error("No se pudo registrar la solicitud para el panel de administradores:", err);
+    console.error("No se pudo registrar la solicitud en el respaldo en memoria:", err);
   }
+  void insertarSolicitud(nuevo);
+  cache = null; // invalida la caché de lectura para reflejar esta solicitud enseguida
 }
 
-export function getLeads(ciudad?: string): SolicitudReg[] {
-  return porRecencia(scope(registros.filter((r) => r.tipo === "cotizacion" || r.tipo === "contactar_asesor"), ciudad));
+// Caché corta de lectura: evita pegarle a Postgres varias veces por comando
+// (ej. "Reportes globales" consulta cada ciudad por separado).
+let cache: { data: SolicitudReg[]; expiraEn: number } | null = null;
+const CACHE_MS = 3000;
+
+async function todasLasSolicitudes(): Promise<SolicitudReg[]> {
+  if (cache && cache.expiraEn > Date.now()) return cache.data;
+  const desdeDb = await obtenerSolicitudes();
+  const data = desdeDb ?? registros;
+  cache = { data, expiraEn: Date.now() + CACHE_MS };
+  return data;
 }
-export function getReclamos(ciudad?: string): SolicitudReg[] {
-  return porRecencia(scope(registros.filter((r) => r.tipo === "reclamo"), ciudad));
+
+export async function getLeads(ciudad?: string): Promise<SolicitudReg[]> {
+  const todas = await todasLasSolicitudes();
+  return porRecencia(scope(todas.filter((r) => r.tipo === "cotizacion" || r.tipo === "contactar_asesor"), ciudad));
 }
-export function getSeguimientos(ciudad?: string): SolicitudReg[] {
-  return porRecencia(scope(registros.filter((r) => r.tipo === "seguimiento_pedido"), ciudad));
+export async function getReclamos(ciudad?: string): Promise<SolicitudReg[]> {
+  const todas = await todasLasSolicitudes();
+  return porRecencia(scope(todas.filter((r) => r.tipo === "reclamo"), ciudad));
+}
+export async function getSeguimientos(ciudad?: string): Promise<SolicitudReg[]> {
+  const todas = await todasLasSolicitudes();
+  return porRecencia(scope(todas.filter((r) => r.tipo === "seguimiento_pedido"), ciudad));
 }
 
 export interface Kpis {
@@ -107,12 +124,12 @@ export interface Kpis {
   reclamosPrioritarios: number;
   seguimientos: number;
 }
-export function getKpis(ciudad?: string): Kpis {
-  const r = getReclamos(ciudad);
+export async function getKpis(ciudad?: string): Promise<Kpis> {
+  const r = await getReclamos(ciudad);
   return {
-    leads: getLeads(ciudad).length,
+    leads: (await getLeads(ciudad)).length,
     reclamos: r.length,
     reclamosPrioritarios: r.filter((x) => x.prioridad !== "normal").length,
-    seguimientos: getSeguimientos(ciudad).length,
+    seguimientos: (await getSeguimientos(ciudad)).length,
   };
 }

@@ -68,10 +68,10 @@ function fmtItem(r: SolicitudReg): string {
   return `• *${r.nombre || "Cliente"}* · ${r.ciudad || "?"}${p}${tel}\n   ${r.detalle}  _(${r.fecha})_\n   ➡️ Derivado a: *${asesorDe(r.ciudad)}*`;
 }
 
-function listLeads(ciudad?: string): string {
+async function listLeads(ciudad?: string): Promise<string> {
   const t = ciudad ? `en *${ciudad}*` : "a nivel *nacional*";
   try {
-    const l = getLeads(ciudad).filter((r) => esDeHoy(r.fecha));
+    const l = (await getLeads(ciudad)).filter((r) => esDeHoy(r.fecha));
     if (!l.length) return `📭 Sin leads nuevos hoy ${t}.`;
     return `🧾 *Leads del día* (${t}) — *${l.length}*\n\n` + l.map(fmtItem).join("\n\n");
   } catch (err) {
@@ -79,8 +79,8 @@ function listLeads(ciudad?: string): string {
     return `⚠️ No pude cargar los leads del día ${t} por un error interno. Ya quedó registrado en los logs.`;
   }
 }
-function listReclamos(ciudad?: string): string {
-  const l = getReclamos(ciudad);
+async function listReclamos(ciudad?: string): Promise<string> {
+  const l = await getReclamos(ciudad);
   const t = ciudad ? `en *${ciudad}*` : "a nivel *nacional*";
   if (!l.length) return `No hay reclamos ${t}. 👌`;
   return `🚨 *Reclamos prioritarios* (${t}) — *${l.length}*\n\n` + l.map(fmtItem).join("\n\n");
@@ -93,7 +93,7 @@ async function lineaConversacionesHoy(): Promise<string> {
 }
 
 async function resumen(ciudad?: string): Promise<string> {
-  const k = getKpis(ciudad);
+  const k = await getKpis(ciudad);
   const t = ciudad ? `*${ciudad}*` : "*Nacional*";
   const conv = ciudad ? "" : await lineaConversacionesHoy();
   return (
@@ -118,7 +118,7 @@ async function reportes(): Promise<string> {
 
   let porCiudadKpis = "";
   for (const c of ciudadesAdmin()) {
-    const k = getKpis(c);
+    const k = await getKpis(c);
     if (k.leads || k.reclamos || k.seguimientos) {
       porCiudadKpis += `\n*${c}*: ${k.leads} leads · ${k.reclamos} reclamos · ${k.seguimientos} seguim.`;
     }
@@ -141,7 +141,7 @@ export async function handleAdminCommand(sessionId: string, admin: Admin, raw: s
     }
     if (pend.accion === "region") {
       const ciudad = ciudadesAdmin().find((c) => norm(c).includes(text)) || raw.trim();
-      return { text: `${listLeads(ciudad)}\n\n${listReclamos(ciudad)}`, ...VOLVER };
+      return { text: `${await listLeads(ciudad)}\n\n${await listReclamos(ciudad)}`, ...VOLVER };
     }
   }
 
@@ -153,8 +153,8 @@ export async function handleAdminCommand(sessionId: string, admin: Admin, raw: s
   }
 
   if (!text || /(menu|menú|ayuda|hola|inicio|volver|comandos)/.test(text)) return menu(admin);
-  if (/(lead|cotiz)/.test(text)) return { text: listLeads(region), ...VOLVER };
-  if (/reclamo/.test(text)) return { text: listReclamos(region), ...VOLVER };
+  if (/(lead|cotiz)/.test(text)) return { text: await listLeads(region), ...VOLVER };
+  if (/reclamo/.test(text)) return { text: await listReclamos(region), ...VOLVER };
   if (/(resumen|kpi|del dia)/.test(text)) return { text: await resumen(region), ...VOLVER };
 
   if (admin.role === "gerente") {

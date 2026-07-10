@@ -75,6 +75,13 @@ export const config = {
     // ID del Google Sheet con el historial (para leerlo por CSV export).
     backfillSheetId: optional("BACKFILL_SHEET_ID", "11UafcrSOl7YZ7G3cYfrrUvKBzM_irS7RXsq-Avdw8eE"),
   },
+
+  database: {
+    // Postgres (Railway). Persiste leads/reclamos/seguimientos entre
+    // redeploys. Vacío => se usa el respaldo en memoria (se pierde al
+    // reiniciar el proceso).
+    url: optional("DATABASE_URL", ""),
+  },
 };
 
 /**
