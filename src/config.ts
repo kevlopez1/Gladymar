@@ -52,9 +52,13 @@ export const config = {
   },
 
   reporteDiario: {
-    // Hora (0-23, zona Bolivia) a la que se manda el reporte global
-    // automático al Gerente General, una vez por día, sin que lo pida.
-    horaBolivia: Number(optional("REPORTE_DIARIO_HORA", "8")),
+    // Horas (0-23, zona Bolivia) a las que se manda el reporte global
+    // automático al Gerente General, sin que lo pida. Lista separada por
+    // comas, ej. "8,17" = 8am y 5pm.
+    horasBolivia: optional("REPORTE_DIARIO_HORAS", "8,17")
+      .split(",")
+      .map((h) => Number(h.trim()))
+      .filter((h) => Number.isInteger(h) && h >= 0 && h <= 23),
   },
 
   assets: {

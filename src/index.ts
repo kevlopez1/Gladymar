@@ -755,10 +755,11 @@ async function procesarTurnoCliente(
   }
 }
 
-// ── Reporte diario automático para el Gerente General ───────────────────────
-// Se manda una sola vez por día (zona Bolivia), a la hora configurada, SIN que
+// ── Reportes automáticos para el Gerente General ─────────────────────────────
+// Se mandan a las horas configuradas (zona Bolivia, ej. 8am y 5pm), SIN que
 // nadie lo pida. Reutiliza el mismo texto de "Reportes globales" del panel.
-let reporteDiarioEnviadoEl: string | null = null; // fecha (Bolivia) del último envío
+// Cada franja (fecha + hora) se manda una sola vez.
+const reportesEnviados = new Set<string>(); // claves "fecha|hora"
 
 function fechaBoliviaHoy(): string {
   return new Date().toLocaleString("es-BO", { timeZone: "America/La_Paz", hour12: false }).split(",")[0].trim();
@@ -767,25 +768,30 @@ function horaBoliviaActual(): number {
   return Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/La_Paz", hour: "numeric", hour12: false }).format(new Date()));
 }
 
-async function chequearReporteDiario(): Promise<void> {
+async function chequearReportesAutomaticos(): Promise<void> {
   if (!isWhatsAppConfigured()) return;
   const hoy = fechaBoliviaHoy();
-  if (reporteDiarioEnviadoEl === hoy) return; // ya se mandó hoy
-  if (horaBoliviaActual() < config.reporteDiario.horaBolivia) return; // todavía no es la hora
+  const horaActual = horaBoliviaActual();
 
-  reporteDiarioEnviadoEl = hoy; // marcar ANTES de mandar, para no reintentar en loop si falla el envío
-  try {
-    const texto = await reportes();
-    await sendText(ADMIN_TELEFONO, `🗓️ *Reporte automático del día*\n\n${texto}`);
-    console.log(`📊 Reporte diario automático enviado a ${ADMIN_TELEFONO}`);
-  } catch (err) {
-    console.error("No se pudo enviar el reporte diario automático:", err);
+  for (const hora of config.reporteDiario.horasBolivia) {
+    if (horaActual < hora) continue; // todavía no es esta franja
+    const clave = `${hoy}|${hora}`;
+    if (reportesEnviados.has(clave)) continue; // ya se mandó esta franja hoy
+
+    reportesEnviados.add(clave); // marcar ANTES de mandar, para no reintentar en loop si falla el envío
+    try {
+      const texto = await reportes();
+      await sendText(ADMIN_TELEFONO, `🗓️ *Reporte automático* (${String(hora).padStart(2, "0")}:00)\n\n${texto}`);
+      console.log(`📊 Reporte automático (${hora}:00) enviado a ${ADMIN_TELEFONO}`);
+    } catch (err) {
+      console.error(`No se pudo enviar el reporte automático de las ${hora}:00:`, err);
+    }
   }
 }
 
-const reporteDiarioTimer = setInterval(() => void chequearReporteDiario(), 15 * 60 * 1000);
-if (typeof reporteDiarioTimer.unref === "function") reporteDiarioTimer.unref();
-void chequearReporteDiario(); // chequeo inicial (por si el proceso arranca después de la hora configurada)
+const reportesAutomaticosTimer = setInterval(() => void chequearReportesAutomaticos(), 15 * 60 * 1000);
+if (typeof reportesAutomaticosTimer.unref === "function") reportesAutomaticosTimer.unref();
+void chequearReportesAutomaticos(); // chequeo inicial (por si el proceso arranca después de alguna franja)
 
 // Red de seguridad global: un error no capturado en cualquier punto (ej. una
 // promesa "en segundo plano" que nadie esperó) NUNCA debe tumbar el proceso
