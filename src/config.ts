@@ -51,6 +51,12 @@ export const config = {
     delayMinutes: Number(optional("SURVEY_DELAY_MINUTES", "30")),
   },
 
+  reporteDiario: {
+    // Hora (0-23, zona Bolivia) a la que se manda el reporte global
+    // automático al Gerente General, una vez por día, sin que lo pida.
+    horaBolivia: Number(optional("REPORTE_DIARIO_HORA", "8")),
+  },
+
   assets: {
     // Enlace PÚBLICO y directo al Manual de Asentamiento (Tríptico de Colocación)
     // en PDF. Si se define, el agente lo adjunta cuando el cliente lo solicita.
