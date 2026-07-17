@@ -103,7 +103,8 @@ async function resumen(ciudad?: string): Promise<string> {
     `Seguimientos: *${k.seguimientos}*`
   );
 }
-async function reportes(): Promise<string> {
+/** Exportada para el reporte diario automático (index.ts), además del comando "Reportes globales". */
+export async function reportes(): Promise<string> {
   const stats = await obtenerStatsHoy();
   let out = `📈 *Reporte global* · Bolivia\n\n${await lineaConversacionesHoy()}`;
 
