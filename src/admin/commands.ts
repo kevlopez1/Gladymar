@@ -39,7 +39,7 @@ function norm(s: string): string {
 
 function menu(admin: Admin): AdminReply {
   const base = ["Leads del día", "Reclamos prioritarios", "Resumen del día"];
-  const gm = ["Reportes globales", "Enviar comunicado", "Ver una región", "🧪 Probar como cliente"];
+  const gm = ["Reportes globales", "Reporte semanal de leads", "Enviar comunicado", "Ver una región", "🧪 Probar como cliente"];
   const opciones = admin.role === "gerente" ? [...base, ...gm] : base;
   const ambito = admin.role === "gerente" ? "Nacional 🇧🇴" : admin.region;
   return {
@@ -103,6 +103,36 @@ async function resumen(ciudad?: string): Promise<string> {
     `Seguimientos: *${k.seguimientos}*`
   );
 }
+/** ¿El registro se creó dentro de los últimos 7 días (usa el timestamp real, no el texto de fecha)? */
+function haceMenosDeUnaSemana(creadoEn: number): boolean {
+  return Date.now() - creadoEn <= 7 * 24 * 60 * 60 * 1000;
+}
+
+async function reporteSemanalLeads(): Promise<string> {
+  try {
+    const leads = (await getLeads()).filter((r) => haceMenosDeUnaSemana(r.creadoEn));
+    if (!leads.length) return "📅 *Reporte semanal de leads* (últimos 7 días)\n\nSin leads registrados en la última semana.";
+
+    const porCiudad: Record<string, number> = {};
+    for (const l of leads) {
+      const c = l.ciudad || "Sin ciudad";
+      porCiudad[c] = (porCiudad[c] || 0) + 1;
+    }
+    const resumenCiudades = Object.entries(porCiudad)
+      .sort((a, b) => b[1] - a[1])
+      .map(([c, n]) => `${c}: ${n}`)
+      .join(" · ");
+
+    return (
+      `📅 *Reporte semanal de leads* (últimos 7 días) — *${leads.length}*\n${resumenCiudades}\n\n` +
+      leads.map(fmtItem).join("\n\n")
+    );
+  } catch (err) {
+    console.error("Error generando el reporte semanal de leads:", err);
+    return "⚠️ No pude generar el reporte semanal de leads por un error interno. Ya quedó registrado en los logs.";
+  }
+}
+
 /** Exportada para el reporte diario automático (index.ts), además del comando "Reportes globales". */
 export async function reportes(): Promise<string> {
   const stats = await obtenerStatsHoy();
@@ -154,6 +184,10 @@ export async function handleAdminCommand(sessionId: string, admin: Admin, raw: s
   }
 
   if (!text || /(menu|menú|ayuda|hola|inicio|volver|comandos)/.test(text)) return menu(admin);
+  if (/semanal/.test(text)) {
+    if (admin.role === "gerente") return { text: await reporteSemanalLeads(), ...VOLVER };
+    return { text: "Ese comando es exclusivo del Gerente General. Tu panel cubre solo tu región.", ...VOLVER };
+  }
   if (/(lead|cotiz)/.test(text)) return { text: await listLeads(region), ...VOLVER };
   if (/reclamo/.test(text)) return { text: await listReclamos(region), ...VOLVER };
   if (/(resumen|kpi|del dia)/.test(text)) return { text: await resumen(region), ...VOLVER };
