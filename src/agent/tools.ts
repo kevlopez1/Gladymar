@@ -18,6 +18,7 @@ import { infoTema, temasDisponibles } from "../knowledge/temas.js";
 import { AREAS } from "../knowledge/contactos.js";
 import { recordSolicitud } from "../admin/data.js";
 import { construirCotizacion, bs, type Cotizacion } from "./cotizacion.js";
+import { buscarPedidoPorFactura, formatearEstadoPedido } from "../integrations/despacho.js";
 
 const TIPOS_SOLICITUD = [
   "contactar_asesor",
@@ -127,6 +128,21 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "consultar_pedido",
+    description:
+      "Consulta el estado REAL de un pedido ya realizado (si salió del almacén, fue despachado o entregado) buscando por número de FACTURA en el sistema de logística de Gladymar. Úsala SOLO cuando el cliente pregunte por el seguimiento/trazabilidad de un pedido que YA hizo (no para cotizaciones nuevas). Si todavía no dio el número de factura, PEDÍSELO primero: no llames esta herramienta sin ese dato.",
+    input_schema: {
+      type: "object",
+      properties: {
+        factura: {
+          type: "string",
+          description: "Número de factura que dio el cliente, tal como lo escribió.",
+        },
+      },
+      required: ["factura"],
+    },
+  },
+  {
     name: "generar_cotizacion",
     description:
       "Genera una COTIZACIÓN en documento PDF (con el logo de Gladymar) y se la envía al cliente. Úsala SOLO cuando el cliente ya definió qué productos quiere y las cantidades (m² o unidades). Los precios son REFERENCIALES/estimados: aclaráselo al cliente y que un asesor confirma el precio final. Pasá el nombre del cliente y la lista de ítems.",
@@ -180,12 +196,12 @@ export interface ToolExecution {
 /**
  * Ejecuta una herramienta por nombre con los argumentos provistos por Claude.
  */
-export function executeTool(
+export async function executeTool(
   name: string,
   input: Record<string, unknown>,
   telefonoCliente?: string,
   prueba?: boolean,
-): ToolExecution {
+): Promise<ToolExecution> {
   switch (name) {
     case "mostrar_menu": {
       const seccion = typeof input.seccion === "string" ? input.seccion.trim() : "";
@@ -233,6 +249,22 @@ export function executeTool(
 
     case "registrar_solicitud":
       return registrarSolicitud(input, telefonoCliente, prueba);
+
+    case "consultar_pedido": {
+      const factura = typeof input.factura === "string" ? input.factura.trim() : "";
+      if (!factura) {
+        return { content: "No se recibió un número de factura. Pedile al cliente su número de factura para poder consultar el estado del pedido." };
+      }
+      const pedido = await buscarPedidoPorFactura(factura);
+      if (!pedido) {
+        return {
+          content:
+            `No encontré la factura "${factura}" en el sistema de despacho (puede ser muy reciente, estar mal escrita, o el sistema puede no estar disponible ahora mismo). ` +
+            "Pedile amablemente que confirme el número. Si insiste en que es correcto y no aparece, derivalo a un asesor con registrar_solicitud (tipo 'seguimiento_pedido').",
+        };
+      }
+      return { content: formatearEstadoPedido(pedido) };
+    }
 
     case "generar_cotizacion": {
       const nombre = typeof input.nombre === "string" && input.nombre.trim() ? input.nombre.trim() : "Cliente";
