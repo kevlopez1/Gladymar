@@ -86,6 +86,13 @@ export const config = {
     backfillSheetId: optional("BACKFILL_SHEET_ID", "11UafcrSOl7YZ7G3cYfrrUvKBzM_irS7RXsq-Avdw8eE"),
   },
 
+  despacho: {
+    // Hoja de control de despacho (NO es nuestra: la administra logística de
+    // Gladymar). Se lee en tiempo real para responder "¿cómo va mi pedido?"
+    // por número de factura. Vacío => la consulta queda desactivada.
+    sheetId: optional("DESPACHO_SHEET_ID", "1HOSOrfxrVZv0hAZFAZhjj58MwboBWXbg1pd7_31KqrA"),
+  },
+
   database: {
     // Postgres (Railway). Persiste leads/reclamos/seguimientos entre
     // redeploys. Vacío => se usa el respaldo en memoria (se pierde al
