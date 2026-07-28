@@ -37,6 +37,44 @@ export async function sendText(to: string, body: string): Promise<void> {
 }
 
 /**
+ * Envía un mensaje de PLANTILLA (template) aprobada por Meta, con variables
+ * numeradas en el body ({{1}}, {{2}}, ...). A diferencia de sendText, esto
+ * funciona aunque hayan pasado más de 24h desde el último mensaje del
+ * cliente — necesario para avisos proactivos como el estado de un pedido.
+ */
+export async function sendTemplate(
+  to: string,
+  templateName: string,
+  languageCode: string,
+  bodyParams: string[],
+): Promise<void> {
+  const url = `${BASE}/${config.whatsapp.phoneNumberId}/messages`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.whatsapp.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+        components: [{ type: "body", parameters: bodyParams.map((text) => ({ type: "text", text })) }],
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Error enviando plantilla WhatsApp (${res.status}): ${detail}`);
+  }
+}
+
+/**
  * Envía un documento (PDF) por WhatsApp a partir de un enlace público.
  * Útil para el Manual de Asentamiento (Tríptico de Colocación) y catálogos.
  * @param link URL pública y directa al archivo (debe ser accesible por Meta).

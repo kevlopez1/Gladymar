@@ -41,6 +41,13 @@ async function crearTabla(): Promise<void> {
     );
   `);
   await p.query(`CREATE INDEX IF NOT EXISTS solicitudes_creado_en_idx ON solicitudes (creado_en DESC);`);
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS pedido_estados (
+      factura TEXT PRIMARY KEY,
+      estado TEXT NOT NULL,
+      actualizado_en BIGINT NOT NULL
+    );
+  `);
 }
 
 /** Asegura que la tabla exista antes de la primera consulta (idempotente, con reintento si falló). */
@@ -118,5 +125,38 @@ export async function obtenerSolicitudes(): Promise<SolicitudRow[] | null> {
   } catch (err) {
     console.error("No se pudieron leer las solicitudes desde Postgres:", err);
     return null;
+  }
+}
+
+/**
+ * Último estado notificado de una factura (para no repetir el mismo aviso de
+ * pedido dos veces). Null si no hay BD o si nunca se notificó esta factura.
+ */
+export async function obtenerEstadoPedido(factura: string): Promise<string | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await tablaLista();
+    const res = await p.query<{ estado: string }>(`SELECT estado FROM pedido_estados WHERE factura = $1`, [factura]);
+    return res.rows[0]?.estado ?? null;
+  } catch (err) {
+    console.error("No se pudo leer el estado del pedido desde Postgres:", err);
+    return null;
+  }
+}
+
+/** Guarda el último estado notificado de una factura. Nunca lanza. */
+export async function guardarEstadoPedido(factura: string, estado: string): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await tablaLista();
+    await p.query(
+      `INSERT INTO pedido_estados (factura, estado, actualizado_en) VALUES ($1, $2, $3)
+       ON CONFLICT (factura) DO UPDATE SET estado = EXCLUDED.estado, actualizado_en = EXCLUDED.actualizado_en`,
+      [factura, estado, Date.now()],
+    );
+  } catch (err) {
+    console.error("No se pudo guardar el estado del pedido en Postgres:", err);
   }
 }

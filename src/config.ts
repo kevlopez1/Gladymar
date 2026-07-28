@@ -91,6 +91,11 @@ export const config = {
     // Gladymar). Se lee en tiempo real para responder "¿cómo va mi pedido?"
     // por número de factura. Vacío => la consulta queda desactivada.
     sheetId: optional("DESPACHO_SHEET_ID", "1HOSOrfxrVZv0hAZFAZhjj58MwboBWXbg1pd7_31KqrA"),
+    // Plantillas de WhatsApp (aprobadas en Meta) para avisar al cliente sin que
+    // pregunte, cuando su factura pasa a "Preparado" o "Despachado".
+    templatePreparado: optional("WHATSAPP_TEMPLATE_PEDIDO_PREPARADO", "gladymar_pedido_preparado"),
+    templateDespachado: optional("WHATSAPP_TEMPLATE_PEDIDO_DESPACHADO", "gladymar_pedido_despachado"),
+    templateIdioma: optional("WHATSAPP_TEMPLATE_IDIOMA", "es"),
   },
 
   database: {

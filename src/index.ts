@@ -21,6 +21,7 @@ import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, ADMIN_TELEFONO,
 import { handleAdminCommand, reportes } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
 import { ciudadesConSucursal } from "./knowledge/sucursales.js";
+import { chequearNotificacionesPedidos } from "./integrations/pedidoEstados.js";
 
 const sheets = new SheetsLogger(config.sheets.webhookUrl);
 const crm = new CrmIngest(config.crm.ingestUrl, config.crm.ingestToken);
@@ -792,6 +793,13 @@ async function chequearReportesAutomaticos(): Promise<void> {
 const reportesAutomaticosTimer = setInterval(() => void chequearReportesAutomaticos(), 15 * 60 * 1000);
 if (typeof reportesAutomaticosTimer.unref === "function") reportesAutomaticosTimer.unref();
 void chequearReportesAutomaticos(); // chequeo inicial (por si el proceso arranca después de alguna franja)
+
+// ── Notificaciones automáticas de estado de pedido ───────────────────────────
+// Avisa al cliente por WhatsApp (plantilla de Meta) cuando su pedido pasa a
+// "Preparado" o "Despachado", sin que tenga que preguntar. Ver pedidoEstados.ts.
+const pedidosAutomaticosTimer = setInterval(() => void chequearNotificacionesPedidos(), 15 * 60 * 1000);
+if (typeof pedidosAutomaticosTimer.unref === "function") pedidosAutomaticosTimer.unref();
+void chequearNotificacionesPedidos();
 
 // Red de seguridad global: un error no capturado en cualquier punto (ej. una
 // promesa "en segundo plano" que nadie esperó) NUNCA debe tumbar el proceso
