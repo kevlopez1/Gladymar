@@ -129,18 +129,22 @@ export async function obtenerSolicitudes(): Promise<SolicitudRow[] | null> {
 }
 
 /**
- * Último estado notificado de una factura (para no repetir el mismo aviso de
- * pedido dos veces). Null si no hay BD o si nunca se notificó esta factura.
+ * Estados ya notificados, por factura (una sola consulta, no N).
+ *
+ * IMPORTANTE: devuelve `null` cuando la BD no está disponible, para poder
+ * distinguirlo de "no hay ninguno notificado todavía" (Map vacío). Sin esa
+ * distinción, una caída de Postgres haría que se reenvíen los avisos a TODOS
+ * los clientes en cada chequeo (spam + costo por plantilla de Meta).
  */
-export async function obtenerEstadoPedido(factura: string): Promise<string | null> {
+export async function obtenerEstadosPedidos(): Promise<Map<string, string> | null> {
   const p = getPool();
   if (!p) return null;
   try {
     await tablaLista();
-    const res = await p.query<{ estado: string }>(`SELECT estado FROM pedido_estados WHERE factura = $1`, [factura]);
-    return res.rows[0]?.estado ?? null;
+    const res = await p.query<{ factura: string; estado: string }>(`SELECT factura, estado FROM pedido_estados`);
+    return new Map(res.rows.map((r) => [r.factura, r.estado]));
   } catch (err) {
-    console.error("No se pudo leer el estado del pedido desde Postgres:", err);
+    console.error("No se pudieron leer los estados de pedidos desde Postgres:", err);
     return null;
   }
 }
