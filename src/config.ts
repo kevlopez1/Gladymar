@@ -96,6 +96,15 @@ export const config = {
     templatePreparado: optional("WHATSAPP_TEMPLATE_PEDIDO_PREPARADO", "gladymar_pedido_preparado"),
     templateDespachado: optional("WHATSAPP_TEMPLATE_PEDIDO_DESPACHADO", "gladymar_pedido_despachado"),
     templateIdioma: optional("WHATSAPP_TEMPLATE_IDIOMA", "es"),
+    // Números internos de Gladymar cargados en la hoja para hacer pruebas. Se
+    // repiten a propósito en varias facturas, así que quedan exentos del
+    // bloqueo por "un teléfono con varios clientes" (ese bloqueo existe para
+    // no mandarle el pedido de un cliente al WhatsApp de otro cliente real).
+    // Lista separada por comas, 8 dígitos, ej. "71091625,72155186".
+    telefonosPrueba: optional("DESPACHO_TELEFONOS_PRUEBA", "")
+      .split(",")
+      .map((t) => t.replace(/\D/g, ""))
+      .filter(Boolean),
   },
 
   database: {

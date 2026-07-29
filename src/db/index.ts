@@ -41,11 +41,16 @@ async function crearTabla(): Promise<void> {
     );
   `);
   await p.query(`CREATE INDEX IF NOT EXISTS solicitudes_creado_en_idx ON solicitudes (creado_en DESC);`);
+  // Clave compuesta (factura, telefono): una factura puede tener dos números de
+  // contacto y a ambos hay que avisarles, sin que el aviso a uno marque como
+  // "ya notificado" al otro.
   await p.query(`
     CREATE TABLE IF NOT EXISTS pedido_estados (
-      factura TEXT PRIMARY KEY,
+      factura TEXT NOT NULL,
+      telefono TEXT NOT NULL,
       estado TEXT NOT NULL,
-      actualizado_en BIGINT NOT NULL
+      actualizado_en BIGINT NOT NULL,
+      PRIMARY KEY (factura, telefono)
     );
   `);
 }
@@ -141,24 +146,31 @@ export async function obtenerEstadosPedidos(): Promise<Map<string, string> | nul
   if (!p) return null;
   try {
     await tablaLista();
-    const res = await p.query<{ factura: string; estado: string }>(`SELECT factura, estado FROM pedido_estados`);
-    return new Map(res.rows.map((r) => [r.factura, r.estado]));
+    const res = await p.query<{ factura: string; telefono: string; estado: string }>(
+      `SELECT factura, telefono, estado FROM pedido_estados`,
+    );
+    return new Map(res.rows.map((r) => [claveEstadoPedido(r.factura, r.telefono), r.estado]));
   } catch (err) {
     console.error("No se pudieron leer los estados de pedidos desde Postgres:", err);
     return null;
   }
 }
 
-/** Guarda el último estado notificado de una factura. Nunca lanza. */
-export async function guardarEstadoPedido(factura: string, estado: string): Promise<void> {
+/** Clave del mapa de estados ya notificados. */
+export function claveEstadoPedido(factura: string, telefono: string): string {
+  return `${factura}|${telefono}`;
+}
+
+/** Guarda el último estado notificado a un teléfono para una factura. Nunca lanza. */
+export async function guardarEstadoPedido(factura: string, telefono: string, estado: string): Promise<void> {
   const p = getPool();
   if (!p) return;
   try {
     await tablaLista();
     await p.query(
-      `INSERT INTO pedido_estados (factura, estado, actualizado_en) VALUES ($1, $2, $3)
-       ON CONFLICT (factura) DO UPDATE SET estado = EXCLUDED.estado, actualizado_en = EXCLUDED.actualizado_en`,
-      [factura, estado, Date.now()],
+      `INSERT INTO pedido_estados (factura, telefono, estado, actualizado_en) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (factura, telefono) DO UPDATE SET estado = EXCLUDED.estado, actualizado_en = EXCLUDED.actualizado_en`,
+      [factura, telefono, estado, Date.now()],
     );
   } catch (err) {
     console.error("No se pudo guardar el estado del pedido en Postgres:", err);
