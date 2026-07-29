@@ -71,22 +71,36 @@ async function descargarDespachos(): Promise<string[][] | null> {
   }
 }
 
+export interface LecturaDespachos {
+  pedidos: PedidoActual[];
+  /**
+   * Teléfonos que aparecen con más de un nombre de cliente distinto. Se calcula
+   * sobre TODAS las filas (no sobre los pedidos ya agrupados): si se calculara
+   * después de agrupar por factura, un teléfono compartido que quedó descartado
+   * al elegir el de la factura pasaría desapercibido.
+   */
+  telefonosAmbiguos: Set<string>;
+}
+
 /** Arma un pedido por factura (una factura tiene varias filas, una por producto). */
-export function leerPedidos(filas: string[][]): PedidoActual[] {
+export function leerPedidos(filas: string[][]): LecturaDespachos {
+  const vacio: LecturaDespachos = { pedidos: [], telefonosAmbiguos: new Set() };
   const encIdx = filas.findIndex((f) => f.some((c) => c.trim().toUpperCase() === "FACTURA"));
-  if (encIdx === -1) return [];
+  if (encIdx === -1) return vacio;
   const enc = filas[encIdx].map((c) => c.trim().toUpperCase());
   const col = (nombre: string) => enc.indexOf(nombre);
   const iFactura = col("FACTURA");
   const iTelefono = col("TELEFONO DEL CLIENTE");
   const iNombre = col("NOMBRE DEL CLIENTE");
   const iEstado = col("ESTADO");
-  if (iFactura === -1 || iTelefono === -1 || iEstado === -1) return [];
+  if (iFactura === -1 || iTelefono === -1 || iEstado === -1) return vacio;
 
   // Una factura tiene varias filas (una por producto). Recolectamos TODOS sus
   // teléfonos: si no coinciden entre sí, no hay forma de elegir a cuál avisar.
   interface Acum { nombre: string; estado: string; telefonos: Set<string> }
   const porFactura = new Map<string, Acum>();
+  const nombresPorTelefono = new Map<string, Set<string>>();
+
   for (let r = encIdx + 1; r < filas.length; r++) {
     const f = filas[r];
     const factura = digitos(f[iFactura] ?? "");
@@ -94,40 +108,30 @@ export function leerPedidos(filas: string[][]): PedidoActual[] {
     const telefono = digitos(f[iTelefono] ?? "");
     const estado = (f[iEstado] ?? "").trim().toLowerCase();
     if (!telefono || !estado) continue;
-    const acum = porFactura.get(factura) ?? {
-      nombre: (iNombre >= 0 ? f[iNombre] ?? "" : "").trim(),
-      estado,
-      telefonos: new Set<string>(),
-    };
+    const nombre = (iNombre >= 0 ? f[iNombre] ?? "" : "").trim();
+
+    const acum = porFactura.get(factura) ?? { nombre, estado, telefonos: new Set<string>() };
     acum.telefonos.add(telefono);
     porFactura.set(factura, acum);
+
+    if (!nombresPorTelefono.has(telefono)) nombresPorTelefono.set(telefono, new Set());
+    nombresPorTelefono.get(telefono)!.add(nombre.toUpperCase());
   }
 
-  return [...porFactura.entries()].map(([factura, a]) => ({
+  const telefonosAmbiguos = new Set<string>();
+  for (const [tel, nombres] of nombresPorTelefono) {
+    if (nombres.size > 1) telefonosAmbiguos.add(tel);
+  }
+
+  const pedidos = [...porFactura.entries()].map(([factura, a]) => ({
     factura,
     nombre: a.nombre,
     estado: a.estado,
     telefono: [...a.telefonos][0],
     telefonoInconsistente: a.telefonos.size > 1,
   }));
-}
 
-/**
- * Teléfonos que aparecen con más de un nombre de cliente distinto: no se puede
- * saber a quién pertenecen, así que no se les manda nada (mandaríamos el pedido
- * de un cliente al WhatsApp de otro).
- */
-export function telefonosAmbiguos(pedidos: PedidoActual[]): Set<string> {
-  const nombresPorTelefono = new Map<string, Set<string>>();
-  for (const p of pedidos) {
-    if (!nombresPorTelefono.has(p.telefono)) nombresPorTelefono.set(p.telefono, new Set());
-    nombresPorTelefono.get(p.telefono)!.add(p.nombre.toUpperCase());
-  }
-  const ambiguos = new Set<string>();
-  for (const [tel, nombres] of nombresPorTelefono) {
-    if (nombres.size > 1) ambiguos.add(tel);
-  }
-  return ambiguos;
+  return { pedidos, telefonosAmbiguos };
 }
 
 /**
@@ -146,7 +150,7 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
   try {
     const filas = await descargarDespachos();
     if (!filas) return;
-    const pedidos = leerPedidos(filas);
+    const { pedidos, telefonosAmbiguos: ambiguos } = leerPedidos(filas);
     if (!pedidos.length) return;
 
     const yaAvisado = await obtenerEstadosPedidos();
@@ -164,7 +168,6 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
     }
 
     // Protección 3: teléfonos que no identifican a un solo cliente.
-    const ambiguos = telefonosAmbiguos(pedidos);
     if (ambiguos.size) {
       console.warn(`📦 ${ambiguos.size} teléfono(s) aparecen con varios clientes distintos en la hoja; esos pedidos NO se avisan.`);
     }
