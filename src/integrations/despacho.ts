@@ -51,17 +51,26 @@ export function detectarEncabezado(ws: ExcelJS.Worksheet): { fila: number; indic
 
 /** ¿Es una celda de solo-hora? Excel las guarda como fecha en su época base (30/12/1899). */
 function esSoloHora(d: Date): boolean {
-  return d.getFullYear() === 1899 || d.getFullYear() === 1900;
+  return d.getUTCFullYear() === 1899 || d.getUTCFullYear() === 1900;
 }
 
+/**
+ * Texto de una celda.
+ *
+ * Las fechas/horas de Excel NO llevan zona horaria: "24/07/2026" significa ese
+ * día calendario, sin más. ExcelJS las entrega como medianoche UTC, así que
+ * formatearlas en America/La_Paz (UTC-4) las corría al día ANTERIOR: la hoja
+ * decía 24 de julio y al cliente se le informaba el 23. Por eso se formatean
+ * en UTC, que es como vinieron.
+ */
 export function celda(row: ExcelJS.Row, col: number | undefined): string {
   if (col === undefined) return "";
   const v: unknown = row.getCell(col).value;
   if (v == null) return "";
   if (v instanceof Date) {
     return esSoloHora(v)
-      ? v.toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })
-      : v.toLocaleDateString("es-BO", { timeZone: "America/La_Paz" });
+      ? v.toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })
+      : v.toLocaleDateString("es-BO", { timeZone: "UTC" });
   }
   if (typeof v === "object" && "text" in v) return String((v as { text: unknown }).text ?? "");
   return String(v).trim();
