@@ -30,10 +30,20 @@ import { sendTemplate } from "../whatsapp/client.js";
 import { obtenerEstadosPedidos, guardarEstadoPedido, dbHabilitada, claveEstadoPedido } from "../db/index.js";
 import { esAdmin } from "../admin/roles.js";
 
-/** Estados que disparan aviso -> plantilla de Meta a usar. */
-function templateDeEstado(estado: string): string | null {
-  if (estado === "preparado") return config.despacho.templatePreparado;
-  if (estado === "despachado") return config.despacho.templateDespachado;
+/**
+ * Estados que disparan aviso -> plantilla de Meta a usar (nombre + idioma).
+ * El idioma es parte de la identidad de la plantilla en Meta, por eso cada una
+ * puede tener el suyo (si una quedó registrada como "English", hay que pedirla
+ * como "en" aunque su texto esté en español).
+ */
+function templateDeEstado(estado: string): { nombre: string; idioma: string } | null {
+  const d = config.despacho;
+  if (estado === "preparado") {
+    return { nombre: d.templatePreparado, idioma: d.templatePreparadoIdioma || d.templateIdioma };
+  }
+  if (estado === "despachado") {
+    return { nombre: d.templateDespachado, idioma: d.templateDespachadoIdioma || d.templateIdioma };
+  }
   return null; // "Entregado" u otros: no se avisa (el cliente ya lo recibió).
 }
 
@@ -206,7 +216,7 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
         }
 
         try {
-          await sendTemplate(telefonoInternacional(tel), template, config.despacho.templateIdioma, [
+          await sendTemplate(telefonoInternacional(tel), template.nombre, template.idioma, [
             pedido.nombre || "Cliente",
             pedido.factura,
           ]);
