@@ -34,7 +34,7 @@ export interface ResultadoPedido {
 }
 
 /** Encuentra la fila de encabezado (la que tiene "FACTURA" como valor de celda) y arma un índice columna->nombre. */
-function detectarEncabezado(ws: ExcelJS.Worksheet): { fila: number; indice: Record<string, number> } | null {
+export function detectarEncabezado(ws: ExcelJS.Worksheet): { fila: number; indice: Record<string, number> } | null {
   for (let r = 1; r <= Math.min(ws.rowCount, 10); r++) {
     const row = ws.getRow(r);
     const valores = (row.values as unknown[]).map((v) => String(v ?? "").trim().toUpperCase());
@@ -51,20 +51,50 @@ function detectarEncabezado(ws: ExcelJS.Worksheet): { fila: number; indice: Reco
 
 /** ¿Es una celda de solo-hora? Excel las guarda como fecha en su época base (30/12/1899). */
 function esSoloHora(d: Date): boolean {
-  return d.getFullYear() === 1899 || d.getFullYear() === 1900;
+  return d.getUTCFullYear() === 1899 || d.getUTCFullYear() === 1900;
 }
 
-function celda(row: ExcelJS.Row, col: number | undefined): string {
+/**
+ * Texto de una celda.
+ *
+ * Las fechas/horas de Excel NO llevan zona horaria: "24/07/2026" significa ese
+ * día calendario, sin más. ExcelJS las entrega como medianoche UTC, así que
+ * formatearlas en America/La_Paz (UTC-4) las corría al día ANTERIOR: la hoja
+ * decía 24 de julio y al cliente se le informaba el 23. Por eso se formatean
+ * en UTC, que es como vinieron.
+ */
+export function celda(row: ExcelJS.Row, col: number | undefined): string {
   if (col === undefined) return "";
   const v: unknown = row.getCell(col).value;
   if (v == null) return "";
   if (v instanceof Date) {
     return esSoloHora(v)
-      ? v.toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })
-      : v.toLocaleDateString("es-BO", { timeZone: "America/La_Paz" });
+      ? v.toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })
+      : v.toLocaleDateString("es-BO", { timeZone: "UTC" });
   }
   if (typeof v === "object" && "text" in v) return String((v as { text: unknown }).text ?? "");
   return String(v).trim();
+}
+
+/**
+ * Descarga el libro completo (todas las pestañas) de la hoja de control de
+ * despacho. Nunca lanza: devuelve null si no hay red, la hoja no está
+ * compartida, o `DESPACHO_SHEET_ID` no está configurado.
+ */
+export async function cargarLibroDespacho(): Promise<ExcelJS.Workbook | null> {
+  if (!config.despacho.sheetId) return null;
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/${config.despacho.sheetId}/export?format=xlsx`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    if (!res.ok) return null;
+    const buffer = await res.arrayBuffer();
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer);
+    return wb;
+  } catch (err) {
+    console.error("No se pudo descargar la hoja de control de despacho:", err);
+    return null;
+  }
 }
 
 /**
@@ -72,18 +102,12 @@ function celda(row: ExcelJS.Row, col: number | undefined): string {
  * Nunca lanza: devuelve null si no se pudo consultar o no se encontró.
  */
 export async function buscarPedidoPorFactura(facturaInput: string): Promise<ResultadoPedido | null> {
-  if (!config.despacho.sheetId) return null;
   const facturaBuscada = facturaInput.replace(/\D/g, "");
   if (!facturaBuscada) return null;
 
   try {
-    const url = `https://docs.google.com/spreadsheets/d/${config.despacho.sheetId}/export?format=xlsx`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    if (!res.ok) return null;
-    const buffer = await res.arrayBuffer();
-
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buffer);
+    const wb = await cargarLibroDespacho();
+    if (!wb) return null;
 
     for (const nombre of PESTAÑAS) {
       const ws = wb.getWorksheet(nombre);

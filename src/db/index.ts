@@ -41,6 +41,18 @@ async function crearTabla(): Promise<void> {
     );
   `);
   await p.query(`CREATE INDEX IF NOT EXISTS solicitudes_creado_en_idx ON solicitudes (creado_en DESC);`);
+  // Clave compuesta (factura, telefono): una factura puede tener dos números de
+  // contacto y a ambos hay que avisarles, sin que el aviso a uno marque como
+  // "ya notificado" al otro.
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS pedido_estados (
+      factura TEXT NOT NULL,
+      telefono TEXT NOT NULL,
+      estado TEXT NOT NULL,
+      actualizado_en BIGINT NOT NULL,
+      PRIMARY KEY (factura, telefono)
+    );
+  `);
 }
 
 /** Asegura que la tabla exista antes de la primera consulta (idempotente, con reintento si falló). */
@@ -118,5 +130,49 @@ export async function obtenerSolicitudes(): Promise<SolicitudRow[] | null> {
   } catch (err) {
     console.error("No se pudieron leer las solicitudes desde Postgres:", err);
     return null;
+  }
+}
+
+/**
+ * Estados ya notificados, por factura (una sola consulta, no N).
+ *
+ * IMPORTANTE: devuelve `null` cuando la BD no está disponible, para poder
+ * distinguirlo de "no hay ninguno notificado todavía" (Map vacío). Sin esa
+ * distinción, una caída de Postgres haría que se reenvíen los avisos a TODOS
+ * los clientes en cada chequeo (spam + costo por plantilla de Meta).
+ */
+export async function obtenerEstadosPedidos(): Promise<Map<string, string> | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await tablaLista();
+    const res = await p.query<{ factura: string; telefono: string; estado: string }>(
+      `SELECT factura, telefono, estado FROM pedido_estados`,
+    );
+    return new Map(res.rows.map((r) => [claveEstadoPedido(r.factura, r.telefono), r.estado]));
+  } catch (err) {
+    console.error("No se pudieron leer los estados de pedidos desde Postgres:", err);
+    return null;
+  }
+}
+
+/** Clave del mapa de estados ya notificados. */
+export function claveEstadoPedido(factura: string, telefono: string): string {
+  return `${factura}|${telefono}`;
+}
+
+/** Guarda el último estado notificado a un teléfono para una factura. Nunca lanza. */
+export async function guardarEstadoPedido(factura: string, telefono: string, estado: string): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await tablaLista();
+    await p.query(
+      `INSERT INTO pedido_estados (factura, telefono, estado, actualizado_en) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (factura, telefono) DO UPDATE SET estado = EXCLUDED.estado, actualizado_en = EXCLUDED.actualizado_en`,
+      [factura, telefono, estado, Date.now()],
+    );
+  } catch (err) {
+    console.error("No se pudo guardar el estado del pedido en Postgres:", err);
   }
 }

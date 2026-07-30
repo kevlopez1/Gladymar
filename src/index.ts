@@ -21,6 +21,8 @@ import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, ADMIN_TELEFONO,
 import { handleAdminCommand, reportes } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
 import { ciudadesConSucursal } from "./knowledge/sucursales.js";
+import { chequearNotificacionesPedidos } from "./integrations/pedidoEstados.js";
+import { parseCSV } from "./util/csv.js";
 
 const sheets = new SheetsLogger(config.sheets.webhookUrl);
 const crm = new CrmIngest(config.crm.ingestUrl, config.crm.ingestToken);
@@ -265,11 +267,46 @@ app.get("/conectar", (_req, res) => {
   }
 });
 
+// ── Límite de uso del demo web ───────────────────────────────────────────────
+// /api/chat es público (la demo del sitio) y cada llamada consume tokens de la
+// API de Claude. Sin tope, cualquiera podría dispararlo en bucle y generar
+// gasto ilimitado. Límite por IP, en memoria (sin dependencias nuevas).
+const DEMO_MAX_POR_HORA = (() => {
+  const n = Number(process.env.DEMO_MAX_POR_HORA);
+  return Number.isFinite(n) && n > 0 ? n : 60;
+})();
+const demoUso = new Map<string, { n: number; desde: number }>();
+
+/** true si la IP superó el tope de la última hora. */
+function demoExcedido(ip: string): boolean {
+  const ahora = Date.now();
+  const HORA = 60 * 60 * 1000;
+  const uso = demoUso.get(ip);
+  if (!uso || ahora - uso.desde > HORA) {
+    demoUso.set(ip, { n: 1, desde: ahora });
+    return false;
+  }
+  uso.n++;
+  return uso.n > DEMO_MAX_POR_HORA;
+}
+
+// Limpieza periódica para que el mapa no crezca sin límite.
+const limpiezaDemo = setInterval(() => {
+  const limite = Date.now() - 60 * 60 * 1000;
+  for (const [ip, uso] of demoUso) if (uso.desde < limite) demoUso.delete(ip);
+}, 15 * 60 * 1000);
+if (typeof limpiezaDemo.unref === "function") limpiezaDemo.unref();
+
 // Endpoint del demo web: chatea con el mismo cerebro del agente (sin WhatsApp).
 app.post("/api/chat", async (req, res) => {
   const { sessionId, message } = req.body ?? {};
   if (typeof sessionId !== "string" || typeof message !== "string" || message.trim() === "") {
     res.status(400).json({ error: "Se requieren 'sessionId' y 'message'." });
+    return;
+  }
+  const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "desconocida").split(",")[0].trim();
+  if (demoExcedido(ip)) {
+    res.status(429).json({ error: "Demasiadas consultas. Intente nuevamente más tarde." });
     return;
   }
   try {
@@ -370,34 +407,6 @@ function splitLong(text: string, max: number): string[] {
   }
   if (actual) partes.push(actual);
   return partes;
-}
-
-/** Parser CSV robusto (soporta comillas, comas y saltos de línea dentro de un campo). */
-function parseCSV(text: string): string[][] {
-  const filas: string[][] = [];
-  let fila: string[] = [];
-  let campo = "";
-  let comillas = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (comillas) {
-      if (c === '"') {
-        if (text[i + 1] === '"') { campo += '"'; i++; } else comillas = false;
-      } else campo += c;
-    } else if (c === '"') {
-      comillas = true;
-    } else if (c === ",") {
-      fila.push(campo); campo = "";
-    } else if (c === "\r") {
-      /* ignora */
-    } else if (c === "\n") {
-      fila.push(campo); filas.push(fila); fila = []; campo = "";
-    } else {
-      campo += c;
-    }
-  }
-  if (campo !== "" || fila.length) { fila.push(campo); filas.push(fila); }
-  return filas;
 }
 
 /**
@@ -792,6 +801,13 @@ async function chequearReportesAutomaticos(): Promise<void> {
 const reportesAutomaticosTimer = setInterval(() => void chequearReportesAutomaticos(), 15 * 60 * 1000);
 if (typeof reportesAutomaticosTimer.unref === "function") reportesAutomaticosTimer.unref();
 void chequearReportesAutomaticos(); // chequeo inicial (por si el proceso arranca después de alguna franja)
+
+// ── Notificaciones automáticas de estado de pedido ───────────────────────────
+// Avisa al cliente por WhatsApp (plantilla de Meta) cuando su pedido pasa a
+// "Preparado" o "Despachado", sin que tenga que preguntar. Ver pedidoEstados.ts.
+const pedidosAutomaticosTimer = setInterval(() => void chequearNotificacionesPedidos(), 15 * 60 * 1000);
+if (typeof pedidosAutomaticosTimer.unref === "function") pedidosAutomaticosTimer.unref();
+void chequearNotificacionesPedidos();
 
 // Red de seguridad global: un error no capturado en cualquier punto (ej. una
 // promesa "en segundo plano" que nadie esperó) NUNCA debe tumbar el proceso

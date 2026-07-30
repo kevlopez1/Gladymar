@@ -91,6 +91,26 @@ export const config = {
     // Gladymar). Se lee en tiempo real para responder "¿cómo va mi pedido?"
     // por número de factura. Vacío => la consulta queda desactivada.
     sheetId: optional("DESPACHO_SHEET_ID", "1HOSOrfxrVZv0hAZFAZhjj58MwboBWXbg1pd7_31KqrA"),
+    // Plantillas de WhatsApp (aprobadas en Meta) para avisar al cliente sin que
+    // pregunte, cuando su factura pasa a "Preparado" o "Despachado".
+    templatePreparado: optional("WHATSAPP_TEMPLATE_PEDIDO_PREPARADO", "gladymar_pedido_preparado"),
+    templateDespachado: optional("WHATSAPP_TEMPLATE_PEDIDO_DESPACHADO", "gladymar_pedido_despachado"),
+    // Idioma con el que la plantilla quedó registrada en Meta. OJO: el idioma
+    // es parte de la identidad de la plantilla, no del texto: si en Meta se
+    // creó como "English" (aunque el texto esté en español), hay que pedirla
+    // como "en" o el envío falla. Por eso se puede fijar una por plantilla.
+    templateIdioma: optional("WHATSAPP_TEMPLATE_IDIOMA", "es"),
+    templatePreparadoIdioma: optional("WHATSAPP_TEMPLATE_PEDIDO_PREPARADO_IDIOMA", ""),
+    templateDespachadoIdioma: optional("WHATSAPP_TEMPLATE_PEDIDO_DESPACHADO_IDIOMA", ""),
+    // Números internos de Gladymar cargados en la hoja para hacer pruebas. Se
+    // repiten a propósito en varias facturas, así que quedan exentos del
+    // bloqueo por "un teléfono con varios clientes" (ese bloqueo existe para
+    // no mandarle el pedido de un cliente al WhatsApp de otro cliente real).
+    // Lista separada por comas, 8 dígitos, ej. "71091625,72155186".
+    telefonosPrueba: optional("DESPACHO_TELEFONOS_PRUEBA", "")
+      .split(",")
+      .map((t) => t.replace(/\D/g, ""))
+      .filter(Boolean),
   },
 
   database: {
