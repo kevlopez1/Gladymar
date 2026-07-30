@@ -18,7 +18,16 @@ let initPromise: Promise<void> | null = null;
 function getPool(): Pool | null {
   if (!config.database.url) return null;
   if (!pool) {
-    pool = new Pool({ connectionString: config.database.url, max: 5 });
+    pool = new Pool({
+      connectionString: config.database.url,
+      max: 5,
+      // Sin estos topes, una consulta que no responde deja el `await` colgado
+      // para siempre y el proceso que la esperaba (ej. el chequeo de avisos de
+      // pedido) queda mudo e inerte, sin error ni reintento.
+      connectionTimeoutMillis: 10_000,
+      statement_timeout: 15_000,
+      query_timeout: 15_000,
+    });
     pool.on("error", (err) => console.error("Error inesperado en el pool de Postgres:", err));
   }
   return pool;
