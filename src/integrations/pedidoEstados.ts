@@ -222,22 +222,32 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
       console.warn(`📦 ${ambiguos.size} teléfono(s) figuran con varios clientes distintos; esos avisos NO se envían.`);
     }
 
+    let enviados = 0;
+    let sinCambios = 0;
+    let omitidos = 0;
+    let fallidos = 0;
+
     for (const pedido of pedidos) {
       const template = templateDeEstado(pedido.estado);
 
       for (const tel of pedido.telefonos) {
-        if (yaAvisado.get(claveEstadoPedido(pedido.factura, tel)) === pedido.estado) continue; // sin cambios
+        if (yaAvisado.get(claveEstadoPedido(pedido.factura, tel)) === pedido.estado) {
+          sinCambios++;
+          continue;
+        }
 
         // Estado que no avisamos (ej. "Entregado"): se registra para no
         // re-evaluarlo, pero no se manda nada.
         if (!template) {
           await guardarEstadoPedido(pedido.factura, tel, pedido.estado);
+          sinCambios++;
           continue;
         }
 
         // Protección 3: no mandarle el pedido de un cliente al WhatsApp de otro.
         if (ambiguos.has(tel)) {
           console.warn(`📦 Factura ${pedido.factura} omitida para ${tel}: ese número figura con varios clientes.`);
+          omitidos++;
           continue;
         }
 
@@ -247,14 +257,23 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
             pedido.factura,
           ]);
           console.log(`📦 Aviso "${pedido.estado}" enviado (factura ${pedido.factura} -> ${tel})`);
+          enviados++;
         } catch (err) {
-          console.error(`No se pudo enviar el aviso (factura ${pedido.factura} -> ${tel}):`, err);
+          console.error(`📦 No se pudo enviar el aviso (factura ${pedido.factura} -> ${tel}):`, err);
+          fallidos++;
           continue; // no se registra: se reintenta en el próximo chequeo
         }
         await guardarEstadoPedido(pedido.factura, tel, pedido.estado);
       }
     }
+
+    // Cierre SIEMPRE presente: sin esto, un chequeo correcto en el que no hubo
+    // nada que avisar se ve igual que uno que se colgó a mitad de camino.
+    console.log(
+      `📦 Chequeo terminado: ${enviados} aviso(s) enviado(s), ${sinCambios} sin cambios, ` +
+        `${omitidos} omitido(s), ${fallidos} con error.`,
+    );
   } catch (err) {
-    console.error("No se pudo chequear las notificaciones de pedidos:", err);
+    console.error("📦 No se pudo chequear las notificaciones de pedidos:", err);
   }
 }
