@@ -76,18 +76,33 @@ interface PedidoActual {
   telefonos: string[];
 }
 
-/** Descarga la pestaña de pedidos en curso como CSV. Null si no se pudo. */
+/**
+ * Descarga la pestaña de pedidos en curso como CSV. Null si no se pudo.
+ * Cada fallo se loguea con su motivo: si esto queda mudo, los avisos dejan de
+ * salir sin ninguna pista de por qué.
+ */
 async function descargarDespachos(): Promise<string[][] | null> {
-  if (!config.despacho.sheetId) return null;
+  if (!config.despacho.sheetId) {
+    console.warn("📦 Avisos de pedido desactivados: falta DESPACHO_SHEET_ID.");
+    return null;
+  }
   try {
     const url = `https://docs.google.com/spreadsheets/d/${config.despacho.sheetId}/export?format=csv`;
     const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`📦 No se pudo leer la hoja de despacho: HTTP ${res.status} ${res.statusText}`);
+      return null;
+    }
     const csv = await res.text();
-    if (csv.trimStart().startsWith("<")) return null; // HTML => hoja no compartida
+    if (csv.trimStart().startsWith("<")) {
+      console.error(
+        "📦 La hoja de despacho devolvió HTML en vez de CSV: hay que compartirla como 'Cualquiera con el enlace: Lector'.",
+      );
+      return null;
+    }
     return parseCSV(csv);
   } catch (err) {
-    console.error("No se pudo descargar la hoja de despacho (CSV):", err);
+    console.error("📦 No se pudo descargar la hoja de despacho (CSV):", err);
     return null;
   }
 }
@@ -171,7 +186,13 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
     const filas = await descargarDespachos();
     if (!filas) return;
     const { pedidos, telefonosAmbiguos: ambiguos } = leerPedidos(filas);
-    if (!pedidos.length) return;
+    if (!pedidos.length) {
+      console.warn(
+        `📦 La hoja se leyó (${filas.length} filas) pero no se reconoció ningún pedido: ` +
+          "revisar que estén las columnas FACTURA, TELEFONO DEL CLIENTE y ESTADO.",
+      );
+      return;
+    }
 
     const yaAvisado = await obtenerEstadosPedidos();
     if (yaAvisado === null) {
