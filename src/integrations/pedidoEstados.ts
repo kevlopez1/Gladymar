@@ -174,7 +174,10 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
  * estado desde el último chequeo. Nunca lanza.
  */
 export async function chequearNotificacionesPedidos(): Promise<void> {
-  if (!isWhatsAppConfigured()) return;
+  if (!isWhatsAppConfigured()) {
+    console.warn("📦 Avisos de pedido en pausa: faltan credenciales de WhatsApp.");
+    return;
+  }
 
   // Protección 1: sin persistencia no hay forma de saber qué ya se avisó.
   if (!dbHabilitada()) {
@@ -183,6 +186,7 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
   }
 
   try {
+    console.log("📦 Chequeando cambios de estado de pedidos...");
     const filas = await descargarDespachos();
     if (!filas) return;
     const { pedidos, telefonosAmbiguos: ambiguos } = leerPedidos(filas);
@@ -194,6 +198,7 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
       return;
     }
 
+    console.log(`📦 ${pedidos.length} pedido(s) leídos de la hoja; consultando avisos ya enviados...`);
     const yaAvisado = await obtenerEstadosPedidos();
     if (yaAvisado === null) {
       console.warn("📦 Avisos de pedido en pausa: Postgres no respondió (se reintenta en el próximo chequeo).");
