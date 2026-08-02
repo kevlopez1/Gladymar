@@ -54,7 +54,10 @@ export class SheetsLogger {
         body: JSON.stringify(row),
       });
       if (!res.ok) {
-        console.error(`Registro en Sheets falló (${res.status}): ${await res.text()}`);
+        // El cuerpo de error de Google es una página HTML entera: se recorta,
+        // si no cada fallo escupe miles de líneas de markup en los logs.
+        const detalle = (await res.text()).replace(/\s+/g, " ").slice(0, 200);
+        console.error(`Registro en Sheets falló (${res.status}): ${detalle}`);
       }
     } catch (err) {
       console.error("Error registrando en Sheets:", err);

@@ -12,7 +12,7 @@ import { config, isWhatsAppConfigured } from "./config.js";
 import { GladymarAgent, type AgentReply } from "./agent/brain.js";
 import { generarCotizacionPDF } from "./agent/cotizacionPdf.js";
 import { InMemorySessionStore } from "./session/store.js";
-import { sendText, sendDocument, sendInteractiveList, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
+import { sendText, sendDocument, sendInteractiveList, sendTemplate, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
@@ -23,6 +23,7 @@ import { bumpConversacion } from "./admin/data.js";
 import { ciudadesConSucursal } from "./knowledge/sucursales.js";
 import { chequearNotificacionesPedidos } from "./integrations/pedidoEstados.js";
 import { parseCSV } from "./util/csv.js";
+import { insertarConversacion, obtenerConversaciones } from "./db/index.js";
 
 const sheets = new SheetsLogger(config.sheets.webhookUrl);
 const crm = new CrmIngest(config.crm.ingestUrl, config.crm.ingestToken);
@@ -149,6 +150,65 @@ app.get("/admin/stats", async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: String(err) });
+  }
+});
+
+// Conversaciones guardadas en Postgres, en CSV (mismas columnas que la hoja).
+// Sirve para recuperar lo que el Apps Script de Google no pudo registrar y
+// pegarlo de vuelta en la planilla. Se abre: /admin/conversaciones.csv?key=TU_CLAVE
+app.get("/admin/conversaciones.csv", async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  const filas = await obtenerConversaciones(Number(req.query.limite) || 5000);
+  if (filas === null) {
+    res.status(503).json({ error: "Postgres no disponible." });
+    return;
+  }
+  const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const cabecera = ["Fecha", "Teléfono", "Nombre", "Ciudad", "Mensaje", "Respuesta", "Tipo de solicitud", "Prioridad", "Detalle", "Derivado a asesor"];
+  const cuerpo = filas
+    .slice()
+    .reverse() // cronológico, como la hoja
+    .map((f) =>
+      [f.fecha, f.telefono, f.nombre, f.ciudad, f.mensaje, f.respuesta, f.tipo_solicitud, f.prioridad, f.detalle, f.escalado ? "Sí" : "No"]
+        .map(esc)
+        .join(","),
+    );
+  res.set("Content-Type", "text/csv; charset=utf-8");
+  res.set("Content-Disposition", 'attachment; filename="conversaciones.csv"');
+  res.send("﻿" + [cabecera.map(esc).join(","), ...cuerpo].join("\n"));
+});
+
+// Prueba de punta a punta del aviso de pedido: manda UNA plantilla real al
+// número indicado, para verificar que Meta la aceptó y que el texto sale bien.
+// Se abre: /admin/probar-aviso?key=TU_CLAVE&telefono=67401827&estado=despachado
+app.get("/admin/probar-aviso", async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  const telefono = String(req.query.telefono || "").replace(/\D/g, "");
+  if (!telefono) {
+    res.status(400).json({ error: "Falta 'telefono' (8 dígitos, ej. 67401827)." });
+    return;
+  }
+  const estado = String(req.query.estado || "preparado").toLowerCase();
+  const esDespachado = estado.startsWith("desp");
+  const plantilla = esDespachado ? config.despacho.templateDespachado : config.despacho.templatePreparado;
+  const idioma =
+    (esDespachado ? config.despacho.templateDespachadoIdioma : config.despacho.templatePreparadoIdioma) ||
+    config.despacho.templateIdioma;
+  const nombre = String(req.query.nombre || "Cliente de prueba");
+  const factura = String(req.query.factura || "0000");
+  try {
+    await sendTemplate(telefono.startsWith("591") ? telefono : `591${telefono}`, plantilla, idioma, [nombre, factura]);
+    res.json({ estado: "ENVIADO", plantilla, idioma, telefono, nombre, factura });
+  } catch (err) {
+    res.status(502).json({ estado: "FALLÓ", plantilla, idioma, error: String(err) });
   }
 });
 
@@ -713,10 +773,12 @@ async function procesarTurnoCliente(
         console.log(`🔔 Derivación a humano para ${from}`);
       }
 
-      // Registra la interacción en Google Sheets (no bloquea ni interrumpe si falla).
-      // Misma ciudad que se le manda al CRM: la de la solicitud, o la recordada
-      // de la conversación (el cliente la da en el saludo inicial).
-      void sheets.log({
+      // Registra la interacción. Va a DOS destinos independientes:
+      //  - Postgres: fuente de verdad nuestra, no se pierde nada.
+      //  - Google Sheets: cómodo para el equipo, pero depende de un Apps Script
+      //    externo que ya se cayó antes (401) y se perdieron conversaciones.
+      // Ninguno de los dos bloquea ni interrumpe la atención si falla.
+      const registro = {
         fecha: nowBolivia(),
         telefono: from,
         nombre: adminRemitente?.nombre || name,
@@ -727,7 +789,9 @@ async function procesarTurnoCliente(
         prioridad: adminRemitente ? undefined : reply.solicitud?.prioridad,
         detalle: adminRemitente ? undefined : reply.solicitud?.detalle,
         escalado: reply.escalated,
-      });
+      };
+      void insertarConversacion(registro);
+      void sheets.log(registro);
 
       // Envía la interacción al CRM de Prime en tiempo real (best-effort, sin bloquear).
       // El payload se arma ATÓMICAMENTE con datos de ESTA conversación (locales),
