@@ -62,6 +62,26 @@ async function crearTabla(): Promise<void> {
       PRIMARY KEY (factura, telefono)
     );
   `);
+  // Registro de conversaciones. Existe porque el registro en Google Sheets
+  // depende de un Apps Script externo que puede caerse (pasó: 34 fallos 401 en
+  // un día, con esas conversaciones perdidas para siempre). Acá no se pierden.
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS conversaciones (
+      id SERIAL PRIMARY KEY,
+      fecha TEXT NOT NULL,
+      telefono TEXT NOT NULL,
+      nombre TEXT,
+      ciudad TEXT,
+      mensaje TEXT NOT NULL,
+      respuesta TEXT NOT NULL,
+      tipo_solicitud TEXT,
+      prioridad TEXT,
+      detalle TEXT,
+      escalado BOOLEAN NOT NULL DEFAULT FALSE,
+      creado_en BIGINT NOT NULL
+    );
+  `);
+  await p.query(`CREATE INDEX IF NOT EXISTS conversaciones_creado_en_idx ON conversaciones (creado_en DESC);`);
 }
 
 /** Asegura que la tabla exista antes de la primera consulta (idempotente, con reintento si falló). */
@@ -138,6 +158,85 @@ export async function obtenerSolicitudes(): Promise<SolicitudRow[] | null> {
     }));
   } catch (err) {
     console.error("No se pudieron leer las solicitudes desde Postgres:", err);
+    return null;
+  }
+}
+
+export interface ConversacionRow {
+  fecha: string;
+  telefono: string;
+  nombre?: string;
+  ciudad?: string;
+  mensaje: string;
+  respuesta: string;
+  tipo_solicitud?: string;
+  prioridad?: string;
+  detalle?: string;
+  escalado: boolean;
+}
+
+/**
+ * Guarda una conversación. Nunca lanza: un fallo de registro no debe
+ * interrumpir la atención al cliente.
+ */
+export async function insertarConversacion(c: ConversacionRow): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await tablaLista();
+    await p.query(
+      `INSERT INTO conversaciones
+         (fecha, telefono, nombre, ciudad, mensaje, respuesta, tipo_solicitud, prioridad, detalle, escalado, creado_en)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [
+        c.fecha,
+        c.telefono,
+        c.nombre ?? null,
+        c.ciudad ?? null,
+        c.mensaje,
+        c.respuesta,
+        c.tipo_solicitud ?? null,
+        c.prioridad ?? null,
+        c.detalle ?? null,
+        c.escalado,
+        Date.now(),
+      ],
+    );
+  } catch (err) {
+    console.error("No se pudo guardar la conversación en Postgres:", err);
+  }
+}
+
+/** Conversaciones guardadas, más recientes primero. Null si la BD no responde. */
+export async function obtenerConversaciones(limite = 5000): Promise<(ConversacionRow & { creadoEn: number })[] | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await tablaLista();
+    const res = await p.query<{
+      fecha: string; telefono: string; nombre: string | null; ciudad: string | null;
+      mensaje: string; respuesta: string; tipo_solicitud: string | null;
+      prioridad: string | null; detalle: string | null; escalado: boolean; creado_en: string;
+    }>(
+      `SELECT fecha, telefono, nombre, ciudad, mensaje, respuesta, tipo_solicitud, prioridad, detalle, escalado, creado_en
+       FROM conversaciones ORDER BY creado_en DESC LIMIT $1`,
+      [limite],
+    );
+    return res.rows.map((r) => ({
+      fecha: r.fecha,
+      telefono: r.telefono,
+      nombre: r.nombre ?? undefined,
+      ciudad: r.ciudad ?? undefined,
+      mensaje: r.mensaje,
+      respuesta: r.respuesta,
+      tipo_solicitud: r.tipo_solicitud ?? undefined,
+      prioridad: r.prioridad ?? undefined,
+      detalle: r.detalle ?? undefined,
+      escalado: r.escalado,
+      creadoEn: Number(r.creado_en),
+    }));
+  } catch (err) {
+    console.error("No se pudieron leer las conversaciones desde Postgres:", err);
     return null;
   }
 }

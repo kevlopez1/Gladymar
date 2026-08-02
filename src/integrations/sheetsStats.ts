@@ -5,6 +5,7 @@
  */
 import { config } from "../config.js";
 import { ciudadesConSucursal } from "../knowledge/sucursales.js";
+import { obtenerConversaciones } from "../db/index.js";
 
 /** Parser CSV robusto (soporta comillas, comas y saltos de línea dentro de un campo). */
 function parseCSV(text: string): string[][] {
@@ -58,17 +59,51 @@ export interface StatsHoy {
 }
 
 /**
- * Lee el Google Sheet de interacciones y calcula estadísticas REALES de hoy.
- * Nunca lanza: si falla (hoja no configurada, sin permiso de lectura, timeout
- * de red), devuelve null para que el caller use un respaldo.
+ * Estadísticas de hoy calculadas desde Postgres (nuestro propio registro).
+ * Es la fuente confiable: el Google Sheet depende de un Apps Script externo
+ * que ya se cayó antes y dejó de recibir conversaciones.
+ */
+async function statsDesdePostgres(): Promise<StatsHoy | null> {
+  const filas = await obtenerConversaciones(5000);
+  if (filas === null) return null;
+  const hoy = hoyStr();
+
+  const contactos = new Set<string>();
+  const ciudadDe = new Map<string, string>();
+  let conversacionesHoy = 0;
+
+  for (const f of filas) {
+    if (f.fecha.split(",")[0].trim() !== hoy) continue;
+    conversacionesHoy++;
+    const tel = f.telefono.replace(/\D/g, "");
+    if (!tel) continue;
+    contactos.add(tel);
+    if (!ciudadDe.has(tel)) {
+      const cd = f.ciudad?.trim() || detectarCiudad(`${f.mensaje} ${f.detalle || ""}`);
+      if (cd) ciudadDe.set(tel, cd);
+    }
+  }
+
+  const porCiudadHoy: Record<string, number> = {};
+  for (const c of ciudadDe.values()) porCiudadHoy[c] = (porCiudadHoy[c] || 0) + 1;
+  return { conversacionesHoy, contactosUnicosHoy: contactos.size, porCiudadHoy };
+}
+
+/**
+ * Estadísticas REALES de hoy. Primero Postgres (nuestro registro, siempre al
+ * día); si no está disponible, se cae al Google Sheet. Nunca lanza: si ambos
+ * fallan devuelve null para que el caller use su propio respaldo.
  */
 export async function obtenerStatsHoy(): Promise<StatsHoy | null> {
-  if (!config.crm.backfillSheetId) return null;
+  const desdeDb = await statsDesdePostgres();
+  if (desdeDb && desdeDb.conversacionesHoy > 0) return desdeDb;
+
+  if (!config.crm.backfillSheetId) return desdeDb;
   try {
     const url = `https://docs.google.com/spreadsheets/d/${config.crm.backfillSheetId}/export?format=csv`;
     const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
     const csv = await res.text();
-    if (!res.ok || csv.trimStart().startsWith("<")) return null;
+    if (!res.ok || csv.trimStart().startsWith("<")) return desdeDb;
 
     const filas = parseCSV(csv);
     if (filas.length < 2) return { conversacionesHoy: 0, contactosUnicosHoy: 0, porCiudadHoy: {} };
@@ -104,6 +139,6 @@ export async function obtenerStatsHoy(): Promise<StatsHoy | null> {
     return { conversacionesHoy, contactosUnicosHoy: contactos.size, porCiudadHoy };
   } catch (err) {
     console.error("No se pudieron leer las estadísticas reales del Sheet:", err);
-    return null;
+    return desdeDb; // el dato de Postgres es mejor que nada
   }
 }
