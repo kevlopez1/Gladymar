@@ -101,7 +101,7 @@ export async function obtenerStatsHoy(): Promise<StatsHoy | null> {
   if (!config.crm.backfillSheetId) return desdeDb;
   try {
     const url = `https://docs.google.com/spreadsheets/d/${config.crm.backfillSheetId}/export?format=csv`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
     const csv = await res.text();
     if (!res.ok || csv.trimStart().startsWith("<")) return desdeDb;
 
@@ -138,7 +138,10 @@ export async function obtenerStatsHoy(): Promise<StatsHoy | null> {
 
     return { conversacionesHoy, contactosUnicosHoy: contactos.size, porCiudadHoy };
   } catch (err) {
-    console.error("No se pudieron leer las estadísticas reales del Sheet:", err);
-    return desdeDb; // el dato de Postgres es mejor que nada
+    // Solo el mensaje: este respaldo falla de forma rutinaria (la hoja es
+    // grande y a veces tarda) y volcar el stack completo cada 15 minutos
+    // llenaba los logs sin aportar nada. El dato de Postgres ya cubre el caso.
+    console.warn(`Respaldo de stats por Sheet no disponible (${(err as Error)?.message ?? err}); se usa Postgres.`);
+    return desdeDb;
   }
 }
