@@ -70,14 +70,8 @@ export const SUCURSALES: Sucursal[] = [
     whatsapp: "67896857",
     horario: "Lun-Vie 08:30-18:30, Sáb 08:30-12:30",
   },
-  {
-    ciudad: "La Paz",
-    nombre: "El Alto",
-    direccion: "Av. Juan Pablo II Nro. 3184, El Alto",
-    telefono: "2840141",
-    whatsapp: "72001279",
-    horario: "Lun-Vie 08:30-12:30 y 14:30-18:30, Sáb 08:30-12:30",
-  },
+  // La agencia de El Alto (Av. Juan Pablo II) se cerró: la quitó Gerencia el
+  // 3/8/2026. No volver a agregarla sin confirmación de Gladymar.
   // ── Cochabamba ──
   {
     ciudad: "Cochabamba",
