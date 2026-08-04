@@ -178,6 +178,8 @@ export interface ToolExecution {
   escalated?: boolean;
   /** El cliente pidió el Manual de Asentamiento: la capa de WhatsApp adjuntará el PDF si hay enlace. */
   attachManual?: boolean;
+  /** El cliente pidió el catálogo: la capa de WhatsApp adjuntará el PDF de Dimensión Viva. */
+  attachCatalogo?: boolean;
   /** Datos de la solicitud registrada (para el log en Google Sheets). */
   solicitud?: {
     tipo: string;
@@ -256,7 +258,11 @@ export async function executeTool(
 
     case "info_tema": {
       const tema = typeof input.tema === "string" ? input.tema : "";
-      return { content: infoTema(tema), attachManual: tema === "manual_asentamiento" };
+      return {
+        content: infoTema(tema),
+        attachManual: tema === "manual_asentamiento",
+        attachCatalogo: tema === "catalogo",
+      };
     }
 
     case "registrar_solicitud":
