@@ -342,6 +342,22 @@ export function cajasNecesarias(metrosCuadrados: number, m2PorCaja: number): { c
   return { cajas: Math.ceil(m2ConMerma / m2PorCaja), m2ConMerma: Math.round(m2ConMerma * 100) / 100 };
 }
 
+/**
+ * ¿El cliente llega pidiendo la colección Dimensión Viva?
+ *
+ * El catálogo FÍSICO lleva un QR que abre WhatsApp con un mensaje ya escrito
+ * ("quiero información sobre dimensión viva"). Ese cliente tiene el catálogo
+ * en la mano y espera recibirlo en PDF de inmediato, así que la detección se
+ * hace acá, sin depender de que el modelo lo interprete.
+ *
+ * Se acepta cualquier redacción que nombre la colección (con o sin tildes) y
+ * también el nombre suelto, por si el cliente lo escribe él mismo.
+ */
+export function pideDimensionViva(texto: string): boolean {
+  const t = normalizar(texto);
+  return /\bdimension\s*viva\b/.test(t);
+}
+
 /** Listado corto de todas las colecciones (para cuando piden "el catálogo"). */
 export function resumenColecciones(): string {
   return (

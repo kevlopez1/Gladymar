@@ -66,10 +66,11 @@ export const config = {
     // en PDF. Si se define, el agente lo adjunta cuando el cliente lo solicita.
     // Vacío => el agente solo lo menciona/ofrece (no adjunta el archivo).
     manualUrl: optional("MANUAL_ASENTAMIENTO_URL", ""),
-    // Enlace PÚBLICO y directo al PDF del catálogo "Dimensión Viva" (66 pág.).
-    // Vacío => el agente igual describe las colecciones y sus fichas (viven en
-    // knowledge/dimensionViva.ts); solo no comparte el archivo.
-    catalogoUrl: optional("CATALOGO_URL", ""),
+    // PDF del catálogo "Dimensión Viva" (66 pág.). Se sirve desde /public, así
+    // que por defecto sale de nuestro propio dominio; se puede apuntar a otro
+    // lado (CDN, sitio de Gladymar) con CATALOGO_URL.
+    // Es el que se envía cuando el cliente llega por el QR del catálogo físico.
+    catalogoUrl: optional("CATALOGO_URL", "/catalogo-dimension-viva.pdf"),
   },
 
   sheets: {

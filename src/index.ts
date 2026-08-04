@@ -24,6 +24,7 @@ import { ciudadesConSucursal } from "./knowledge/sucursales.js";
 import { chequearNotificacionesPedidos } from "./integrations/pedidoEstados.js";
 import { parseCSV } from "./util/csv.js";
 import { insertarConversacion, obtenerConversaciones } from "./db/index.js";
+import { pideDimensionViva } from "./knowledge/dimensionViva.js";
 
 const sheets = new SheetsLogger(config.sheets.webhookUrl);
 const crm = new CrmIngest(config.crm.ingestUrl, config.crm.ingestToken);
@@ -651,6 +652,34 @@ async function handleIncoming(msg: {
   programarCliente(msg);
 }
 
+// ── Catálogo Dimensión Viva ──────────────────────────────────────────────────
+// El catálogo IMPRESO lleva un QR que abre WhatsApp con un mensaje ya escrito
+// ("quiero información sobre dimensión viva"). Ese cliente tiene el catálogo en
+// la mano: espera el PDF de inmediato, así que el envío no depende de que el
+// modelo decida ofrecerlo.
+// Se recuerda a quién ya se le mandó para no repetir el archivo (18 MB) en cada
+// mensaje de la misma conversación.
+const catalogoYaEnviado = new Set<string>();
+
+/** URL pública del PDF (config.assets.catalogoUrl puede ser relativa o absoluta). */
+function urlCatalogo(): string {
+  const u = config.assets.catalogoUrl;
+  if (!u) return "";
+  return /^https?:\/\//i.test(u) ? u : `${config.publicBaseUrl.replace(/\/$/, "")}${u.startsWith("/") ? "" : "/"}${u}`;
+}
+
+async function enviarCatalogo(to: string): Promise<void> {
+  const url = urlCatalogo();
+  if (!url) return;
+  await sendDocument(
+    to,
+    url,
+    "Gladymar - Catálogo Dimensión Viva 2026.pdf",
+    "Colección Dimensión Viva 2026 ◆ Gladymar",
+  );
+  console.log(`📕 Catálogo Dimensión Viva enviado a ${to}`);
+}
+
 async function procesarTurnoCliente(
   from: string,
   text: string,
@@ -661,6 +690,9 @@ async function procesarTurnoCliente(
   // En modo prueba (un admin probando como cliente) usamos una sesión aparte
   // y NO registramos nada real (ni KPIs, ni lead, ni CRM/Sheets).
   const prueba = opts?.prueba === true;
+  // El QR del catálogo físico manda un texto fijo; se detecta acá para que el
+  // PDF salga siempre, sin depender de cómo lo interprete el modelo.
+  const porQrCatalogo = !prueba && pideDimensionViva(text);
   const sessionId = prueba ? `test:${from}` : from;
 
   // Marca leído + "escribiendo…" y suma a KPIs.
@@ -739,6 +771,17 @@ async function procesarTurnoCliente(
         );
       } catch (err) {
         console.error(`No se pudo adjuntar el manual a ${from}:`, err);
+      }
+    }
+
+    // Catálogo Dimensión Viva: se adjunta si el agente lo ofreció, o si el
+    // cliente llegó por el QR del catálogo físico (ver `llegaPorQrCatalogo`).
+    if ((reply.attachCatalogo || porQrCatalogo) && !catalogoYaEnviado.has(from)) {
+      try {
+        await enviarCatalogo(from);
+        catalogoYaEnviado.add(from);
+      } catch (err) {
+        console.error(`No se pudo adjuntar el catálogo a ${from}:`, err);
       }
     }
 

@@ -27,6 +27,8 @@ export interface AgentReply {
   optionsTitle?: string;
   /** El cliente pidió el Manual de Asentamiento (adjuntar PDF si hay enlace configurado). */
   attachManual: boolean;
+  /** El cliente pidió el catálogo (adjuntar el PDF de Dimensión Viva). */
+  attachCatalogo: boolean;
   /** Documento (PDF) a "enviar" en el chat, ej. el catálogo (muestra en el demo). */
   document?: { name: string; info?: string };
   /** Solicitud registrada en este turno (para el log en Google Sheets), si hubo. */
@@ -170,6 +172,7 @@ export class GladymarAgent {
 
     let escalated = false;
     let attachManual = false;
+    let attachCatalogo = false;
     let solicitud: AgentReply["solicitud"];
     let cotizacion: AgentReply["cotizacion"];
     let sucursales: AgentReply["sucursales"];
@@ -191,6 +194,7 @@ export class GladymarAgent {
           const result = await executeTool(block.name, block.input as Record<string, unknown>, telefonoCliente, prueba);
           if (result.escalated) escalated = true;
           if (result.attachManual) attachManual = true;
+          if (result.attachCatalogo) attachCatalogo = true;
           if (result.solicitud) solicitud = result.solicitud;
           if (result.cotizacion) cotizacion = result.cotizacion;
           if (result.sucursales) sucursales = result.sucursales;
@@ -246,6 +250,7 @@ export class GladymarAgent {
       document: withDoc.document,
       escalated,
       attachManual,
+      attachCatalogo,
       solicitud,
       cotizacion,
       sucursales,
