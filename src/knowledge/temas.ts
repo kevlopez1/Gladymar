@@ -6,6 +6,8 @@
  * de soluciones frecuentes). Mientras tanto el agente será transparente y no
  * inventará enlaces ni datos. Completa el contenido y pon `confirmado: true`.
  */
+import { resumenColecciones } from "./dimensionViva.js";
+import { config } from "../config.js";
 
 export interface Tema {
   id: string;
@@ -28,9 +30,12 @@ export const TEMAS: Record<string, Tema> = {
     id: "catalogo",
     titulo: "Catálogo de productos",
     contenido:
-      "Podés explorar nuestro catálogo y portafolio acá:\n" +
-      "• Portafolio: https://gladymar.com.bo/portafolio/\n" +
-      "• Sitio web: https://gladymar.com.bo",
+      resumenColecciones() +
+      "\n\nCada línea tiene su propio carácter, contame qué ambiente estás armando y te recomiendo la ideal. ✨\n" +
+      (config.assets.catalogoUrl
+        ? `Catálogo completo en PDF: ${config.assets.catalogoUrl}\n`
+        : "") +
+      "También podés explorar el portafolio completo en https://gladymar.com.bo/portafolio/",
     confirmado: true,
   },
 

@@ -66,6 +66,10 @@ export const config = {
     // en PDF. Si se define, el agente lo adjunta cuando el cliente lo solicita.
     // Vacío => el agente solo lo menciona/ofrece (no adjunta el archivo).
     manualUrl: optional("MANUAL_ASENTAMIENTO_URL", ""),
+    // Enlace PÚBLICO y directo al PDF del catálogo "Dimensión Viva" (66 pág.).
+    // Vacío => el agente igual describe las colecciones y sus fichas (viven en
+    // knowledge/dimensionViva.ts); solo no comparte el archivo.
+    catalogoUrl: optional("CATALOGO_URL", ""),
   },
 
   sheets: {

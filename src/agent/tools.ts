@@ -8,6 +8,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { buscarCategorias, formatearCategoria } from "../knowledge/productos.js";
 import { buscarCatalogo, formatearProductoCat } from "../knowledge/catalogo.js";
+import { buscarColecciones, formatearColeccion } from "../knowledge/dimensionViva.js";
 import {
   sucursalesPorCiudad,
   formatearSucursal,
@@ -213,12 +214,23 @@ export async function executeTool(
       // Con una consulta concreta, sugiere productos REALES del catálogo.
       if (consulta) {
         const productos = buscarCatalogo(consulta, 6);
+        // Colecciones 2026: aportan el concepto (para recomendar por estilo) y
+        // los datos que el catálogo suelto no trae (tipo de uso, m² por caja).
+        const colecciones = buscarColecciones(consulta, 2);
+        const bloques: string[] = [];
         if (productos.length) {
+          bloques.push(
+            "Algunas opciones de nuestro catálogo:\n\n" + productos.map(formatearProductoCat).join("\n"),
+          );
+        }
+        if (colecciones.length) {
+          bloques.push(
+            "De nuestra colección más reciente:\n\n" + colecciones.map(formatearColeccion).join("\n\n"),
+          );
+        }
+        if (bloques.length) {
           return {
-            content:
-              "Algunas opciones de nuestro catálogo:\n\n" +
-              productos.map(formatearProductoCat).join("\n") +
-              "\n\n_El precio y la disponibilidad te los confirma un asesor._",
+            content: bloques.join("\n\n") + "\n\n_El precio y la disponibilidad te los confirma un asesor._",
           };
         }
       }
