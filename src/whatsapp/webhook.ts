@@ -22,9 +22,11 @@ export function verifyWebhook(query: Record<string, unknown>): string | null {
 
 export interface IncomingMessage {
   from: string; // número del remitente (sin "+")
-  text: string; // contenido del mensaje
+  text: string; // contenido del mensaje (vacío si mandó solo una foto)
   messageId: string; // id del mensaje (para marcar como leído)
   name?: string; // nombre de perfil, si está disponible
+  /** Id del media si el cliente mandó una FOTO (captura del catálogo, un ambiente, etc.). */
+  imageId?: string;
 }
 
 /**
@@ -65,8 +67,18 @@ export function parseIncomingMessages(body: unknown): IncomingMessage[] {
           if (text) {
             result.push({ from: msg.from, text, messageId: msg.id, name });
           }
+        } else if (msg.type === "image" && msg.image?.id) {
+          // FOTO: captura del catálogo, un ambiente, un producto en obra. Antes se
+          // descartaba en silencio y el cliente se quedaba sin respuesta.
+          result.push({
+            from: msg.from,
+            text: msg.image.caption?.trim() || "",
+            messageId: msg.id,
+            name,
+            imageId: msg.image.id,
+          });
         }
-        // Otros tipos (imagen, audio, ubicación) podrían manejarse aquí.
+        // Otros tipos (audio, ubicación) podrían manejarse aquí.
       }
     }
   }
@@ -91,6 +103,7 @@ interface WebhookPayload {
             list_reply?: { id?: string; title?: string };
             button_reply?: { id?: string; title?: string };
           };
+          image?: { id?: string; caption?: string; mime_type?: string };
         }>;
       };
     }>;

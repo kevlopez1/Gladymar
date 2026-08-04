@@ -12,7 +12,7 @@ import { config, isWhatsAppConfigured } from "./config.js";
 import { GladymarAgent, type AgentReply } from "./agent/brain.js";
 import { generarCotizacionPDF } from "./agent/cotizacionPdf.js";
 import { InMemorySessionStore } from "./session/store.js";
-import { sendText, sendDocument, sendInteractiveList, sendTemplate, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
+import { sendText, sendDocument, sendInteractiveList, sendTemplate, downloadMedia, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
@@ -510,7 +510,15 @@ async function notificarAsesor(
 // Ventana de espera para agrupar: damos tiempo a que el cliente termine de
 // escribir varios mensajes seguidos antes de responder (evita "bombardear").
 const DEBOUNCE_MS = 5000;
-interface BufferCliente { textos: string[]; timer: NodeJS.Timeout | null; messageId: string; name?: string; prueba?: boolean }
+interface BufferCliente {
+  textos: string[];
+  timer: NodeJS.Timeout | null;
+  messageId: string;
+  name?: string;
+  prueba?: boolean;
+  /** Última foto del grupo de mensajes (si mandó varias, vale la más reciente). */
+  imageId?: string;
+}
 const buffers = new Map<string, BufferCliente>();
 const enCurso = new Set<string>();
 // Admins que están "probando como cliente" (modo demo): sus mensajes van al agente.
@@ -544,7 +552,10 @@ async function enviarPanel(
   }
 }
 
-function programarCliente(msg: { from: string; text: string; messageId: string; name?: string }, prueba = false): void {
+function programarCliente(
+  msg: { from: string; text: string; messageId: string; name?: string; imageId?: string },
+  prueba = false,
+): void {
   let buf = buffers.get(msg.from);
   if (!buf) {
     buf = { textos: [], timer: null, messageId: msg.messageId, name: msg.name, prueba };
@@ -553,9 +564,10 @@ function programarCliente(msg: { from: string; text: string; messageId: string; 
   // Marca leído + mantiene "escribiendo…" vivo con CADA mensaje (mientras el
   // cliente sigue tecleando), no solo con el primero.
   void markReadAndTyping(msg.messageId);
-  buf.textos.push(msg.text);
+  if (msg.text) buf.textos.push(msg.text);
   buf.messageId = msg.messageId;
   buf.prueba = prueba;
+  if (msg.imageId) buf.imageId = msg.imageId;
   if (msg.name) buf.name = msg.name;
   // Encuesta de satisfacción desactivada por pedido de Gladymar.
   if (buf.timer) clearTimeout(buf.timer);
@@ -577,10 +589,15 @@ async function vaciarCliente(from: string): Promise<void> {
   if (!buf) return;
   buffers.delete(from);
   const text = buf.textos.join("\n").trim();
-  if (!text) return;
+  // Una foto sin texto TAMBIÉN se atiende: antes se descartaba y el cliente
+  // quedaba sin respuesta.
+  if (!text && !buf.imageId) return;
   enCurso.add(from);
   try {
-    await procesarTurnoCliente(from, text, buf.messageId, buf.name, { prueba: buf.prueba });
+    await procesarTurnoCliente(from, text, buf.messageId, buf.name, {
+      prueba: buf.prueba,
+      imageId: buf.imageId,
+    });
   } finally {
     enCurso.delete(from);
   }
@@ -685,7 +702,7 @@ async function procesarTurnoCliente(
   text: string,
   messageId: string,
   name?: string,
-  opts?: { prueba?: boolean },
+  opts?: { prueba?: boolean; imageId?: string },
 ): Promise<void> {
   // En modo prueba (un admin probando como cliente) usamos una sesión aparte
   // y NO registramos nada real (ni KPIs, ni lead, ni CRM/Sheets).
@@ -707,8 +724,16 @@ async function procesarTurnoCliente(
   }
 
   try {
+    // Si mandó una foto (captura del catálogo, un ambiente, un producto en obra),
+    // se descarga de Meta para que el agente pueda VERLA. Si falla, se sigue con
+    // el texto solamente: nunca se deja al cliente sin respuesta por una imagen.
+    const imagen = opts?.imageId ? ((await downloadMedia(opts.imageId)) ?? undefined) : undefined;
+    if (opts?.imageId) {
+      console.log(`🖼️  Foto de ${from}: ${imagen ? "descargada, se envía al agente" : "no se pudo leer"}`);
+    }
+
     // La cotización en PDF solo está habilitada para admins (modo prueba).
-    const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF: prueba, prueba });
+    const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF: prueba, prueba, imagen });
 
     // Respuestas en bloques: muestra "escribiendo…" antes de cada bloque (y un mínimo antes del primero).
     // El último bloque, si hay opciones, se envía como LISTA interactiva (igual que el demo).

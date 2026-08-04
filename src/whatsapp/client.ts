@@ -36,6 +36,67 @@ export async function sendText(to: string, body: string): Promise<void> {
   }
 }
 
+/** Tipos de imagen que acepta la API de Claude. */
+const IMAGENES_SOPORTADAS = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+/** Tope de la API de Claude por imagen (~5 MB en base64). */
+const MAX_IMAGEN_BYTES = 3_500_000;
+
+export interface MediaDescargada {
+  base64: string;
+  mimeType: string;
+}
+
+/**
+ * Descarga una imagen que mandó el cliente por WhatsApp.
+ *
+ * Meta lo hace en dos pasos: primero se consulta el id del media para obtener
+ * una URL temporal, y recién esa URL se descarga con el token de acceso (no es
+ * pública). Nunca lanza: si algo falla devuelve null y la conversación sigue
+ * como si el cliente no hubiera mandado imagen.
+ */
+export async function downloadMedia(mediaId: string): Promise<MediaDescargada | null> {
+  try {
+    const metaRes = await fetch(`${BASE}/${mediaId}`, {
+      headers: { Authorization: `Bearer ${config.whatsapp.accessToken}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!metaRes.ok) {
+      console.warn(`🖼️  No se pudo consultar el media ${mediaId}: HTTP ${metaRes.status}`);
+      return null;
+    }
+    const meta = (await metaRes.json()) as { url?: string; mime_type?: string; file_size?: number };
+    if (!meta.url) return null;
+
+    const mimeType = (meta.mime_type || "").split(";")[0].trim();
+    if (!IMAGENES_SOPORTADAS.includes(mimeType)) {
+      console.warn(`🖼️  Tipo de imagen no soportado (${mimeType || "desconocido"}), se ignora.`);
+      return null;
+    }
+    if (meta.file_size && meta.file_size > MAX_IMAGEN_BYTES) {
+      console.warn(`🖼️  Imagen demasiado grande (${meta.file_size} bytes), se ignora.`);
+      return null;
+    }
+
+    const binRes = await fetch(meta.url, {
+      headers: { Authorization: `Bearer ${config.whatsapp.accessToken}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!binRes.ok) {
+      console.warn(`🖼️  No se pudo descargar el media ${mediaId}: HTTP ${binRes.status}`);
+      return null;
+    }
+    const buf = Buffer.from(await binRes.arrayBuffer());
+    if (buf.byteLength > MAX_IMAGEN_BYTES) {
+      console.warn(`🖼️  Imagen demasiado grande (${buf.byteLength} bytes), se ignora.`);
+      return null;
+    }
+    return { base64: buf.toString("base64"), mimeType };
+  } catch (err) {
+    console.error(`🖼️  Error descargando la imagen ${mediaId}:`, err);
+    return null;
+  }
+}
+
 /**
  * Envía un mensaje de PLANTILLA (template) aprobada por Meta, con variables
  * numeradas en el body ({{1}}, {{2}}, ...). A diferencia de sendText, esto

@@ -87,6 +87,29 @@ function scrubContactos(text: string): string {
   return lineas.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+/**
+ * Quita los datos binarios de las imágenes antes de guardar el historial.
+ *
+ * La foto solo hace falta en el turno en que llega. Si se guardara, se
+ * reenviaría completa en CADA turno posterior de la conversación (una imagen
+ * cuesta ~1.600 tokens, y el historial guarda hasta 40 mensajes). Se deja una
+ * nota de texto para que el agente recuerde que hubo una foto.
+ */
+function sinImagenes(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((m) => {
+    if (!Array.isArray(m.content)) return m;
+    if (!m.content.some((b) => typeof b === "object" && b.type === "image")) return m;
+    return {
+      ...m,
+      content: m.content.map((b) =>
+        typeof b === "object" && b.type === "image"
+          ? ({ type: "text", text: "(foto enviada por el cliente)" } as const)
+          : b,
+      ),
+    };
+  });
+}
+
 interface ParsedOptions {
   text: string;
   options: string[];
@@ -162,13 +185,41 @@ export class GladymarAgent {
   async handleMessage(
     userId: string,
     userText: string,
-    opts?: { cotizacionPDF?: boolean; prueba?: boolean },
+    opts?: {
+      cotizacionPDF?: boolean;
+      prueba?: boolean;
+      /** Foto que mandó el cliente (captura del catálogo, un ambiente, un producto). */
+      imagen?: { base64: string; mimeType: string };
+    },
   ): Promise<AgentReply> {
     // La cotización en PDF solo está habilitada para admins (modo prueba).
     const permitirPDF = opts?.cotizacionPDF === true;
     const prueba = opts?.prueba === true;
     const messages: ChatMessage[] = [...this.store.get(userId)];
-    messages.push({ role: "user", content: userText });
+
+    if (opts?.imagen) {
+      // La imagen va ANTES del texto: Claude interpreta mejor cuando ve primero
+      // la foto y después la pregunta que la acompaña.
+      messages.push({
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: opts.imagen.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+              data: opts.imagen.base64,
+            },
+          },
+          {
+            type: "text",
+            text: userText || "(el cliente mandó esta foto sin texto)",
+          },
+        ],
+      });
+    } else {
+      messages.push({ role: "user", content: userText });
+    }
 
     let escalated = false;
     let attachManual = false;
@@ -219,7 +270,7 @@ export class GladymarAgent {
 
     // Persistimos el turno final del asistente para mantener el contexto.
     messages.push({ role: "assistant", content: response.content });
-    this.store.set(userId, messages);
+    this.store.set(userId, sinImagenes(messages));
 
     const withDoc = extractDocument(
       text || "Disculpe, no pude generar una respuesta. ¿Podría reformular su consulta?",
