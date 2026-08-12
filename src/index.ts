@@ -937,7 +937,10 @@ void chequearReportesAutomaticos(); // chequeo inicial (por si el proceso arranc
 // ── Notificaciones automáticas de estado de pedido ───────────────────────────
 // Avisa al cliente por WhatsApp (plantilla de Meta) cuando su pedido pasa a
 // "Preparado" o "Despachado", sin que tenga que preguntar. Ver pedidoEstados.ts.
-const pedidosAutomaticosTimer = setInterval(() => void chequearNotificacionesPedidos(), 15 * 60 * 1000);
+const pedidosAutomaticosTimer = setInterval(
+  () => void chequearNotificacionesPedidos(),
+  config.despacho.chequeoMinutos * 60 * 1000,
+);
 if (typeof pedidosAutomaticosTimer.unref === "function") pedidosAutomaticosTimer.unref();
 void chequearNotificacionesPedidos();
 
