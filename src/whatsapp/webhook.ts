@@ -86,6 +86,49 @@ export function parseIncomingMessages(body: unknown): IncomingMessage[] {
   return result;
 }
 
+export interface EstadoEnvio {
+  /** wamid del mensaje que enviamos (el que devuelve la API al mandarlo). */
+  messageId: string;
+  /** sent | delivered | read | failed */
+  estado: string;
+  /** Número al que iba dirigido (formato internacional, sin "+"). */
+  destinatario: string;
+  /** Solo en "failed": qué dijo Meta. */
+  error?: string;
+}
+
+/**
+ * Acuses de entrega que manda Meta por el mismo webhook.
+ *
+ * IMPORTANTE: que la API responda 200 al enviar una plantilla solo significa
+ * que Meta ACEPTÓ el mensaje, no que le haya llegado a alguien. Si el número no
+ * existe en WhatsApp, o el cliente bloqueó a la empresa, el fallo llega después
+ * por acá. Sin leer esto no hay forma de contestar "¿le llegó o no?".
+ */
+export function parseStatusUpdates(body: unknown): EstadoEnvio[] {
+  const result: EstadoEnvio[] = [];
+  const payload = body as WebhookPayload;
+
+  for (const entry of payload?.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      for (const st of change.value?.statuses ?? []) {
+        if (!st.id || !st.status) continue;
+        const err = st.errors?.[0];
+        result.push({
+          messageId: st.id,
+          estado: st.status,
+          destinatario: st.recipient_id ?? "",
+          error: err
+            ? `[${err.code ?? "?"}] ${err.title ?? ""}${err.error_data?.details ? ` — ${err.error_data.details}` : ""}`.trim()
+            : undefined,
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
 // ── Tipos del payload del webhook (parcial, solo lo que usamos) ──
 interface WebhookPayload {
   object?: string;
@@ -104,6 +147,17 @@ interface WebhookPayload {
             button_reply?: { id?: string; title?: string };
           };
           image?: { id?: string; caption?: string; mime_type?: string };
+        }>;
+        statuses?: Array<{
+          id?: string;
+          status?: string;
+          recipient_id?: string;
+          errors?: Array<{
+            code?: number;
+            title?: string;
+            message?: string;
+            error_data?: { details?: string };
+          }>;
         }>;
       };
     }>;
