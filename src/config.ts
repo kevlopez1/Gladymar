@@ -125,6 +125,14 @@ export const config = {
     // número se le avisó?" sin abrir el Sheet; apagado por defecto porque son
     // datos de clientes y ensucia el log.
     logDetalle: optional("DESPACHO_LOG_DETALLE", "") === "1",
+    // Facturas a reenviar aunque ya figuren como avisadas (lista separada por
+    // comas, ej. "12252,3794"). Sirve cuando un aviso salió pero no llegó y hay
+    // que repetirlo sin tocar la base. Se fuerza UNA sola vez por arranque del
+    // proceso: si no, cada chequeo volvería a mandarlo y sería spam.
+    reenviarFacturas: optional("DESPACHO_REENVIAR_FACTURAS", "")
+      .split(",")
+      .map((f) => f.trim().replace(/\D/g, ""))
+      .filter(Boolean),
   },
 
   database: {

@@ -63,6 +63,21 @@ function telefonoInternacional(numero: string): string {
   return numero.startsWith("591") ? numero : `591${numero}`;
 }
 
+/**
+ * Reenvíos ya forzados en este proceso. DESPACHO_REENVIAR_FACTURAS repite un
+ * aviso que salió pero no llegó; sin esta memoria se repetiría en cada chequeo
+ * (cada 5 min) hasta que alguien se acuerde de borrar la variable.
+ */
+const reenviosForzados = new Set<string>();
+
+function forzarReenvio(factura: string, clave: string): boolean {
+  if (!config.despacho.reenviarFacturas.includes(factura)) return false;
+  if (reenviosForzados.has(clave)) return false;
+  reenviosForzados.add(clave);
+  console.log(`📦 Reenvío forzado de la factura ${factura} (DESPACHO_REENVIAR_FACTURAS).`);
+  return true;
+}
+
 /** ¿Es un número interno de Gladymar (panel de admins o cargado para pruebas)? */
 function esTelefonoInterno(telefono: string): boolean {
   return esAdmin(telefono) || config.despacho.telefonosPrueba.includes(telefono);
@@ -248,7 +263,8 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
       const template = templateDeEstado(pedido.estado);
 
       for (const tel of pedido.telefonos) {
-        if (yaAvisado.get(claveEstadoPedido(pedido.factura, tel)) === pedido.estado) {
+        const clave = claveEstadoPedido(pedido.factura, tel);
+        if (yaAvisado.get(clave) === pedido.estado && !forzarReenvio(pedido.factura, clave)) {
           sinCambios++;
           continue;
         }
