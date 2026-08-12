@@ -103,12 +103,19 @@ export async function downloadMedia(mediaId: string): Promise<MediaDescargada | 
  * funciona aunque hayan pasado más de 24h desde el último mensaje del
  * cliente — necesario para avisos proactivos como el estado de un pedido.
  */
+/**
+ * Envía una plantilla aprobada y devuelve el wamid del mensaje.
+ *
+ * OJO: un 200 acá significa que Meta ACEPTÓ el mensaje, NO que le llegó al
+ * cliente. La entrega real (o el fallo) se sabe después por los acuses que
+ * Meta manda al webhook; el wamid es lo que permite cruzarlos.
+ */
 export async function sendTemplate(
   to: string,
   templateName: string,
   languageCode: string,
   bodyParams: string[],
-): Promise<void> {
+): Promise<string | null> {
   const url = `${BASE}/${config.whatsapp.phoneNumberId}/messages`;
   const res = await fetch(url, {
     method: "POST",
@@ -133,6 +140,9 @@ export async function sendTemplate(
     const detail = await res.text();
     throw new Error(`Error enviando plantilla WhatsApp (${res.status}): ${detail}`);
   }
+
+  const data = (await res.json().catch(() => null)) as { messages?: Array<{ id?: string }> } | null;
+  return data?.messages?.[0]?.id ?? null;
 }
 
 /**

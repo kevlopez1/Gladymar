@@ -199,6 +199,15 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
     }
 
     console.log(`📦 ${pedidos.length} pedido(s) leídos de la hoja; consultando avisos ya enviados...`);
+
+    if (config.despacho.logDetalle) {
+      for (const p of pedidos.slice(0, 50)) {
+        console.log(
+          `📦 [hoja] factura ${p.factura} | ${p.estado} | ${p.nombre || "(sin nombre)"} | ` +
+            `tel: ${p.telefonos.join(" , ") || "(sin teléfono)"}`,
+        );
+      }
+    }
     const yaAvisado = await obtenerEstadosPedidos();
     if (yaAvisado === null) {
       console.warn("📦 Avisos de pedido en pausa: Postgres no respondió (se reintenta en el próximo chequeo).");
@@ -260,11 +269,17 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
         }
 
         try {
-          await sendTemplate(telefonoInternacional(tel), template.nombre, template.idioma, [
+          const wamid = await sendTemplate(telefonoInternacional(tel), template.nombre, template.idioma, [
             pedido.nombre || "Cliente",
             pedido.factura,
           ]);
-          console.log(`📦 Aviso "${pedido.estado}" enviado (factura ${pedido.factura} -> ${tel})`);
+          // El wamid es lo que después permite cruzar este envío con el acuse
+          // de entrega que manda Meta al webhook ("delivered" / "failed"): sin
+          // él, "enviado" solo quiere decir que Meta lo aceptó.
+          console.log(
+            `📦 Aviso "${pedido.estado}" aceptado por Meta (factura ${pedido.factura} -> ${tel})` +
+              `${wamid ? ` id=${wamid}` : ""}`,
+          );
           enviados++;
         } catch (err) {
           console.error(`📦 No se pudo enviar el aviso (factura ${pedido.factura} -> ${tel}):`, err);

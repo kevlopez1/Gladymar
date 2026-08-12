@@ -13,7 +13,7 @@ import { GladymarAgent, type AgentReply } from "./agent/brain.js";
 import { generarCotizacionPDF } from "./agent/cotizacionPdf.js";
 import { InMemorySessionStore } from "./session/store.js";
 import { sendText, sendDocument, sendInteractiveList, sendTemplate, downloadMedia, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
-import { verifyWebhook, parseIncomingMessages } from "./whatsapp/webhook.js";
+import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
 import { CrmIngest, stageDeTipo } from "./integrations/crm.js";
@@ -425,6 +425,19 @@ app.post("/webhook", async (req, res) => {
   res.sendStatus(200);
 
   try {
+    // Acuses de entrega: la única forma de saber si un aviso LLEGÓ de verdad.
+    // Meta responde 200 al enviar aunque el número no exista en WhatsApp; el
+    // fallo aparece recién acá, minutos después.
+    for (const st of parseStatusUpdates(req.body)) {
+      if (st.estado === "failed") {
+        console.error(
+          `📬 NO ENTREGADO a ${st.destinatario} (id=${st.messageId}): ${st.error ?? "sin detalle de Meta"}`,
+        );
+      } else if (st.estado === "delivered" || st.estado === "read") {
+        console.log(`📬 ${st.estado} -> ${st.destinatario} (id=${st.messageId})`);
+      }
+    }
+
     const messages = parseIncomingMessages(req.body);
     for (const msg of messages) {
       handleIncoming(msg).catch((err) => console.error(`Error atendiendo a ${msg.from}:`, err));

@@ -120,6 +120,11 @@ export const config = {
     // Mientras logística prueba conviene bajarlo (esperar 15 min por cada
     // prueba es mucho); el costo por chequeo es una descarga de ~3 KB.
     chequeoMinutos: Math.min(60, Math.max(1, Number(optional("PEDIDOS_CHEQUEO_MINUTOS", "15")) || 15)),
+    // DESPACHO_LOG_DETALLE=1 hace que cada chequeo liste factura, cliente,
+    // estado y teléfonos tal como vienen de la hoja. Sirve para auditar "¿a qué
+    // número se le avisó?" sin abrir el Sheet; apagado por defecto porque son
+    // datos de clientes y ensucia el log.
+    logDetalle: optional("DESPACHO_LOG_DETALLE", "") === "1",
   },
 
   database: {
