@@ -116,6 +116,10 @@ export const config = {
       .split(",")
       .map((t) => t.replace(/\D/g, ""))
       .filter(Boolean),
+    // Cada cuántos minutos se revisa la hoja buscando cambios de estado.
+    // Mientras logística prueba conviene bajarlo (esperar 15 min por cada
+    // prueba es mucho); el costo por chequeo es una descarga de ~3 KB.
+    chequeoMinutos: Math.min(60, Math.max(1, Number(optional("PEDIDOS_CHEQUEO_MINUTOS", "15")) || 15)),
   },
 
   database: {

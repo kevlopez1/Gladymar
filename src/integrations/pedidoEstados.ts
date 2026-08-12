@@ -219,7 +219,15 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
     }
 
     if (ambiguos.size) {
-      console.warn(`📦 ${ambiguos.size} teléfono(s) figuran con varios clientes distintos; esos avisos NO se envían.`);
+      // El mensaje tiene que ser accionable: la causa casi siempre es que
+      // logística está probando con un número propio repetido en varias
+      // facturas, y entonces basta con declararlo como interno.
+      console.warn(
+        `📦 ${ambiguos.size} teléfono(s) figuran con varios clientes distintos, esos avisos NO se envían: ` +
+          `${[...ambiguos].join(", ")}. ` +
+          "Si son números INTERNOS de Gladymar (pruebas), agregalos a DESPACHO_TELEFONOS_PRUEBA. " +
+          "Si son de clientes reales, hay que corregir la columna TELEFONO DEL CLIENTE en la hoja.",
+      );
     }
 
     let enviados = 0;
