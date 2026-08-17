@@ -82,6 +82,19 @@ async function crearTabla(): Promise<void> {
     );
   `);
   await p.query(`CREATE INDEX IF NOT EXISTS conversaciones_creado_en_idx ON conversaciones (creado_en DESC);`);
+  // Consumo de tokens por día (zona Bolivia). Hasta ahora el gasto solo se
+  // podía estimar; con esto se mide. Se separa lo escrito en caché de lo leído
+  // porque cuestan distinto (leer de caché sale ~10 veces más barato).
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS uso_tokens (
+      fecha TEXT PRIMARY KEY,
+      llamadas BIGINT NOT NULL DEFAULT 0,
+      entrada BIGINT NOT NULL DEFAULT 0,
+      salida BIGINT NOT NULL DEFAULT 0,
+      cache_escrito BIGINT NOT NULL DEFAULT 0,
+      cache_leido BIGINT NOT NULL DEFAULT 0
+    );
+  `);
 }
 
 /** Asegura que la tabla exista antes de la primera consulta (idempotente, con reintento si falló). */
@@ -282,5 +295,67 @@ export async function guardarEstadoPedido(factura: string, telefono: string, est
     );
   } catch (err) {
     console.error("No se pudo guardar el estado del pedido en Postgres:", err);
+  }
+}
+
+export interface UsoDia {
+  fecha: string;
+  llamadas: number;
+  entrada: number;
+  salida: number;
+  cacheEscrito: number;
+  cacheLeido: number;
+}
+
+/**
+ * Suma el consumo de una llamada al día en curso. Nunca lanza: medir el gasto
+ * jamás debe tumbar la atención al cliente.
+ */
+export async function acumularUso(fecha: string, u: Omit<UsoDia, "fecha" | "llamadas">): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await tablaLista();
+    await p.query(
+      `INSERT INTO uso_tokens (fecha, llamadas, entrada, salida, cache_escrito, cache_leido)
+       VALUES ($1, 1, $2, $3, $4, $5)
+       ON CONFLICT (fecha) DO UPDATE SET
+         llamadas      = uso_tokens.llamadas + 1,
+         entrada       = uso_tokens.entrada + EXCLUDED.entrada,
+         salida        = uso_tokens.salida + EXCLUDED.salida,
+         cache_escrito = uso_tokens.cache_escrito + EXCLUDED.cache_escrito,
+         cache_leido   = uso_tokens.cache_leido + EXCLUDED.cache_leido`,
+      [fecha, u.entrada, u.salida, u.cacheEscrito, u.cacheLeido],
+    );
+  } catch (err) {
+    console.error("No se pudo registrar el uso de tokens en Postgres:", err);
+  }
+}
+
+/** Consumo diario, del más reciente al más viejo. `null` si la BD no responde. */
+export async function obtenerUso(dias = 60): Promise<UsoDia[] | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await tablaLista();
+    const res = await p.query<{
+      fecha: string;
+      llamadas: string;
+      entrada: string;
+      salida: string;
+      cache_escrito: string;
+      cache_leido: string;
+    }>(`SELECT * FROM uso_tokens ORDER BY fecha DESC LIMIT $1`, [dias]);
+    return res.rows.map((r) => ({
+      fecha: r.fecha,
+      llamadas: Number(r.llamadas),
+      entrada: Number(r.entrada),
+      salida: Number(r.salida),
+      cacheEscrito: Number(r.cache_escrito),
+      cacheLeido: Number(r.cache_leido),
+    }));
+  } catch (err) {
+    console.error("No se pudo leer el uso de tokens desde Postgres:", err);
+    return null;
   }
 }
