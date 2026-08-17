@@ -10,6 +10,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { buildSystemPrompt } from "./systemPrompt.js";
 import { TOOLS, executeTool } from "./tools.js";
+import { registrarUso } from "./uso.js";
 import type { Cotizacion } from "./cotizacion.js";
 import type { SessionStore, ChatMessage } from "../session/store.js";
 
@@ -313,16 +314,18 @@ export class GladymarAgent {
     this.store.reset(userId);
   }
 
-  private create(messages: ChatMessage[], permitirPDF = false): Promise<Anthropic.Message> {
+  private async create(messages: ChatMessage[], permitirPDF = false): Promise<Anthropic.Message> {
     // Cliente real: quitamos la herramienta de cotización en PDF y usamos el
     // system con override. Admin en modo prueba: herramientas completas.
     const tools = permitirPDF ? TOOLS : TOOLS.filter((t) => t.name !== "generar_cotizacion");
-    return this.client.messages.create({
+    const msg = await this.client.messages.create({
       model: this.model,
       max_tokens: MAX_TOKENS,
       system: permitirPDF ? this.system : this.systemSinPDF,
       tools,
       messages,
     });
+    registrarUso(msg.usage);
+    return msg;
   }
 }

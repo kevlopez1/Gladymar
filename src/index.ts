@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { config, isWhatsAppConfigured } from "./config.js";
 import { GladymarAgent, type AgentReply } from "./agent/brain.js";
 import { generarCotizacionPDF } from "./agent/cotizacionPdf.js";
+import { resumenUso, PRECIOS_USD_POR_MILLON } from "./agent/uso.js";
 import { InMemorySessionStore } from "./session/store.js";
 import { sendText, sendDocument, sendInteractiveList, sendTemplate, downloadMedia, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./whatsapp/webhook.js";
@@ -211,6 +212,29 @@ app.get("/admin/probar-aviso", async (req, res) => {
   } catch (err) {
     res.status(502).json({ estado: "FALLÓ", plantilla, idioma, error: String(err) });
   }
+});
+
+// Consumo real de tokens y su costo: /admin/uso?key=TU_CLAVE
+app.get("/admin/uso", async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  const resumen = await resumenUso(Number(req.query.dias) || 60);
+  if (!resumen) {
+    res.status(503).json({ error: "Postgres no respondió (o DATABASE_URL no está configurada)." });
+    return;
+  }
+  res.json({
+    modelo: config.anthropic.model,
+    precios_usd_por_millon: PRECIOS_USD_POR_MILLON,
+    totales: resumen.totales,
+    costo_usd: Number(resumen.costoUsd.toFixed(4)),
+    costo_sin_cache_usd: Number(resumen.costoSinCacheUsd.toFixed(4)),
+    ahorro_por_cache_usd: Number((resumen.costoSinCacheUsd - resumen.costoUsd).toFixed(4)),
+    por_dia: resumen.dias,
+  });
 });
 
 // Padrón de administradores: lo consume el CRM para marcarlos como "Administrador"
