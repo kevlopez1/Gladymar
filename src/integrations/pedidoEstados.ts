@@ -172,6 +172,8 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
   // (todo bien) de "hay filas pero la columna FACTURA no se entiende" (roto).
   let filasDebajo = 0;
   let sinFactura = 0;
+  let sinTelefono = 0;
+  let sinEstado = 0;
 
   for (let r = encIdx + 1; r < filas.length; r++) {
     const f = filas[r];
@@ -183,7 +185,13 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     }
     const telefono = digitos(f[iTelefono] ?? "");
     const estado = (f[iEstado] ?? "").trim().toLowerCase();
-    if (!telefono || !estado) continue;
+    if (!telefono || !estado) {
+      // Estas dos columnas las llena logística a mano y son la causa más
+      // frecuente de que un pedido no dispare su aviso.
+      if (!telefono) sinTelefono++;
+      if (!estado) sinEstado++;
+      continue;
+    }
     const nombre = (iNombre >= 0 ? f[iNombre] ?? "" : "").trim();
 
     const acum = porFactura.get(factura) ?? { nombre, estado, telefonos: new Set<string>() };
@@ -212,7 +220,9 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     ? undefined
     : filasDebajo === 0
       ? "el encabezado está bien y no hay ninguna fila debajo: la hoja quedó vacía (¿se limpió la pestaña DESPACHOS?)."
-      : `hay ${filasDebajo} fila(s) con datos debajo del encabezado, pero ${sinFactura} no tienen número de factura legible en la columna FACTURA.`;
+      : `hay ${filasDebajo} fila(s) con datos debajo del encabezado. Descartadas: ` +
+        `${sinFactura} sin factura legible, ${sinTelefono} sin TELEFONO DEL CLIENTE, ${sinEstado} sin ESTADO. ` +
+        "Las dos últimas columnas las llena logística a mano: si están vacías, el aviso no puede salir.";
 
   return { pedidos, telefonosAmbiguos, motivo };
 }
