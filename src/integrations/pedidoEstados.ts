@@ -168,11 +168,19 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
   interface Acum { nombre: string; estado: string; telefonos: Set<string> }
   const porFactura = new Map<string, Acum>();
   const nombresPorTelefono = new Map<string, Set<string>>();
+  // Para poder distinguir "la hoja está vacía porque no hay pedidos pendientes"
+  // (todo bien) de "hay filas pero la columna FACTURA no se entiende" (roto).
+  let filasDebajo = 0;
+  let sinFactura = 0;
 
   for (let r = encIdx + 1; r < filas.length; r++) {
     const f = filas[r];
+    if (f.some((c) => c.trim() !== "")) filasDebajo++;
     const factura = digitos(f[iFactura] ?? "");
-    if (!factura) continue;
+    if (!factura) {
+      if (f.some((c) => c.trim() !== "")) sinFactura++;
+      continue;
+    }
     const telefono = digitos(f[iTelefono] ?? "");
     const estado = (f[iEstado] ?? "").trim().toLowerCase();
     if (!telefono || !estado) continue;
@@ -200,7 +208,13 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     telefonos: [...a.telefonos],
   }));
 
-  return { pedidos, telefonosAmbiguos };
+  const motivo = pedidos.length
+    ? undefined
+    : filasDebajo === 0
+      ? "el encabezado está bien y no hay ninguna fila debajo: la hoja quedó vacía (¿se limpió la pestaña DESPACHOS?)."
+      : `hay ${filasDebajo} fila(s) con datos debajo del encabezado, pero ${sinFactura} no tienen número de factura legible en la columna FACTURA.`;
+
+  return { pedidos, telefonosAmbiguos, motivo };
 }
 
 /**
