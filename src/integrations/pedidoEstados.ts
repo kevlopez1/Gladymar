@@ -131,20 +131,39 @@ export interface LecturaDespachos {
    * al elegir el de la factura pasaría desapercibido.
    */
   telefonosAmbiguos: Set<string>;
+  /**
+   * Por qué no se reconoció ningún pedido. Sin esto, "la hoja se leyó pero no
+   * hay pedidos" tapa tres causas muy distintas (no está el encabezado, falta
+   * una columna, o no hay filas) y no se puede arreglar sin abrir la hoja.
+   */
+  motivo?: string;
 }
 
 /** Arma un pedido por factura (una factura tiene varias filas, una por producto). */
 export function leerPedidos(filas: string[][]): LecturaDespachos {
   const vacio: LecturaDespachos = { pedidos: [], telefonosAmbiguos: new Set() };
   const encIdx = filas.findIndex((f) => f.some((c) => c.trim().toUpperCase() === "FACTURA"));
-  if (encIdx === -1) return vacio;
+  if (encIdx === -1) {
+    const primeras = filas.slice(0, 3).map((f) => f.join(" | ")).join("  //  ");
+    return { ...vacio, motivo: `no se encontró ninguna fila con la columna FACTURA. Primeras filas: ${primeras}` };
+  }
   const enc = filas[encIdx].map((c) => c.trim().toUpperCase());
   const col = (nombre: string) => enc.indexOf(nombre);
   const iFactura = col("FACTURA");
   const iTelefono = col("TELEFONO DEL CLIENTE");
   const iNombre = col("NOMBRE DEL CLIENTE");
   const iEstado = col("ESTADO");
-  if (iFactura === -1 || iTelefono === -1 || iEstado === -1) return vacio;
+  if (iFactura === -1 || iTelefono === -1 || iEstado === -1) {
+    const faltan = [
+      iFactura === -1 ? "FACTURA" : null,
+      iTelefono === -1 ? "TELEFONO DEL CLIENTE" : null,
+      iEstado === -1 ? "ESTADO" : null,
+    ].filter(Boolean);
+    return {
+      ...vacio,
+      motivo: `falta(n) la(s) columna(s) ${faltan.join(", ")}. Encabezado encontrado: ${enc.join(" | ")}`,
+    };
+  }
 
   interface Acum { nombre: string; estado: string; telefonos: Set<string> }
   const porFactura = new Map<string, Acum>();
@@ -204,11 +223,11 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
     console.log("📦 Chequeando cambios de estado de pedidos...");
     const filas = await descargarDespachos();
     if (!filas) return;
-    const { pedidos, telefonosAmbiguos: ambiguos } = leerPedidos(filas);
+    const { pedidos, telefonosAmbiguos: ambiguos, motivo } = leerPedidos(filas);
     if (!pedidos.length) {
       console.warn(
         `📦 La hoja se leyó (${filas.length} filas) pero no se reconoció ningún pedido: ` +
-          "revisar que estén las columnas FACTURA, TELEFONO DEL CLIENTE y ESTADO.",
+          (motivo ?? "el encabezado está bien pero no hay filas de pedidos debajo."),
       );
       return;
     }
