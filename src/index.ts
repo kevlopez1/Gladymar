@@ -981,6 +981,25 @@ const pedidosAutomaticosTimer = setInterval(
 if (typeof pedidosAutomaticosTimer.unref === "function") pedidosAutomaticosTimer.unref();
 void chequearNotificacionesPedidos();
 
+// ── Consumo de tokens en el log ─────────────────────────────────────────────
+// El endpoint /admin/uso requiere abrir el navegador con la clave; esto deja
+// el mismo dato en los logs, que es donde se mira cuando algo preocupa.
+async function loguearUso(): Promise<void> {
+  const r = await resumenUso(60);
+  if (!r) return;
+  const t = r.totales;
+  const hoy = r.dias[0];
+  console.log(
+    `🧮 Tokens acumulados (${r.dias.length} día/s): ${t.llamadas} llamada(s), ` +
+      `entrada ${t.entrada}, salida ${t.salida}, caché escrito ${t.cacheEscrito}, caché leído ${t.cacheLeido} ` +
+      `=> USD ${r.costoUsd.toFixed(4)} (sin caché habría sido USD ${r.costoSinCacheUsd.toFixed(4)}).` +
+      (hoy ? ` Hoy (${hoy.fecha}): ${hoy.llamadas} llamada(s).` : ""),
+  );
+}
+const usoTimer = setInterval(() => void loguearUso(), 60 * 60 * 1000);
+if (typeof usoTimer.unref === "function") usoTimer.unref();
+void loguearUso();
+
 // Red de seguridad global: un error no capturado en cualquier punto (ej. una
 // promesa "en segundo plano" que nadie esperó) NUNCA debe tumbar el proceso
 // completo y afectar a TODOS los clientes. Solo se loguea.
