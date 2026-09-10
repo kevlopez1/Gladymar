@@ -37,6 +37,14 @@ export const config = {
     phoneNumberId: optional("WHATSAPP_PHONE_NUMBER_ID", ""),
     apiVersion: optional("WHATSAPP_API_VERSION", "v21.0"),
     verifyToken: optional("WHATSAPP_VERIFY_TOKEN", ""),
+    // Id de la WhatsApp Business Account (NO es el phoneNumberId). Solo se usa
+    // para verificar/crear plantillas por API. Vacío => no se crean solas, pero
+    // el envío funciona igual si ya están creadas a mano en Meta.
+    wabaId: optional("WHATSAPP_WABA_ID", ""),
+    // Plantilla para avisarle al equipo fuera de la ventana de 24 h (un solo
+    // parámetro: el resumen). Ver whatsapp/plantillas.ts.
+    templateAvisos: optional("WHATSAPP_TEMPLATE_AVISOS", "avisos"),
+    templateAvisosIdioma: optional("WHATSAPP_TEMPLATE_AVISOS_IDIOMA", "es"),
   },
 
   session: {

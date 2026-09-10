@@ -9,7 +9,15 @@ const BASE = `https://graph.facebook.com/${config.whatsapp.apiVersion}`;
  * Envía un mensaje de texto a un número de WhatsApp.
  * @param to Número del destinatario en formato internacional sin "+" (ej. 59171234567).
  */
-export async function sendText(to: string, body: string): Promise<void> {
+/**
+ * Manda texto libre y devuelve el wamid.
+ *
+ * OJO: que esto no lance NO significa que el mensaje haya llegado. Meta acepta
+ * y responde 200; si la ventana de 24 h está cerrada, el fallo llega segundos
+ * después por el webhook de estados. El wamid es lo que permite cruzarlos y,
+ * si hizo falta, reintentar con plantilla.
+ */
+export async function sendText(to: string, body: string): Promise<string | null> {
   const url = `${BASE}/${config.whatsapp.phoneNumberId}/messages`;
 
   // WhatsApp limita el cuerpo de texto a ~4096 caracteres.
@@ -34,6 +42,9 @@ export async function sendText(to: string, body: string): Promise<void> {
     const detail = await res.text();
     throw new Error(`Error enviando WhatsApp (${res.status}): ${detail}`);
   }
+
+  const data = (await res.json().catch(() => null)) as { messages?: Array<{ id?: string }> } | null;
+  return data?.messages?.[0]?.id ?? null;
 }
 
 /** Tipos de imagen que acepta la API de Claude. */

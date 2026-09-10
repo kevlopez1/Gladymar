@@ -27,6 +27,7 @@ import { parseCSV } from "./util/csv.js";
 import { insertarConversacion, obtenerConversaciones } from "./db/index.js";
 import { pideDimensionViva } from "./knowledge/dimensionViva.js";
 import { departamentoDeLugar, mapaMunicipios, municipiosReconocidos } from "./knowledge/departamentos.js";
+import { asegurarPlantillaAvisos, resumenLead, esFalloDeVentana } from "./whatsapp/plantillas.js";
 
 const sheets = new SheetsLogger(config.sheets.webhookUrl);
 const crm = new CrmIngest(config.crm.ingestUrl, config.crm.ingestToken);
@@ -483,6 +484,7 @@ app.post("/webhook", async (req, res) => {
         console.error(
           `📬 NO ENTREGADO a ${st.destinatario} (id=${st.messageId}): ${st.error ?? "sin detalle de Meta"}`,
         );
+        void reintentarAvisoPorPlantilla(st.messageId, st.error);
       } else if (st.estado === "delivered" || st.estado === "read") {
         console.log(`📬 ${st.estado} -> ${st.destinatario} (id=${st.messageId})`);
       }
@@ -559,10 +561,64 @@ async function notificarAsesor(
     "Escribile para continuar la atención. 💬",
   ].filter(Boolean);
   try {
-    await sendText(destino, lineas.join("\n"));
+    const wamid = await sendText(destino, lineas.join("\n"));
     console.log(`📤 Handoff -> asesor ${destino} (cliente ${from}, ${ciudad || "sin ciudad"})`);
+    // Meta responde 200 aunque la ventana de 24 h esté cerrada: el fallo llega
+    // segundos después por el webhook. Guardamos con qué reintentar por si eso
+    // pasa; el asesor casi nunca le escribe al bot, así que pasa seguido.
+    if (wamid) {
+      recordarAviso(wamid, destino, resumenLead({ nombre, telefono: from, tipo: sol.tipo, detalle: sol.detalle }));
+    }
   } catch (err) {
     console.error(`No se pudo avisar al asesor ${destino}:`, err);
+  }
+}
+
+/**
+ * Avisos al equipo que salieron como texto libre y podrían rebotar por la
+ * ventana de 24 h, indexados por wamid para reintentarlos con plantilla.
+ *
+ * Vive en memoria a propósito: el acuse de Meta llega en segundos, así que no
+ * hace falta persistirlo, y si el proceso se reinicia justo en el medio se
+ * pierde un reintento, no un lead (el lead ya está en Postgres y en el CRM).
+ */
+const avisosPendientes = new Map<string, { destino: string; resumen: string }>();
+const MAX_AVISOS_PENDIENTES = 500;
+
+function recordarAviso(wamid: string, destino: string, resumen: string): void {
+  // Tope duro: si algo dejara de limpiar, esto no puede crecer sin freno.
+  if (avisosPendientes.size >= MAX_AVISOS_PENDIENTES) {
+    const primero = avisosPendientes.keys().next().value;
+    if (primero) avisosPendientes.delete(primero);
+  }
+  avisosPendientes.set(wamid, { destino, resumen });
+  // Si a los 10 minutos no rebotó, llegó bien: se suelta la memoria.
+  setTimeout(() => avisosPendientes.delete(wamid), 10 * 60 * 1000).unref?.();
+}
+
+/**
+ * Reintenta por plantilla un aviso al equipo que rebotó por ventana cerrada.
+ *
+ * El aviso va MÍNIMO a propósito: mandar la plantilla no abre la ventana, solo
+ * responderla. Por eso el detalle completo no se manda acá — sale cuando la
+ * persona contesta, que es lo único que habilita el texto libre.
+ */
+async function reintentarAvisoPorPlantilla(wamid: string, error?: string): Promise<void> {
+  const pendiente = avisosPendientes.get(wamid);
+  if (!pendiente) return;
+  avisosPendientes.delete(wamid);
+  if (!esFalloDeVentana(error)) return; // número inexistente o bloqueo: la plantilla también fallaría
+
+  try {
+    await sendTemplate(
+      pendiente.destino,
+      config.whatsapp.templateAvisos,
+      config.whatsapp.templateAvisosIdioma,
+      [pendiente.resumen],
+    );
+    console.log(`📤 Aviso reenviado por plantilla a ${pendiente.destino} (la ventana de 24 h estaba cerrada).`);
+  } catch (err) {
+    console.error(`No se pudo reenviar el aviso por plantilla a ${pendiente.destino}:`, err);
   }
 }
 
@@ -1035,6 +1091,11 @@ async function loguearUso(): Promise<void> {
 const usoTimer = setInterval(() => void loguearUso(), 60 * 60 * 1000);
 if (typeof usoTimer.unref === "function") usoTimer.unref();
 void loguearUso();
+
+// Plantilla de avisos al equipo: se verifica/crea al arrancar. Best-effort — si
+// Meta falla, el bot arranca igual y los avisos siguen saliendo como texto
+// libre (que es lo que ya hacía).
+void asegurarPlantillaAvisos();
 
 // Red de seguridad global: un error no capturado en cualquier punto (ej. una
 // promesa "en segundo plano" que nadie esperó) NUNCA debe tumbar el proceso
