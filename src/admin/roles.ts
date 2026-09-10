@@ -7,7 +7,7 @@
  *   comandos base. Sus números son los WhatsApp de las sucursales.
  */
 import { ciudadesConSucursal } from "../knowledge/sucursales.js";
-import { regionDeLugar } from "../knowledge/departamentos.js";
+import { departamentoDeLugar, REGION_ASESOR } from "../knowledge/departamentos.js";
 
 export interface Admin {
   id: string;
@@ -93,7 +93,8 @@ export function getAdminByPhone(telefono: string): Admin | undefined {
  * municipios resuelve eso primero, y la comparación literal queda de respaldo.
  */
 export function regionAdminDeCiudad(ciudad?: string): string | undefined {
-  const region = regionDeLugar(ciudad);
+  const depto = departamentoDeLugar(ciudad);
+  const region = depto ? REGION_ASESOR[depto] : undefined;
   if (region && ADMIN_REGIONAL_TELEFONO[region]) return region;
 
   const c = normCiudad(ciudad || "");

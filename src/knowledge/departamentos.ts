@@ -1,15 +1,16 @@
 /**
- * Municipio -> región del asesor que lo atiende.
+ * Municipio -> departamento, y departamento -> asesor que lo atiende.
  *
  * POR QUÉ EXISTE: los asesores de Gladymar son uno por departamento, pero el
  * cliente nunca dice el departamento: dice "soy de Montero", "estoy en El Alto",
  * "vivo en Quillacollo". Comparar ese texto contra "Santa Cruz" o "La Paz" no
  * matchea nunca, así que el lead terminaba sin asesor y caía al Gerente General.
  *
- * Las claves de salida son las MISMAS que usa el padrón de asesores en
- * admin/roles.ts ("Santa Cruz", "La Paz", "Cochabamba", "Sucre", "Tarija",
- * "Potosí", "Oruro"). Ojo con Chuquisaca: el padrón la llama "Sucre" (por la
- * ciudad), así que los municipios chuquisaqueños devuelven "Sucre".
+ * Las claves de salida son los DEPARTAMENTOS reales de Bolivia, no las claves
+ * del padrón de asesores: el CRM filtra por región y "Sucre" es una ciudad, no
+ * un departamento. La traducción departamento -> asesor vive en REGION_ASESOR,
+ * que es donde se resuelve que a Chuquisaca la atiende el asesor cargado bajo
+ * la clave "Sucre".
  *
  * Beni y Pando están mapeados a propósito aunque HOY no tengan asesor: así el
  * CRM recibe la región correcta y el día que Gladymar nombre a alguien, alcanza
@@ -31,8 +32,8 @@ function normalizar(s: string): string {
     .trim();
 }
 
-/** Región del asesor (clave del padrón) -> municipios y sinónimos que le corresponden. */
-const MUNICIPIOS_POR_REGION: Record<string, string[]> = {
+/** Departamento -> municipios y sinónimos que le corresponden. */
+const MUNICIPIOS_POR_DEPARTAMENTO: Record<string, string[]> = {
   "Santa Cruz": [
     "santa cruz",
     "santa cruz de la sierra",
@@ -127,7 +128,7 @@ const MUNICIPIOS_POR_REGION: Record<string, string[]> = {
     "entre rios cochabamba",
     "colomi",
   ],
-  Sucre: [
+  Chuquisaca: [
     "sucre",
     "chuquisaca",
     "yotala",
@@ -218,14 +219,29 @@ const MUNICIPIOS_POR_REGION: Record<string, string[]> = {
   Pando: ["pando", "cobija", "porvenir", "puerto rico", "gonzalo moreno", "filadelfia"],
 };
 
-/** Índice invertido: municipio normalizado -> región. Se arma una sola vez. */
-const REGION_POR_MUNICIPIO = new Map<string, string>();
-for (const [region, municipios] of Object.entries(MUNICIPIOS_POR_REGION)) {
-  for (const m of municipios) REGION_POR_MUNICIPIO.set(normalizar(m), region);
+/**
+ * Departamento -> clave con la que ese asesor está cargado en el padrón.
+ * Solo Chuquisaca difiere: el padrón la tiene como "Sucre". Beni y Pando no
+ * figuran porque todavía no tienen asesor asignado.
+ */
+export const REGION_ASESOR: Record<string, string> = {
+  "Santa Cruz": "Santa Cruz",
+  "La Paz": "La Paz",
+  Cochabamba: "Cochabamba",
+  Chuquisaca: "Sucre",
+  Tarija: "Tarija",
+  "Potosí": "Potosí",
+  Oruro: "Oruro",
+};
+
+/** Índice invertido: municipio normalizado -> departamento. Se arma una sola vez. */
+const DEPARTAMENTO_POR_MUNICIPIO = new Map<string, string>();
+for (const [departamento, municipios] of Object.entries(MUNICIPIOS_POR_DEPARTAMENTO)) {
+  for (const m of municipios) DEPARTAMENTO_POR_MUNICIPIO.set(normalizar(m), departamento);
 }
 
 /**
- * Región del asesor que corresponde a un lugar escrito por el cliente.
+ * Departamento al que pertenece un lugar escrito por el cliente.
  *
  * Primero busca coincidencia exacta del texto completo, y recién después
  * palabra por palabra dentro de la frase ("estoy en Montero, Santa Cruz").
@@ -235,25 +251,34 @@ for (const [region, municipios] of Object.entries(MUNICIPIOS_POR_REGION)) {
  * Devuelve undefined si no reconoce el lugar: es preferible dejar el lead sin
  * asesor a mandárselo al asesor equivocado.
  */
-export function regionDeLugar(lugar?: string): string | undefined {
+export function departamentoDeLugar(lugar?: string): string | undefined {
   const t = normalizar(lugar || "");
   if (!t) return undefined;
 
-  const exacta = REGION_POR_MUNICIPIO.get(t);
+  const exacta = DEPARTAMENTO_POR_MUNICIPIO.get(t);
   if (exacta) return exacta;
 
   // Coincidencia por frase contenida, de la clave más larga a la más corta,
   // para que "santa cruz de la sierra" gane sobre "santa cruz".
-  const claves = [...REGION_POR_MUNICIPIO.keys()].sort((a, b) => b.length - a.length);
+  const claves = [...DEPARTAMENTO_POR_MUNICIPIO.keys()].sort((a, b) => b.length - a.length);
   for (const clave of claves) {
     if (new RegExp(`(^|\\s)${clave.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|\\s)`).test(t)) {
-      return REGION_POR_MUNICIPIO.get(clave);
+      return DEPARTAMENTO_POR_MUNICIPIO.get(clave);
     }
   }
   return undefined;
 }
 
+/**
+ * Mapa completo municipio -> departamento, para que el CRM pueda repartir de
+ * una sola vez la cartera que ya tiene cargada en vez de esperar a que cada
+ * cliente vuelva a escribir. Se sirve por /admin/municipios.
+ */
+export function mapaMunicipios(): Record<string, string> {
+  return Object.fromEntries([...DEPARTAMENTO_POR_MUNICIPIO.entries()].sort());
+}
+
 /** Municipios reconocidos (para diagnóstico y pruebas). */
 export function municipiosReconocidos(): number {
-  return REGION_POR_MUNICIPIO.size;
+  return DEPARTAMENTO_POR_MUNICIPIO.size;
 }

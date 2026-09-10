@@ -28,6 +28,14 @@ export interface CrmPayload {
    * cuando viene vacío en vez de mandarse como "".
    */
   asesor?: string;
+  /**
+   * Departamento del lead (los 9 reales de Bolivia, no la clave del padrón).
+   *
+   * Viaja aunque no haya asesor: un lead de Beni o Pando, o de una región sin
+   * asesor asignado, igual queda filtrable por región en el CRM en vez de
+   * quedar visible solo para el Gerente General.
+   */
+  departamento?: string;
 }
 
 export class CrmIngest {
@@ -55,7 +63,7 @@ export class CrmIngest {
     if (!p.external_id || (!p.message && !p.response && !p.is_admin)) return "skip";
 
     const body: Record<string, unknown> = { external_id: p.external_id };
-    for (const k of ["name", "city", "segment", "stage", "interest", "message", "response", "role", "asesor"] as const) {
+    for (const k of ["name", "city", "segment", "stage", "interest", "message", "response", "role", "asesor", "departamento"] as const) {
       const v = p[k];
       if (v != null && String(v).trim() !== "") body[k] = v;
     }

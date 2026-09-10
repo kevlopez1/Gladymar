@@ -26,6 +26,7 @@ import { chequearNotificacionesPedidos } from "./integrations/pedidoEstados.js";
 import { parseCSV } from "./util/csv.js";
 import { insertarConversacion, obtenerConversaciones } from "./db/index.js";
 import { pideDimensionViva } from "./knowledge/dimensionViva.js";
+import { departamentoDeLugar, mapaMunicipios, municipiosReconocidos } from "./knowledge/departamentos.js";
 
 const sheets = new SheetsLogger(config.sheets.webhookUrl);
 const crm = new CrmIngest(config.crm.ingestUrl, config.crm.ingestToken);
@@ -234,6 +235,31 @@ app.get("/admin/uso", async (req, res) => {
     costo_sin_cache_usd: Number(resumen.costoSinCacheUsd.toFixed(4)),
     ahorro_por_cache_usd: Number((resumen.costoSinCacheUsd - resumen.costoUsd).toFixed(4)),
     por_dia: resumen.dias,
+  });
+});
+
+// Mapa municipio -> departamento -> asesor. Lo consume el CRM de Prime para
+// repartir de una sola vez la cartera ya cargada (backfill sobre su columna
+// city), en vez de esperar a que cada cliente vuelva a escribir.
+// Se abre: /admin/municipios?key=TU_CLAVE
+app.get("/admin/municipios", (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  const asesorPorDepartamento: Record<string, string | null> = {};
+  for (const depto of new Set(Object.values(mapaMunicipios()))) {
+    asesorPorDepartamento[depto] = adminNombrePorCiudad(depto) ?? null;
+  }
+  res.json({
+    nota:
+      "Las claves de 'municipios' están normalizadas: minúsculas, sin tildes y sin puntuación. " +
+      "Normalizá igual el valor de city antes de buscarlo. Un departamento con asesor null " +
+      "(Beni, Pando) todavía no tiene asesor asignado: mandar la región, no el asesor.",
+    total: municipiosReconocidos(),
+    asesorPorDepartamento,
+    municipios: mapaMunicipios(),
   });
 });
 
@@ -920,6 +946,10 @@ async function procesarTurnoCliente(
         stage: adminRemitente ? undefined : stageDeTipo(reply.solicitud?.tipo),
         interest: adminRemitente ? undefined : reply.solicitud?.detalle,
         asesor: adminRemitente ? undefined : adminNombrePorCiudad(ciudadLead),
+        // El departamento viaja aunque NO haya asesor (Beni, Pando): así el CRM
+        // puede filtrar por región sin depender del nombre del asesor, y un lead
+        // de una región sin asesor asignado igual lo ve alguien.
+        departamento: adminRemitente ? undefined : departamentoDeLugar(ciudadLead),
         message: text,
         response: reply.text,
         is_admin: Boolean(adminRemitente),
