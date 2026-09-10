@@ -19,6 +19,15 @@ export interface CrmPayload {
   is_admin?: boolean;
   /** Rol del contacto cuando es administrador (ej. "gerente", "regional"). */
   role?: string;
+  /**
+   * Nombre del asesor al que se derivó el lead, con tildes y tal cual figura en
+   * el padrón (el panel del CRM filtra por comparación literal).
+   *
+   * OJO: el CRM lo aplica con COALESCE, así que una cadena vacía BORRARÍA la
+   * asignación existente. Por eso este campo, como el resto, se omite del body
+   * cuando viene vacío en vez de mandarse como "".
+   */
+  asesor?: string;
 }
 
 export class CrmIngest {
@@ -46,7 +55,7 @@ export class CrmIngest {
     if (!p.external_id || (!p.message && !p.response && !p.is_admin)) return "skip";
 
     const body: Record<string, unknown> = { external_id: p.external_id };
-    for (const k of ["name", "city", "segment", "stage", "interest", "message", "response", "role"] as const) {
+    for (const k of ["name", "city", "segment", "stage", "interest", "message", "response", "role", "asesor"] as const) {
       const v = p[k];
       if (v != null && String(v).trim() !== "") body[k] = v;
     }
@@ -73,19 +82,26 @@ export class CrmIngest {
   }
 }
 
-/** Mapea el tipo de solicitud del agente a una etapa del embudo del CRM. */
+/**
+ * Mapea el tipo de solicitud del agente a una etapa del embudo del CRM.
+ *
+ * Los valores son los SLUGS del embudo de Gladymar, no etiquetas para mostrar:
+ * el CRM compara la cadena literal. Antes se mandaba "Cotizado" / "Visita
+ * técnica" (capitalizados y con tilde) y no coincidían con los slugs, así que
+ * la etapa no se aplicaba. No cambiar sin coordinar con el CRM.
+ */
 export function stageDeTipo(tipo?: string): string | undefined {
   switch (tipo) {
     case "cotizacion":
-      return "Cotizado";
+      return "cotizado";
     case "contactar_asesor":
-      return "Contactado";
+      return "contactado";
     case "seguimiento_pedido":
-      return "Seguimiento";
+      return "seguimiento";
     case "reclamo":
-      return "Reclamo";
+      return "reclamo";
     case "visita_tecnica":
-      return "Visita técnica";
+      return "visita_tecnica";
     default:
       return undefined;
   }

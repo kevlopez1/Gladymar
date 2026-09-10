@@ -7,6 +7,7 @@
  *   comandos base. Sus números son los WhatsApp de las sucursales.
  */
 import { ciudadesConSucursal } from "../knowledge/sucursales.js";
+import { regionDeLugar } from "../knowledge/departamentos.js";
 
 export interface Admin {
   id: string;
@@ -83,15 +84,37 @@ export function getAdminByPhone(telefono: string): Admin | undefined {
   return ADMIN_POR_TELEFONO[toIntlBolivia(telefono)];
 }
 
-/** Teléfono (internacional) del administrador regional de una ciudad, si existe. */
-export function adminTelefonoPorCiudad(ciudad: string): string | undefined {
-  const c = normCiudad(ciudad);
+/**
+ * Región del asesor que corresponde a un lugar dicho por el cliente.
+ *
+ * El cliente dice el municipio ("Montero", "El Alto", "Quillacollo"), no el
+ * departamento. Antes esto comparaba el texto contra "Santa Cruz" / "La Paz" y
+ * no matcheaba nunca, así que esos leads quedaban sin asesor: el mapa de
+ * municipios resuelve eso primero, y la comparación literal queda de respaldo.
+ */
+export function regionAdminDeCiudad(ciudad?: string): string | undefined {
+  const region = regionDeLugar(ciudad);
+  if (region && ADMIN_REGIONAL_TELEFONO[region]) return region;
+
+  const c = normCiudad(ciudad || "");
   if (!c) return undefined;
-  for (const [nombre, num] of Object.entries(ADMIN_REGIONAL_TELEFONO)) {
+  for (const nombre of Object.keys(ADMIN_REGIONAL_TELEFONO)) {
     const n = normCiudad(nombre);
-    if (n === c || c.includes(n) || n.includes(c)) return toIntlBolivia(num);
+    if (n === c || c.includes(n) || n.includes(c)) return nombre;
   }
   return undefined;
+}
+
+/** Nombre del asesor que atiende ese lugar, tal cual va al CRM (con tildes). */
+export function adminNombrePorCiudad(ciudad?: string): string | undefined {
+  const region = regionAdminDeCiudad(ciudad);
+  return region ? ADMIN_REGIONAL_NOMBRE[region] : undefined;
+}
+
+/** Teléfono (internacional) del administrador regional de una ciudad, si existe. */
+export function adminTelefonoPorCiudad(ciudad: string): string | undefined {
+  const region = regionAdminDeCiudad(ciudad);
+  return region ? toIntlBolivia(ADMIN_REGIONAL_TELEFONO[region]) : undefined;
 }
 
 /** True si el número (en cualquier formato) pertenece a un administrador. */

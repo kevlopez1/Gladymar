@@ -18,7 +18,7 @@ import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./what
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
 import { CrmIngest, stageDeTipo } from "./integrations/crm.js";
-import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, ADMIN_TELEFONO, adminRoster } from "./admin/roles.js";
+import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, adminNombrePorCiudad, ADMIN_TELEFONO, adminRoster } from "./admin/roles.js";
 import { handleAdminCommand, reportes } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
 import { ciudadesConSucursal } from "./knowledge/sucursales.js";
@@ -907,13 +907,19 @@ async function procesarTurnoCliente(
         const cd = detectarCiudad(ciudadSolicitud) || ciudadSolicitud;
         ciudadPorUsuario.set(from, cd);
       }
+      // Asesor asignado: el mismo al que se le mandó el handoff por WhatsApp,
+      // resuelto por municipio -> departamento. Si no se reconoce el lugar queda
+      // undefined y el campo NO viaja: mandarlo vacío borraría en el CRM una
+      // asignación que alguien pudo haber hecho a mano.
+      const ciudadLead = reply.solicitud?.ciudad || ciudadPorUsuario.get(from);
       void crm.send({
         external_id: from,
         name: adminRemitente?.nombre || reply.solicitud?.nombre || name,
-        city: adminRemitente?.region || reply.solicitud?.ciudad || ciudadPorUsuario.get(from),
+        city: adminRemitente?.region || ciudadLead,
         segment: adminRemitente ? "Administrador" : undefined,
         stage: adminRemitente ? undefined : stageDeTipo(reply.solicitud?.tipo),
         interest: adminRemitente ? undefined : reply.solicitud?.detalle,
+        asesor: adminRemitente ? undefined : adminNombrePorCiudad(ciudadLead),
         message: text,
         response: reply.text,
         is_admin: Boolean(adminRemitente),
