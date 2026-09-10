@@ -82,6 +82,16 @@ export class CrmIngest {
         console.warn(`CRM ingest falló (${res.status}): ${await res.text()}`);
         return "fail";
       }
+      // Traza de asignación, SOLO para envíos que son un lead (los que llevan
+      // stage). Sin esto no hay forma de contestar "¿con qué asesor salió este
+      // lead?" sin acceso a la base del CRM: el payload se iba sin dejar rastro.
+      // No se loguea el mensaje ni la respuesta (son texto del cliente).
+      if (p.stage) {
+        console.log(
+          `🔗 CRM lead: external_id=${p.external_id} city=${p.city ?? "—"} ` +
+            `departamento=${p.departamento ?? "—"} asesor=${p.asesor ?? "—"} stage=${p.stage}`,
+        );
+      }
       return "ok";
     } catch (err) {
       console.warn("CRM ingest error (red):", err);
