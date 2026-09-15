@@ -39,6 +39,7 @@ import {
 import { sendText } from "../whatsapp/client.js";
 import { ADMIN_TELEFONO, esAdmin } from "../admin/roles.js";
 import { encolarAvisos, colaAvisosHabilitada, type AvisoParaEncolar } from "./colaAvisos.js";
+import { enviarFotoPedidos } from "./pedidosCrm.js";
 
 /**
  * Estados que disparan aviso -> plantilla de Meta a usar (nombre + idioma).
@@ -123,12 +124,28 @@ function esTelefonoInterno(telefono: string): boolean {
   return esAdmin(telefono) || config.despacho.telefonosPrueba.includes(telefono);
 }
 
-interface PedidoActual {
+export interface ItemPedido {
+  descripcion?: string;
+  cantidad?: string;
+  estado: string;
+}
+
+export interface PedidoActual {
   factura: string;
   nombre: string;
   estado: string;
-  /** Todos los números de contacto cargados para esa factura (sin repetir). */
+  /**
+   * Todos los números de contacto cargados para esa factura (sin repetir).
+   * Puede venir VACÍO: un pedido sin teléfono cargado no recibe aviso, pero
+   * existe igual y tiene que salir en la foto que ve logística.
+   */
   telefonos: string[];
+  /** Una por fila de la hoja: una factura trae una fila por producto. */
+  items: ItemPedido[];
+  /** Las columnas de la hoja que no usamos, tal cual vinieron. */
+  extra: Record<string, string>;
+  /** Las filas de esta factura NO coinciden en el ESTADO. */
+  estadosMixtos: boolean;
 }
 
 /**
@@ -238,7 +255,24 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     };
   }
 
-  interface Acum { nombre: string; estado: string; telefonos: Set<string>; estadosEnFilas: Set<string> }
+  interface Acum {
+    nombre: string;
+    estado: string;
+    telefonos: Set<string>;
+    estadosEnFilas: Set<string>;
+    items: ItemPedido[];
+    extra: Record<string, string>;
+  }
+  // Columnas que ya viajan como campo propio: todo lo demás va en `extra` tal
+  // cual vino. Así una columna nueva en la hoja llega al CRM sin tocar código.
+  const iDescripcion = enc.findIndex((c) => /PRODUCTO|DESCRIPCI|DETALLE|ITEM|ARTICULO|ART[IÍ]CULO/.test(c));
+  const iCantidad = enc.findIndex((c) => /^CANT|CANTIDAD/.test(c));
+  // Descripción y cantidad salen por `items`, una por fila: repetirlas en
+  // `extra` mandaría el primer producto de la factura haciéndose pasar por un
+  // dato de la cabecera.
+  const columnasPropias = new Set(
+    [iFactura, iTelefono, iNombre, iEstado, iDescripcion, iCantidad].filter((i) => i >= 0),
+  );
   const porFactura = new Map<string, Acum>();
   const nombresPorTelefono = new Map<string, Set<string>>();
   // Para poder distinguir "la hoja está vacía porque no hay pedidos pendientes"
@@ -260,23 +294,48 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     const telefono = digitos(f[iTelefono] ?? "");
     const estado = (f[iEstado] ?? "").trim().toLowerCase();
     if (estado) estadosVistos[estado] = (estadosVistos[estado] ?? 0) + 1;
-    if (!telefono || !estado) {
-      // Estas dos columnas las llena logística a mano y son la causa más
-      // frecuente de que un pedido no dispare su aviso.
-      if (!telefono) sinTelefono++;
-      if (!estado) sinEstado++;
-      continue;
+    // Estas dos columnas las llena logística a mano y son la causa más
+    // frecuente de que un pedido no dispare su aviso.
+    if (!telefono) sinTelefono++;
+    if (!estado) {
+      sinEstado++;
+      continue; // sin estado no hay nada que reportar de esta fila
     }
+    // Sin teléfono NO se descarta el pedido: no va a recibir aviso, pero existe
+    // y tiene que salir en la foto que ve logística. Antes desaparecía del
+    // listado entero por un dato que le falta a la hoja, no al pedido.
     const nombre = (iNombre >= 0 ? f[iNombre] ?? "" : "").trim();
 
     const acum =
-      porFactura.get(factura) ?? { nombre, estado, telefonos: new Set<string>(), estadosEnFilas: new Set<string>() };
-    acum.telefonos.add(telefono);
+      porFactura.get(factura) ??
+      {
+        nombre,
+        estado,
+        telefonos: new Set<string>(),
+        estadosEnFilas: new Set<string>(),
+        items: [] as ItemPedido[],
+        extra: {} as Record<string, string>,
+      };
+    if (telefono) acum.telefonos.add(telefono);
     acum.estadosEnFilas.add(estado);
+    acum.items.push({
+      descripcion: iDescripcion >= 0 ? (f[iDescripcion] ?? "").trim() || undefined : undefined,
+      cantidad: iCantidad >= 0 ? (f[iCantidad] ?? "").trim() || undefined : undefined,
+      estado,
+    });
+    // Primer valor no vacío de cada columna suelta. Se queda con el primero y
+    // no con el último para que una fila de detalle vacía no borre el dato.
+    for (let c = 0; c < enc.length; c++) {
+      if (columnasPropias.has(c)) continue;
+      const valor = (f[c] ?? "").trim();
+      if (valor && !acum.extra[enc[c]]) acum.extra[enc[c]] = valor;
+    }
     porFactura.set(factura, acum);
 
-    if (!nombresPorTelefono.has(telefono)) nombresPorTelefono.set(telefono, new Set());
-    nombresPorTelefono.get(telefono)!.add(nombre.toUpperCase());
+    if (telefono) {
+      if (!nombresPorTelefono.has(telefono)) nombresPorTelefono.set(telefono, new Set());
+      nombresPorTelefono.get(telefono)!.add(nombre.toUpperCase());
+    }
   }
 
   // Los números internos se repiten a propósito entre facturas de prueba: no
@@ -286,11 +345,14 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     if (nombres.size > 1 && !esTelefonoInterno(tel)) telefonosAmbiguos.add(tel);
   }
 
-  const pedidos = [...porFactura.entries()].map(([factura, a]) => ({
+  const pedidos: PedidoActual[] = [...porFactura.entries()].map(([factura, a]) => ({
     factura,
     nombre: a.nombre,
     estado: a.estado,
     telefonos: [...a.telefonos],
+    items: a.items,
+    extra: a.extra,
+    estadosMixtos: a.estadosEnFilas.size > 1,
   }));
 
   const facturasConEstadosMixtos: Record<string, string[]> = {};
@@ -353,17 +415,6 @@ async function mandarDirecto(a: AvisoParaEncolar): Promise<"enviado" | "fallido"
 }
 
 export async function chequearNotificacionesPedidos(): Promise<void> {
-  if (!isWhatsAppConfigured()) {
-    console.warn("📦 Avisos de pedido en pausa: faltan credenciales de WhatsApp.");
-    return;
-  }
-
-  // Protección 1: sin persistencia no hay forma de saber qué ya se avisó.
-  if (!dbHabilitada()) {
-    console.warn("📦 Avisos de pedido en pausa: falta DATABASE_URL (sin ella se reenviarían en cada chequeo).");
-    return;
-  }
-
   try {
     console.log("📦 Chequeando cambios de estado de pedidos...");
     const filas = await descargarDespachos();
@@ -385,6 +436,23 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
     if (estados.length) {
       console.log(`📦 [hoja] estados: ${estados.map(([e, n]) => `${e} (${n})`).join(", ")}`);
     }
+    // La foto va ANTES de las guardas de los avisos y no depende de ellas: el
+    // panel de logística tiene que reflejar la hoja aunque hoy no haya ninguna
+    // transición, y aunque los avisos estén pausados. Leer la hoja no cuesta
+    // nada y no le manda nada a ningún cliente; quedarse sin panel porque
+    // Postgres no responde sería apagar dos cosas por el precio de una.
+    await enviarFotoPedidos(pedidos);
+
+    if (!isWhatsAppConfigured()) {
+      console.warn("📦 Avisos de pedido en pausa: faltan credenciales de WhatsApp.");
+      return;
+    }
+    // Protección 1: sin persistencia no hay forma de saber qué ya se avisó.
+    if (!dbHabilitada()) {
+      console.warn("📦 Avisos de pedido en pausa: falta DATABASE_URL (sin ella se reenviarían en cada chequeo).");
+      return;
+    }
+
     const mixtas = Object.entries(facturasConEstadosMixtos);
     if (mixtas.length) {
       console.warn(
