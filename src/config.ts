@@ -99,6 +99,14 @@ export const config = {
     backfillSheetId: optional("BACKFILL_SHEET_ID", "11UafcrSOl7YZ7G3cYfrrUvKBzM_irS7RXsq-Avdw8eE"),
   },
 
+  promociones: {
+    // Hoja de Google con las promociones vigentes, que administra Gladymar
+    // (columnas TITULO, DETALLE, CIUDAD, DESDE, HASTA, ACTIVA). Vacío => el
+    // agente no menciona ninguna promoción: nunca se inventa una, porque una
+    // promo inventada es una promesa que hay que honrar en el mostrador.
+    sheetId: optional("PROMOS_SHEET_ID", ""),
+  },
+
   despacho: {
     // Hoja de control de despacho (NO es nuestra: la administra logística de
     // Gladymar). Se lee en tiempo real para responder "¿cómo va mi pedido?"

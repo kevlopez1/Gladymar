@@ -27,6 +27,12 @@ export interface IncomingMessage {
   name?: string; // nombre de perfil, si está disponible
   /** Id del media si el cliente mandó una FOTO (captura del catálogo, un ambiente, etc.). */
   imageId?: string;
+  /** Id del media si mandó un PDF (una cotización, una orden, una ficha). */
+  documentId?: string;
+  /** Nombre del archivo, para nombrarlo al responder. */
+  documentName?: string;
+  /** true si mandó una NOTA DE VOZ. Ver el manejo en index.ts. */
+  esAudio?: boolean;
 }
 
 /**
@@ -67,6 +73,21 @@ export function parseIncomingMessages(body: unknown): IncomingMessage[] {
           if (text) {
             result.push({ from: msg.from, text, messageId: msg.id, name });
           }
+        } else if (msg.type === "document" && msg.document?.id) {
+          // PDF: una cotización de otra casa, una orden, una ficha escrita.
+          result.push({
+            from: msg.from,
+            text: msg.document.caption?.trim() || "",
+            messageId: msg.id,
+            name,
+            documentId: msg.document.id,
+            documentName: msg.document.filename,
+          });
+        } else if (msg.type === "audio" && msg.audio?.id) {
+          // NOTA DE VOZ. No se transcribe (ver index.ts): se responde pidiendo
+          // texto en vez de dejar al cliente hablando solo, que es lo que
+          // pasaba antes — el audio se descartaba sin ninguna respuesta.
+          result.push({ from: msg.from, text: "", messageId: msg.id, name, esAudio: true });
         } else if (msg.type === "image" && msg.image?.id) {
           // FOTO: captura del catálogo, un ambiente, un producto en obra. Antes se
           // descartaba en silencio y el cliente se quedaba sin respuesta.
@@ -147,6 +168,8 @@ interface WebhookPayload {
             button_reply?: { id?: string; title?: string };
           };
           image?: { id?: string; caption?: string; mime_type?: string };
+          document?: { id?: string; caption?: string; filename?: string; mime_type?: string };
+          audio?: { id?: string; mime_type?: string; voice?: boolean };
         }>;
         statuses?: Array<{
           id?: string;

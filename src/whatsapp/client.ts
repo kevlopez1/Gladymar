@@ -51,10 +51,19 @@ export async function sendText(to: string, body: string): Promise<string | null>
 const IMAGENES_SOPORTADAS = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 /** Tope de la API de Claude por imagen (~5 MB en base64). */
 const MAX_IMAGEN_BYTES = 3_500_000;
+/** Documentos que Claude puede leer directamente. Solo PDF. */
+const DOCUMENTOS_SOPORTADOS = ["application/pdf"];
+/** Tope por PDF. Más grande que una foto porque un PDF de varias hojas pesa. */
+const MAX_DOCUMENTO_BYTES = 4_500_000;
 
 export interface MediaDescargada {
   base64: string;
   mimeType: string;
+}
+
+/** Descarga un PDF que mandó el cliente (cotización, orden, ficha). */
+export async function downloadDocumento(mediaId: string): Promise<MediaDescargada | null> {
+  return downloadMedia(mediaId, DOCUMENTOS_SOPORTADOS, MAX_DOCUMENTO_BYTES);
 }
 
 /**
@@ -65,7 +74,11 @@ export interface MediaDescargada {
  * pública). Nunca lanza: si algo falla devuelve null y la conversación sigue
  * como si el cliente no hubiera mandado imagen.
  */
-export async function downloadMedia(mediaId: string): Promise<MediaDescargada | null> {
+export async function downloadMedia(
+  mediaId: string,
+  tipos: string[] = IMAGENES_SOPORTADAS,
+  maxBytes: number = MAX_IMAGEN_BYTES,
+): Promise<MediaDescargada | null> {
   try {
     const metaRes = await fetch(`${BASE}/${mediaId}`, {
       headers: { Authorization: `Bearer ${config.whatsapp.accessToken}` },
@@ -79,12 +92,12 @@ export async function downloadMedia(mediaId: string): Promise<MediaDescargada | 
     if (!meta.url) return null;
 
     const mimeType = (meta.mime_type || "").split(";")[0].trim();
-    if (!IMAGENES_SOPORTADAS.includes(mimeType)) {
-      console.warn(`🖼️  Tipo de imagen no soportado (${mimeType || "desconocido"}), se ignora.`);
+    if (!tipos.includes(mimeType)) {
+      console.warn(`🖼️  Tipo no soportado (${mimeType || "desconocido"}), se ignora.`);
       return null;
     }
-    if (meta.file_size && meta.file_size > MAX_IMAGEN_BYTES) {
-      console.warn(`🖼️  Imagen demasiado grande (${meta.file_size} bytes), se ignora.`);
+    if (meta.file_size && meta.file_size > maxBytes) {
+      console.warn(`🖼️  Archivo demasiado grande (${meta.file_size} bytes), se ignora.`);
       return null;
     }
 
@@ -97,7 +110,7 @@ export async function downloadMedia(mediaId: string): Promise<MediaDescargada | 
       return null;
     }
     const buf = Buffer.from(await binRes.arrayBuffer());
-    if (buf.byteLength > MAX_IMAGEN_BYTES) {
+    if (buf.byteLength > maxBytes) {
       console.warn(`🖼️  Imagen demasiado grande (${buf.byteLength} bytes), se ignora.`);
       return null;
     }

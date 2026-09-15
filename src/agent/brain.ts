@@ -97,16 +97,18 @@ function scrubContactos(text: string): string {
  * nota de texto para que el agente recuerde que hubo una foto.
  */
 function sinImagenes(messages: ChatMessage[]): ChatMessage[] {
+  const pesado = (t: unknown) => t === "image" || t === "document";
   return messages.map((m) => {
     if (!Array.isArray(m.content)) return m;
-    if (!m.content.some((b) => typeof b === "object" && b.type === "image")) return m;
+    if (!m.content.some((b) => typeof b === "object" && pesado(b.type))) return m;
     return {
       ...m,
-      content: m.content.map((b) =>
-        typeof b === "object" && b.type === "image"
-          ? ({ type: "text", text: "(foto enviada por el cliente)" } as const)
-          : b,
-      ),
+      content: m.content.map((b) => {
+        if (typeof b !== "object" || !pesado(b.type)) return b;
+        // Un PDF pesa todavía más que una foto: con más razón no se guarda.
+        const nota = b.type === "image" ? "(foto enviada por el cliente)" : "(PDF enviado por el cliente)";
+        return { type: "text", text: nota } as const;
+      }),
     };
   });
 }
@@ -191,6 +193,8 @@ export class GladymarAgent {
       prueba?: boolean;
       /** Foto que mandó el cliente (captura del catálogo, un ambiente, un producto). */
       imagen?: { base64: string; mimeType: string };
+      /** PDF que mandó el cliente (una cotización de otra casa, una orden, una ficha). */
+      documento?: { base64: string; nombre?: string };
     },
   ): Promise<AgentReply> {
     // La cotización en PDF solo está habilitada para admins (modo prueba).
@@ -215,6 +219,24 @@ export class GladymarAgent {
           {
             type: "text",
             text: userText || "(el cliente mandó esta foto sin texto)",
+          },
+        ],
+      });
+    } else if (opts?.documento) {
+      // El PDF va antes del texto, igual que la foto: Claude lo lee y después
+      // interpreta la pregunta que lo acompaña.
+      messages.push({
+        role: "user",
+        content: [
+          {
+            type: "document",
+            source: { type: "base64", media_type: "application/pdf", data: opts.documento.base64 },
+          },
+          {
+            type: "text",
+            text:
+              userText ||
+              `(el cliente mandó este PDF${opts.documento.nombre ? ` "${opts.documento.nombre}"` : ""} sin texto)`,
           },
         ],
       });

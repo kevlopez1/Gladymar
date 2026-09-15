@@ -19,6 +19,8 @@ import { infoTema, temasDisponibles } from "../knowledge/temas.js";
 import { AREAS } from "../knowledge/contactos.js";
 import { recordSolicitud } from "../admin/data.js";
 import { construirCotizacion, bs, type Cotizacion } from "./cotizacion.js";
+import { resumenMaterial } from "../knowledge/material.js";
+import { promocionesVigentes, formatearPromociones } from "../knowledge/promociones.js";
 import { buscarPedidoPorFactura, formatearEstadoPedido } from "../integrations/despacho.js";
 
 const TIPOS_SOLICITUD = [
@@ -96,6 +98,34 @@ export const TOOLS: Anthropic.Tool[] = [
         },
       },
       required: ["tema"],
+    },
+  },
+  {
+    name: "calcular_material",
+    description:
+      "Calcula cuánto material necesita el cliente para una superficie: los m² con el 10% de desperdicio por cortes, cuántas CAJAS le corresponden según la línea o el formato, y qué pegamento va. Usala apenas el cliente diga cuántos m² tiene que cubrir. Devuelve el texto listo para responder.",
+    input_schema: {
+      type: "object",
+      properties: {
+        metros_cuadrados: { type: "number", description: "Superficie a cubrir, en m²." },
+        producto: {
+          type: "string",
+          description:
+            "Producto o línea elegida, con su formato si se sabe (ej. 'Lomas Beige 60x120', 'porcelanato 60x60').",
+        },
+      },
+      required: ["metros_cuadrados", "producto"],
+    },
+  },
+  {
+    name: "promociones_vigentes",
+    description:
+      "Devuelve las promociones y descuentos que Gladymar tiene vigentes hoy, filtradas por la ciudad del cliente. Usala cuando el cliente pregunte por ofertas, promociones o descuentos, y también cuando estés por cerrar una cotización, para ofrecerle lo que aplique. Si no devuelve ninguna, NO inventes promociones: decí que por el momento no hay vigentes para su ciudad.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ciudad: { type: "string", description: "Ciudad del cliente, si la sabés." },
+      },
     },
   },
   {
@@ -282,6 +312,27 @@ export async function executeTool(
         };
       }
       return { content: formatearEstadoPedido(pedido) };
+    }
+
+    case "calcular_material": {
+      const m2 = Number(input.metros_cuadrados);
+      if (!Number.isFinite(m2) || m2 <= 0) {
+        return { content: "Falta cuántos m² hay que cubrir. Preguntáselo al cliente antes de calcular." };
+      }
+      const producto = typeof input.producto === "string" ? input.producto.trim() : "";
+      return { content: resumenMaterial(m2, producto) };
+    }
+
+    case "promociones_vigentes": {
+      const ciudad = typeof input.ciudad === "string" ? input.ciudad.trim() : undefined;
+      const promos = await promocionesVigentes(ciudad);
+      if (!promos.length) {
+        return {
+          content:
+            "No hay promociones vigentes cargadas para esa ciudad. NO inventes ninguna: decile al cliente que por el momento no hay promociones vigentes y seguí con su consulta.",
+        };
+      }
+      return { content: `Promociones vigentes:\n${formatearPromociones(promos)}` };
     }
 
     case "generar_cotizacion": {

@@ -11,9 +11,10 @@ import { readFileSync } from "node:fs";
 import { config, isWhatsAppConfigured } from "./config.js";
 import { GladymarAgent, type AgentReply } from "./agent/brain.js";
 import { generarCotizacionPDF } from "./agent/cotizacionPdf.js";
+import { bs, type Cotizacion } from "./agent/cotizacion.js";
 import { resumenUso, PRECIOS_USD_POR_MILLON } from "./agent/uso.js";
 import { InMemorySessionStore } from "./session/store.js";
-import { sendText, sendDocument, sendInteractiveList, sendTemplate, downloadMedia, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
+import { sendText, sendDocument, sendInteractiveList, sendTemplate, downloadMedia, downloadDocumento, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
@@ -575,6 +576,48 @@ async function notificarAsesor(
 }
 
 /**
+ * Le pasa al asesor la MISMA cotización que recibió el cliente.
+ *
+ * Sin esto el asesor llama a ciegas: el cliente le menciona un total que él no
+ * tiene a mano y queda en offside. Va el detalle y el enlace al PDF, no un
+ * aviso genérico.
+ */
+async function avisarCotizacionAlAsesor(
+  from: string,
+  nombreCliente: string | undefined,
+  cot: Cotizacion,
+  urlPdf: string,
+): Promise<void> {
+  const destino = adminTelefonoPorCiudad(cot.ciudad || "") || ADMIN_TELEFONO;
+  const lineas = [
+    `🧾 *Cotización ${cot.numero}*${cot.ciudad ? " · " + cot.ciudad : ""}`,
+    `👤 ${cot.cliente || nombreCliente || "Cliente"}`,
+    `📱 ${from}  (wa.me/${from})`,
+    "",
+    ...cot.items.map((i) => `• ${i.descripcion}: ${i.cantidad} ${i.unidad} × ${bs(i.precioUnit)} = ${bs(i.subtotal)}`),
+    `*TOTAL: ${bs(cot.total)}*`,
+    "",
+    cot.departamento ? `Precios de ${cot.departamento}.` : "Precios de lista nacional (no se pudo determinar la región).",
+    `Vence: ${cot.vence}`,
+    urlPdf,
+  ];
+  try {
+    const wamid = await sendText(destino, lineas.join("\n"));
+    console.log(`🧾 Cotización ${cot.numero} enviada al asesor ${destino}`);
+    if (wamid) {
+      recordarAviso(wamid, destino, resumenLead({
+        nombre: cot.cliente || nombreCliente,
+        telefono: from,
+        tipo: `cotizacion ${cot.numero}`,
+        detalle: `${cot.items.length} item(s), total ${bs(cot.total)}`,
+      }));
+    }
+  } catch (err) {
+    console.error(`No se pudo pasarle la cotización ${cot.numero} al asesor ${destino}:`, err);
+  }
+}
+
+/**
  * Avisos al equipo que salieron como texto libre y podrían rebotar por la
  * ventana de 24 h, indexados por wamid para reintentarlos con plantilla.
  *
@@ -637,6 +680,9 @@ interface BufferCliente {
   prueba?: boolean;
   /** Última foto del grupo de mensajes (si mandó varias, vale la más reciente). */
   imageId?: string;
+  /** Último PDF del grupo de mensajes. */
+  documentId?: string;
+  documentName?: string;
 }
 const buffers = new Map<string, BufferCliente>();
 const enCurso = new Set<string>();
@@ -672,7 +718,15 @@ async function enviarPanel(
 }
 
 function programarCliente(
-  msg: { from: string; text: string; messageId: string; name?: string; imageId?: string },
+  msg: {
+    from: string;
+    text: string;
+    messageId: string;
+    name?: string;
+    imageId?: string;
+    documentId?: string;
+    documentName?: string;
+  },
   prueba = false,
 ): void {
   let buf = buffers.get(msg.from);
@@ -687,6 +741,10 @@ function programarCliente(
   buf.messageId = msg.messageId;
   buf.prueba = prueba;
   if (msg.imageId) buf.imageId = msg.imageId;
+  if (msg.documentId) {
+    buf.documentId = msg.documentId;
+    buf.documentName = msg.documentName;
+  }
   if (msg.name) buf.name = msg.name;
   // Encuesta de satisfacción desactivada por pedido de Gladymar.
   if (buf.timer) clearTimeout(buf.timer);
@@ -710,12 +768,14 @@ async function vaciarCliente(from: string): Promise<void> {
   const text = buf.textos.join("\n").trim();
   // Una foto sin texto TAMBIÉN se atiende: antes se descartaba y el cliente
   // quedaba sin respuesta.
-  if (!text && !buf.imageId) return;
+  if (!text && !buf.imageId && !buf.documentId) return;
   enCurso.add(from);
   try {
     await procesarTurnoCliente(from, text, buf.messageId, buf.name, {
       prueba: buf.prueba,
       imageId: buf.imageId,
+      documentId: buf.documentId,
+      documentName: buf.documentName,
     });
   } finally {
     enCurso.delete(from);
@@ -727,8 +787,28 @@ async function handleIncoming(msg: {
   text: string;
   messageId: string;
   name?: string;
+  esAudio?: boolean;
 }): Promise<void> {
-  console.log(`📩 ${msg.from}${msg.name ? ` (${msg.name})` : ""}: ${msg.text}`);
+  console.log(`📩 ${msg.from}${msg.name ? ` (${msg.name})` : ""}: ${msg.esAudio ? "(nota de voz)" : msg.text}`);
+
+  // NOTA DE VOZ. No se transcribe: Claude no procesa audio, hace falta un
+  // servicio de transcripción aparte (decisión pendiente, tiene costo por
+  // minuto). Hasta entonces se CONTESTA igual, que es lo que importa: antes el
+  // audio se descartaba en silencio y el cliente se quedaba esperando sin
+  // saber que nadie lo había escuchado.
+  if (msg.esAudio) {
+    void markAsRead(msg.messageId);
+    try {
+      await sendText(
+        msg.from,
+        "¡Gracias por tu mensaje! 😊 Por ahora no puedo escuchar las notas de voz. " +
+          "¿Me lo escribís en un mensaje y seguimos?",
+      );
+    } catch (err) {
+      console.error(`No se pudo responder la nota de voz de ${msg.from}:`, err);
+    }
+    return;
+  }
 
   // Si el número es de un administrador, va al panel admin (no al agente cliente).
   const admin = getAdminByPhone(msg.from);
@@ -821,7 +901,7 @@ async function procesarTurnoCliente(
   text: string,
   messageId: string,
   name?: string,
-  opts?: { prueba?: boolean; imageId?: string },
+  opts?: { prueba?: boolean; imageId?: string; documentId?: string; documentName?: string },
 ): Promise<void> {
   // En modo prueba (un admin probando como cliente) usamos una sesión aparte
   // y NO registramos nada real (ni KPIs, ni lead, ni CRM/Sheets).
@@ -851,8 +931,21 @@ async function procesarTurnoCliente(
       console.log(`🖼️  Foto de ${from}: ${imagen ? "descargada, se envía al agente" : "no se pudo leer"}`);
     }
 
+    // PDF: una cotización de otra casa, una orden, una ficha escrita. Claude lo
+    // lee directo, sin convertirlo a imágenes.
+    const docDescargado = opts?.documentId ? await downloadDocumento(opts.documentId) : null;
+    const documento = docDescargado
+      ? { base64: docDescargado.base64, nombre: opts?.documentName }
+      : undefined;
+    if (opts?.documentId) {
+      console.log(`📄 PDF de ${from}: ${documento ? "descargado, se envía al agente" : "no se pudo leer"}`);
+    }
+
     // La cotización en PDF solo está habilitada para admins (modo prueba).
-    const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF: prueba, prueba, imagen });
+    // La cotización ya NO es exclusiva del modo prueba: el cliente real puede
+    // pedirla y recibir el PDF. Es la función central de la propuesta ("cotiza
+    // sin que nadie conteste") y estaba apagada para clientes.
+    const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF: true, prueba, imagen, documento });
 
     // Respuestas en bloques: muestra "escribiendo…" antes de cada bloque (y un mínimo antes del primero).
     // El último bloque, si hay opciones, se envía como LISTA interactiva (igual que el demo).
@@ -929,13 +1022,15 @@ async function procesarTurnoCliente(
       }
     }
 
-    // Cotización en PDF: SOLO para admins (modo prueba). Un cliente real nunca
-    // recibe el documento (la herramienta ni siquiera está disponible para él).
-    if (reply.cotizacion && prueba) {
+    // Cotización en PDF, para el cliente y para el asesor de su sucursal.
+    if (reply.cotizacion) {
       try {
         const rel = await generarCotizacionPDF(reply.cotizacion);
         const url = `${config.publicBaseUrl.replace(/\/$/, "")}/${rel}`;
         await sendDocument(from, url, `Cotización ${reply.cotizacion.numero}.pdf`, "Cotización referencial ◆ Gladymar");
+        // El asesor tiene que ver lo mismo que vio el cliente ANTES de llamarlo:
+        // si no, el cliente le habla de un precio que el asesor no conoce.
+        if (!prueba) void avisarCotizacionAlAsesor(from, name, reply.cotizacion, url);
       } catch (err) {
         console.error(`No se pudo generar/enviar la cotización a ${from}:`, err);
       }
