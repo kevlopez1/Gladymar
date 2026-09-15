@@ -793,6 +793,7 @@ async function handleIncoming(msg: {
   messageId: string;
   name?: string;
   esAudio?: boolean;
+  imageId?: string;
 }): Promise<void> {
   console.log(`📩 ${msg.from}${msg.name ? ` (${msg.name})` : ""}: ${msg.esAudio ? "(nota de voz)" : msg.text}`);
 
@@ -862,7 +863,10 @@ async function handleIncoming(msg: {
     // Panel de administrador normal.
     void markAsRead(msg.messageId);
     try {
-      await enviarPanel(msg.from, await handleAdminCommand(`wa:${msg.from}`, admin, msg.text));
+      await enviarPanel(
+        msg.from,
+        await handleAdminCommand(`wa:${msg.from}`, admin, msg.text, { imageId: msg.imageId }),
+      );
     } catch (err) {
       console.error(`Error en panel admin para ${msg.from}:`, err);
     }

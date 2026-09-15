@@ -4,18 +4,26 @@
  * - Gerente General (UNO, nacional): todos los comandos, ámbito nacional.
  *   Su número se define con GERENTE_TELEFONO (Andres Tejada).
  * - Administradores regionales: uno por ciudad, ven SOLO su región y los
- *   comandos base. Sus números son los WhatsApp de las sucursales.
+ *   comandos base. Sus números son los WhatsApp de las sucursales, más los
+ *   supervisores de sucursal del padrón de asesores.
+ * - Asesores comerciales: los 17 restantes del padrón. Panel reducido (ven los
+ *   leads de su departamento y pueden dar de alta clientes), sin reclamos ni
+ *   reportes. Se los agrega acá y no en asesores.ts porque ese módulo decide a
+ *   quién se DERIVA un lead, que es otra cosa: un asesor puede recibir leads
+ *   sin tener panel, y el panel no lo convierte en el dueño de la sucursal.
  */
 import { config } from "../config.js";
 import { ciudadesConSucursal } from "../knowledge/sucursales.js";
 import { departamentoDeLugar, REGION_ASESOR } from "../knowledge/departamentos.js";
-import { asesorParaLugar } from "./asesores.js";
+import { asesorParaLugar, ASESORES } from "./asesores.js";
 
 export interface Admin {
   id: string;
   nombre: string;
-  role: "gerente" | "regional";
-  region?: string; // ciudad, solo para regionales
+  role: "gerente" | "regional" | "asesor";
+  region?: string; // ciudad/región, para regionales y asesores
+  /** Sucursal del padrón (solo asesores y supervisores). */
+  sucursal?: string;
 }
 
 /** Número del Gerente General (formato internacional sin "+", como llega de WhatsApp). */
@@ -55,6 +63,24 @@ export function toIntlBolivia(num: string): string {
 
 /** Mapa teléfono (internacional) -> Admin (para enrutar en WhatsApp real). */
 export const ADMIN_POR_TELEFONO: Record<string, Admin> = {};
+
+// 1) Padrón de asesores. Va PRIMERO a propósito: varios de estos números son
+//    también el WhatsApp de la sucursal (Thalía Vera, Ma. René Aviles), y en
+//    ese caso tiene que ganar la entrada regional que se carga después, que es
+//    la que trae el nombre con tildes y la región ya resuelta.
+for (const a of ASESORES) {
+  if (!a.telefono) continue;
+  const tel = toIntlBolivia(a.telefono);
+  ADMIN_POR_TELEFONO[tel] = {
+    id: tel,
+    nombre: a.nombre,
+    role: a.esSupervisor ? "regional" : "asesor",
+    region: REGION_ASESOR[a.departamento] ?? a.departamento,
+    sucursal: a.sucursalCanonica || a.sucursal,
+  };
+}
+
+// 2) Líneas de WhatsApp de las sucursales (el padrón viejo de 7).
 for (const [ciudad, num] of Object.entries(ADMIN_REGIONAL_TELEFONO)) {
   const tel = toIntlBolivia(num);
   ADMIN_POR_TELEFONO[tel] = {
@@ -64,7 +90,7 @@ for (const [ciudad, num] of Object.entries(ADMIN_REGIONAL_TELEFONO)) {
     region: ciudad,
   };
 }
-// El Gerente General tiene prioridad (acceso nacional).
+// 3) El Gerente General tiene prioridad (acceso nacional).
 const gerenteTel = toIntlBolivia(ADMIN_TELEFONO);
 ADMIN_POR_TELEFONO[gerenteTel] = { id: gerenteTel, nombre: "Gerente General", role: "gerente" };
 

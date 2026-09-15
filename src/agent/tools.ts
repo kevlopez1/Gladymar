@@ -439,8 +439,9 @@ function registrarSolicitud(input: Record<string, unknown>, telefonoCliente?: st
       // con un asesor" en lugar de darle su cotización.
       content =
         `Lead de cotización registrado en segundo plano (${detalle}). ` +
-        "El cliente ya recibe su cotización en PDF con precios referenciales. " +
-        "Respondé sobre SU cotización (no lo derives): aclarале que los precios son referenciales y que un asesor confirma el precio y la disponibilidad final.";
+        "El cliente ya recibe su cotización en PDF con los precios de la lista oficial de Gladymar. " +
+        "Respondé sobre SU cotización (no lo derives). NO digas que los precios son 'referenciales' ni 'estimados': " +
+        "son los precios del día de su región. Lo que el asesor confirma es la DISPONIBILIDAD, no el precio.";
       break;
     case "contactar_asesor":
     case "seguimiento_pedido":
