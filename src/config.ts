@@ -99,6 +99,25 @@ export const config = {
     backfillSheetId: optional("BACKFILL_SHEET_ID", "11UafcrSOl7YZ7G3cYfrrUvKBzM_irS7RXsq-Avdw8eE"),
   },
 
+  colaAvisos: {
+    // Cola de avisos del CRM de Prime: el CRM encola, el bot reclama y manda.
+    // Contrato en docs/clientes/gladymar/cola-avisos.md (repo prime-agent-whatsapp).
+    // Vacío => el consumidor queda apagado y el bot sigue leyendo la hoja.
+    url: optional("AVISOS_URL", "https://primebusiness.live"),
+    // Token PROPIO de esta cola, distinto del de publicaciones de Prime: si hay
+    // que rotar uno, el otro no se cae. Vacío => apagado.
+    token: optional("AVISOS_TOKEN", ""),
+    tenant: optional("AVISOS_TENANT", "gladymar"),
+    arrendatario: optional("AVISOS_ARRENDATARIO", "bot-gladymar"),
+    // El TTL cubre el LOTE ENTERO, no un mensaje. Regla: reclamar lo que se
+    // puede mandar en la MITAD del TTL, así una tanda lenta no vence a mitad
+    // de camino y vuelve a la cola mientras todavía se está mandando.
+    // 10 avisos son ~15 s a ritmo normal de Meta; 120 s deja 8x de margen.
+    lote: Math.min(50, Math.max(1, Number(optional("AVISOS_LOTE", "10")) || 10)),
+    ttlSeg: Math.min(900, Math.max(30, Number(optional("AVISOS_TTL_SEG", "120")) || 120)),
+    chequeoMinutos: Math.min(60, Math.max(1, Number(optional("AVISOS_CHEQUEO_MINUTOS", "2")) || 2)),
+  },
+
   cotizacion: {
     // Quiénes pueden emitir la cotización en PDF, además del Gerente General.
     // Lo restringió Gladymar el 15/09/2026: no la genera ni el cliente final ni
