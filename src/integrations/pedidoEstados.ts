@@ -27,8 +27,17 @@
 import { config, isWhatsAppConfigured } from "../config.js";
 import { parseCSV } from "../util/csv.js";
 import { sendTemplate } from "../whatsapp/client.js";
-import { obtenerEstadosPedidos, guardarEstadoPedido, dbHabilitada, claveEstadoPedido } from "../db/index.js";
-import { esAdmin } from "../admin/roles.js";
+import {
+  obtenerEstadosPedidos,
+  guardarEstadoPedido,
+  dbHabilitada,
+  claveEstadoPedido,
+  reservarAviso,
+  confirmarAviso,
+  liberarAviso,
+} from "../db/index.js";
+import { sendText } from "../whatsapp/client.js";
+import { ADMIN_TELEFONO, esAdmin } from "../admin/roles.js";
 
 /**
  * Estados que disparan aviso -> plantilla de Meta a usar (nombre + idioma).
@@ -76,6 +85,36 @@ function forzarReenvio(factura: string, clave: string): boolean {
   reenviosForzados.add(clave);
   console.log(`📦 Reenvío forzado de la factura ${factura} (DESPACHO_REENVIAR_FACTURAS).`);
   return true;
+}
+
+/**
+ * Un log en rojo que nadie lee no es una alerta.
+ *
+ * Este módulo estuvo un mes entero gritando cada 5 minutos que no encontraba un
+ * solo teléfono en la hoja, con severity error, y nadie se enteró porque los
+ * logs de Railway no los mira nadie. 77 clientes quedaron sin su aviso.
+ *
+ * Por eso, cuando pasa un día entero sin poder notificar a nadie, el problema
+ * sale del log y va al WhatsApp del Gerente. Una vez por día, no más: un
+ * recordatorio diario se lee, uno cada 5 minutos se silencia.
+ */
+let ultimoAvisoSalud = 0;
+const UN_DIA_MS = 24 * 60 * 60 * 1000;
+
+async function alertarNoPuedeAvisar(motivo: string): Promise<void> {
+  if (Date.now() - ultimoAvisoSalud < UN_DIA_MS) return;
+  ultimoAvisoSalud = Date.now();
+  try {
+    await sendText(
+      ADMIN_TELEFONO,
+      "⚠️ *Avisos de pedido detenidos*\n\n" +
+        `${motivo}\n\n` +
+        "Mientras esto siga así, ningún cliente recibe el aviso de que su pedido está listo o despachado.",
+    );
+    console.log("📦 Se alertó al Gerente de que los avisos no están saliendo.");
+  } catch (err) {
+    console.error("📦 No se pudo alertar que los avisos están detenidos:", err);
+  }
 }
 
 /** ¿Es un número interno de Gladymar (panel de admins o cargado para pruebas)? */
@@ -249,10 +288,9 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
     if (!filas) return;
     const { pedidos, telefonosAmbiguos: ambiguos, motivo } = leerPedidos(filas);
     if (!pedidos.length) {
-      console.warn(
-        `📦 La hoja se leyó (${filas.length} filas) pero no se reconoció ningún pedido: ` +
-          (motivo ?? "el encabezado está bien pero no hay filas de pedidos debajo."),
-      );
+      const detalle = motivo ?? "el encabezado está bien pero no hay filas de pedidos debajo.";
+      console.warn(`📦 La hoja se leyó (${filas.length} filas) pero no se reconoció ningún pedido: ${detalle}`);
+      void alertarNoPuedeAvisar(`No se reconoce ningún pedido en la hoja de CONTROL DE DESPACHO: ${detalle}`);
       return;
     }
 
@@ -327,11 +365,21 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
           continue;
         }
 
+        // Guarda de idempotencia: se reserva ANTES de llamar a Meta. Si la
+        // clave ya estaba tomada, el aviso salió antes y no se repite aunque
+        // este ciclo crea que hace falta.
+        const claveIdem = `${pedido.factura}:${tel}:${pedido.estado}`;
+        if (!(await reservarAviso(claveIdem))) {
+          sinCambios++;
+          continue;
+        }
+
         try {
           const wamid = await sendTemplate(telefonoInternacional(tel), template.nombre, template.idioma, [
             pedido.nombre || "Cliente",
             pedido.factura,
           ]);
+          void confirmarAviso(claveIdem, wamid);
           // El wamid es lo que después permite cruzar este envío con el acuse
           // de entrega que manda Meta al webhook ("delivered" / "failed"): sin
           // él, "enviado" solo quiere decir que Meta lo aceptó.
@@ -341,9 +389,13 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
           );
           enviados++;
         } catch (err) {
+          // Meta rechazó el envío: se libera la reserva para poder reintentar.
+          // Solo acá. Si Meta aceptó y después no entregó, la reserva se queda:
+          // el mensaje salió y reenviarlo se cobra igual.
+          await liberarAviso(claveIdem);
           console.error(`📦 No se pudo enviar el aviso (factura ${pedido.factura} -> ${tel}):`, err);
           fallidos++;
-          continue; // no se registra: se reintenta en el próximo chequeo
+          continue;
         }
         await guardarEstadoPedido(pedido.factura, tel, pedido.estado);
       }
