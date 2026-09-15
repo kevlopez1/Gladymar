@@ -45,8 +45,8 @@ export function generarCotizacionPDF(cot: Cotizacion): Promise<string> {
     doc.roundedRect(bx, by, bw, 58, 8).fill(CREMA);
     doc.fillColor(GRIS2).font("Helvetica-Bold").fontSize(8).text("N° COTIZACIÓN", bx + 12, by + 10);
     doc.fillColor(ROJO).font("Helvetica-Bold").fontSize(12).text(cot.numero, bx + 12, by + 22);
-    doc.fillColor(GRIS).font("Helvetica").fontSize(8).text(`Fecha: ${cot.fecha}`, bx + 12, by + 40);
-    doc.text("Válida por 15 días", bx + 78, by + 40);
+    doc.fillColor(GRIS).font("Helvetica").fontSize(7.5).text(`Emitida: ${cot.fecha}`, bx + 12, by + 38);
+    doc.fillColor(ROJO).font("Helvetica-Bold").fontSize(7.5).text("Válida por 24 horas", bx + 12, by + 47);
 
     // ── Cliente ──
     let y = 118;
@@ -101,6 +101,7 @@ export function generarCotizacionPDF(cot: Cotizacion): Promise<string> {
     y += 62;
     doc.fillColor(TINTA).font("Helvetica-Bold").fontSize(9).text("Condiciones", M, y);
     doc.fillColor(GRIS).font("Helvetica").fontSize(8.5).text(
+      `• Esta cotización vence el ${cot.vence} (24 horas desde su emisión). Pasado ese plazo los precios se recotizan.\n` +
       "• Precios REFERENCIALES / estimados, sujetos a confirmación del asesor de Gladymar.\n" +
       "• Este documento no constituye factura ni documento fiscal.\n" +
       "• Disponibilidad, tiempos de entrega y condiciones finales a confirmar por un asesor.",
