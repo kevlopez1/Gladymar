@@ -82,6 +82,27 @@ async function crearTabla(): Promise<void> {
     );
   `);
   await p.query(`CREATE INDEX IF NOT EXISTS conversaciones_creado_en_idx ON conversaciones (creado_en DESC);`);
+  // Guarda de idempotencia de los avisos al cliente.
+  //
+  // POR QUÉ NO ALCANZA pedido_estados: esa tabla guarda el ÚLTIMO estado
+  // avisado por (factura, telefono). Sirve para el flujo que lee la hoja, pero
+  // no para una cola con reintentos: si el bot manda, Meta acepta, y el acuse
+  // de vuelta al emisor se pierde por red, la fila vuelve a la cola y se manda
+  // otra vez. El cliente recibe dos mensajes y Gladymar los paga dos veces.
+  //
+  // La clave incluye el ESTADO, no solo factura y teléfono: un pedido que
+  // vuelve de "despachado" a "preparado" tiene que poder avisar de nuevo.
+  //
+  // Se reserva ANTES de llamar a Meta, no después. Reservar después deja la
+  // ventana abierta justo donde está la llamada de red.
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS avisos_enviados (
+      clave_idem TEXT PRIMARY KEY,
+      wamid TEXT,
+      enviado_en BIGINT NOT NULL
+    );
+  `);
+
   // Consumo de tokens por día (zona Bolivia). Hasta ahora el gasto solo se
   // podía estimar; con esto se mide. Se separa lo escrito en caché de lo leído
   // porque cuestan distinto (leer de caché sale ~10 veces más barato).
@@ -357,5 +378,64 @@ export async function obtenerUso(dias = 60): Promise<UsoDia[] | null> {
   } catch (err) {
     console.error("No se pudo leer el uso de tokens desde Postgres:", err);
     return null;
+  }
+}
+
+
+/**
+ * Reserva la clave de un aviso ANTES de mandarlo.
+ *
+ * Devuelve true si la reserva es nuestra (hay que mandar) y false si ya estaba
+ * tomada (ya se mandó, no se repite). El INSERT ... ON CONFLICT DO NOTHING es
+ * atómico, así que dos procesos que reclamen la misma fila a la vez no pueden
+ * mandar los dos.
+ *
+ * Ante un fallo de base devuelve FALSE, o sea NO manda. Es deliberado: sin
+ * poder registrar el envío, mandar es arriesgarse a duplicar, y un aviso que
+ * no sale se recupera en el próximo ciclo. Un aviso duplicado no se recupera.
+ */
+export async function reservarAviso(claveIdem: string): Promise<boolean> {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await tablaLista();
+    const res = await p.query(
+      `INSERT INTO avisos_enviados (clave_idem, enviado_en) VALUES ($1, $2)
+       ON CONFLICT (clave_idem) DO NOTHING`,
+      [claveIdem, Date.now()],
+    );
+    return (res.rowCount ?? 0) > 0;
+  } catch (err) {
+    console.error("No se pudo reservar el aviso en Postgres:", err);
+    return false;
+  }
+}
+
+/** Guarda el wamid del aviso ya mandado, para poder cruzarlo con el acuse. */
+export async function confirmarAviso(claveIdem: string, wamid: string | null): Promise<void> {
+  const p = getPool();
+  if (!p || !wamid) return;
+  try {
+    await tablaLista();
+    await p.query(`UPDATE avisos_enviados SET wamid = $2 WHERE clave_idem = $1`, [claveIdem, wamid]);
+  } catch (err) {
+    console.error("No se pudo guardar el wamid del aviso:", err);
+  }
+}
+
+/**
+ * Libera la reserva cuando el envío falló de verdad (Meta lo rechazó).
+ *
+ * Solo para fallos del ENVÍO. Si Meta aceptó y después no se entregó, la
+ * reserva se mantiene: el mensaje salió y volver a mandarlo se cobra igual.
+ */
+export async function liberarAviso(claveIdem: string): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await tablaLista();
+    await p.query(`DELETE FROM avisos_enviados WHERE clave_idem = $1`, [claveIdem]);
+  } catch (err) {
+    console.error("No se pudo liberar la reserva del aviso:", err);
   }
 }
