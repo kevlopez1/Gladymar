@@ -172,6 +172,32 @@ export interface LecturaDespachos {
    */
   telefonosAmbiguos: Set<string>;
   /**
+   * El encabezado tal cual vino, con TODAS las columnas (leemos cuatro, la
+   * hoja tiene más). Sin esto, "qué columnas tiene la hoja de verdad" solo se
+   * contesta abriendo el Sheet, y la hoja no es nuestra.
+   */
+  encabezado: string[];
+  /**
+   * Cada valor distinto de ESTADO visto, con cuántas filas lo traen.
+   *
+   * Solo avisamos "preparado" y "despachado"; de los demás sabíamos el nombre
+   * de uno ("Entregado") y nada más. Un estado como Anulado que nadie
+   * contempla deja un pedido pendiente para siempre, así que conviene que la
+   * hoja los declare en vez de que alguien los recuerde.
+   */
+  estadosVistos: Record<string, number>;
+  /**
+   * Facturas cuyas filas NO coinciden en el ESTADO, con los estados que traen.
+   *
+   * Una factura tiene una fila por producto y hasta ahora se tomaba el estado
+   * de la PRIMERA, callado. Si logística despacha por partes, una factura con
+   * un ítem preparado y otro despachado se queda en "preparado" y el cliente
+   * nunca recibe el segundo aviso. No se cambia el criterio a ciegas —
+   * adelantar al estado más avanzado anunciaría "despachado" con media factura
+   * en el almacén, que es peor — pero deja de ser invisible.
+   */
+  facturasConEstadosMixtos: Record<string, string[]>;
+  /**
    * Por qué no se reconoció ningún pedido. Sin esto, "la hoja se leyó pero no
    * hay pedidos" tapa tres causas muy distintas (no está el encabezado, falta
    * una columna, o no hay filas) y no se puede arreglar sin abrir la hoja.
@@ -181,7 +207,13 @@ export interface LecturaDespachos {
 
 /** Arma un pedido por factura (una factura tiene varias filas, una por producto). */
 export function leerPedidos(filas: string[][]): LecturaDespachos {
-  const vacio: LecturaDespachos = { pedidos: [], telefonosAmbiguos: new Set() };
+  const vacio: LecturaDespachos = {
+    pedidos: [],
+    telefonosAmbiguos: new Set(),
+    encabezado: [],
+    estadosVistos: {},
+    facturasConEstadosMixtos: {},
+  };
   const encIdx = filas.findIndex((f) => f.some((c) => c.trim().toUpperCase() === "FACTURA"));
   if (encIdx === -1) {
     const primeras = filas.slice(0, 3).map((f) => f.join(" | ")).join("  //  ");
@@ -201,11 +233,12 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     ].filter(Boolean);
     return {
       ...vacio,
+      encabezado: enc,
       motivo: `falta(n) la(s) columna(s) ${faltan.join(", ")}. Encabezado encontrado: ${enc.join(" | ")}`,
     };
   }
 
-  interface Acum { nombre: string; estado: string; telefonos: Set<string> }
+  interface Acum { nombre: string; estado: string; telefonos: Set<string>; estadosEnFilas: Set<string> }
   const porFactura = new Map<string, Acum>();
   const nombresPorTelefono = new Map<string, Set<string>>();
   // Para poder distinguir "la hoja está vacía porque no hay pedidos pendientes"
@@ -214,6 +247,7 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
   let sinFactura = 0;
   let sinTelefono = 0;
   let sinEstado = 0;
+  const estadosVistos: Record<string, number> = {};
 
   for (let r = encIdx + 1; r < filas.length; r++) {
     const f = filas[r];
@@ -225,6 +259,7 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     }
     const telefono = digitos(f[iTelefono] ?? "");
     const estado = (f[iEstado] ?? "").trim().toLowerCase();
+    if (estado) estadosVistos[estado] = (estadosVistos[estado] ?? 0) + 1;
     if (!telefono || !estado) {
       // Estas dos columnas las llena logística a mano y son la causa más
       // frecuente de que un pedido no dispare su aviso.
@@ -234,8 +269,10 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     }
     const nombre = (iNombre >= 0 ? f[iNombre] ?? "" : "").trim();
 
-    const acum = porFactura.get(factura) ?? { nombre, estado, telefonos: new Set<string>() };
+    const acum =
+      porFactura.get(factura) ?? { nombre, estado, telefonos: new Set<string>(), estadosEnFilas: new Set<string>() };
     acum.telefonos.add(telefono);
+    acum.estadosEnFilas.add(estado);
     porFactura.set(factura, acum);
 
     if (!nombresPorTelefono.has(telefono)) nombresPorTelefono.set(telefono, new Set());
@@ -256,6 +293,11 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     telefonos: [...a.telefonos],
   }));
 
+  const facturasConEstadosMixtos: Record<string, string[]> = {};
+  for (const [factura, a] of porFactura) {
+    if (a.estadosEnFilas.size > 1) facturasConEstadosMixtos[factura] = [...a.estadosEnFilas];
+  }
+
   const motivo = pedidos.length
     ? undefined
     : filasDebajo === 0
@@ -264,7 +306,7 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
         `${sinFactura} sin factura legible, ${sinTelefono} sin TELEFONO DEL CLIENTE, ${sinEstado} sin ESTADO. ` +
         "Las dos últimas columnas las llena logística a mano: si están vacías, el aviso no puede salir.";
 
-  return { pedidos, telefonosAmbiguos, motivo };
+  return { pedidos, telefonosAmbiguos, encabezado: enc, estadosVistos, facturasConEstadosMixtos, motivo };
 }
 
 /**
@@ -326,7 +368,31 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
     console.log("📦 Chequeando cambios de estado de pedidos...");
     const filas = await descargarDespachos();
     if (!filas) return;
-    const { pedidos, telefonosAmbiguos: ambiguos, motivo } = leerPedidos(filas);
+    const {
+      pedidos,
+      telefonosAmbiguos: ambiguos,
+      encabezado,
+      estadosVistos,
+      facturasConEstadosMixtos,
+      motivo,
+    } = leerPedidos(filas);
+
+    // Se loguea una vez por ciclo porque son las dos preguntas que no se pueden
+    // contestar sin abrir el Sheet, y el Sheet no es nuestro: qué columnas trae
+    // de verdad, y qué estados existen además de los dos que avisamos.
+    if (encabezado.length) console.log(`📦 [hoja] columnas: ${encabezado.join(" | ")}`);
+    const estados = Object.entries(estadosVistos).sort((a, b) => b[1] - a[1]);
+    if (estados.length) {
+      console.log(`📦 [hoja] estados: ${estados.map(([e, n]) => `${e} (${n})`).join(", ")}`);
+    }
+    const mixtas = Object.entries(facturasConEstadosMixtos);
+    if (mixtas.length) {
+      console.warn(
+        `📦 ${mixtas.length} factura(s) tienen filas con ESTADOS distintos y se avisa con el de la primera: ` +
+          `${mixtas.slice(0, 10).map(([f, e]) => `${f} [${e.join(" + ")}]`).join(", ")}. ` +
+          "Si logística despacha por partes, esos pedidos no reciben el segundo aviso.",
+      );
+    }
     if (!pedidos.length) {
       const detalle = motivo ?? "el encabezado está bien pero no hay filas de pedidos debajo.";
       console.warn(`📦 La hoja se leyó (${filas.length} filas) pero no se reconoció ningún pedido: ${detalle}`);
