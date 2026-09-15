@@ -19,6 +19,13 @@ import { CrmIngest } from "../integrations/crm.js";
 import { adminNombrePorCiudad, toIntlBolivia, type Admin } from "./roles.js";
 import { departamentoDeLugar } from "../knowledge/departamentos.js";
 
+export interface LecturaClientes {
+  clientes: ClienteNuevo[];
+  error?: string;
+  /** Cuántos contactos se leyeron de más y quedaron fuera del lote. */
+  recortados?: number;
+}
+
 export interface ClienteNuevo {
   nombre: string;
   telefono?: string;
@@ -31,8 +38,15 @@ export interface ClienteNuevo {
 const crm = new CrmIngest(config.crm.ingestUrl, config.crm.ingestToken);
 const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });
 
-/** Tope de contactos por foto: una lista larga hay que revisarla, no tragarla. */
-const MAX_POR_LOTE = 15;
+/**
+ * Tope de contactos por tanda.
+ *
+ * Una hoja de cuaderno entera entra sin problema, pero hay un tope igual: la
+ * confirmación se lee en la pantalla del teléfono, y una lista de cincuenta
+ * nadie la revisa de verdad — la aprueba de un toque, que es justo lo que la
+ * confirmación viene a evitar. Lo que sobra se AVISA, nunca se descarta callado.
+ */
+const MAX_POR_LOTE = 25;
 
 const INSTRUCCION = `Extraé los datos de contacto de clientes que aparezcan en lo que te mandan.
 
@@ -44,6 +58,7 @@ Reglas:
 - "telefono": solo los dígitos, sin +591 ni espacios. Si no hay, omitilo.
 - "ciudad": la ciudad o municipio de Bolivia que figure. Si no hay, omitilo.
 - "interes": qué producto o metraje le interesa, en pocas palabras. Si no hay, omitilo.
+- Puede haber UN contacto o VARIOS: devolvé uno por cada persona que distingas, sin fusionar dos en uno ni partir uno en dos.
 - NO inventes ningún dato. Un campo que no está, no va.
 - Si no se distingue ningún contacto, devolvé [].`;
 
@@ -76,8 +91,9 @@ function normalizarTelefono(t?: string): { tel?: string; aviso?: string } {
   return { tel: local };
 }
 
-function limpiar(crudos: unknown): ClienteNuevo[] {
-  if (!Array.isArray(crudos)) return [];
+function limpiar(crudos: unknown): { clientes: ClienteNuevo[]; recortados: number } {
+  if (!Array.isArray(crudos)) return { clientes: [], recortados: 0 };
+  const recortados = Math.max(0, crudos.length - MAX_POR_LOTE);
   const out: ClienteNuevo[] = [];
   for (const c of crudos.slice(0, MAX_POR_LOTE)) {
     if (!c || typeof c !== "object") continue;
@@ -92,12 +108,10 @@ function limpiar(crudos: unknown): ClienteNuevo[] {
       aviso,
     });
   }
-  return out;
+  return { clientes: out, recortados };
 }
 
-async function pedirleAClaude(
-  contenido: Anthropic.MessageParam["content"],
-): Promise<{ clientes: ClienteNuevo[]; error?: string }> {
+async function pedirleAClaude(contenido: Anthropic.MessageParam["content"]): Promise<LecturaClientes> {
   try {
     const res = await anthropic.messages.create({
       model: config.anthropic.model,
@@ -109,7 +123,7 @@ async function pedirleAClaude(
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("\n");
-    return { clientes: limpiar(extraerJson(texto)) };
+    return limpiar(extraerJson(texto));
   } catch (err) {
     console.error("No se pudieron leer los datos del cliente nuevo:", err);
     return { clientes: [], error: "No pude leer los datos en este momento. Probá de nuevo en un minuto." };
@@ -117,13 +131,13 @@ async function pedirleAClaude(
 }
 
 /** Lee uno o varios clientes de un mensaje escrito por el asesor. */
-export async function leerClientesDeTexto(texto: string): Promise<{ clientes: ClienteNuevo[]; error?: string }> {
+export async function leerClientesDeTexto(texto: string): Promise<LecturaClientes> {
   if (!texto.trim()) return { clientes: [] };
   return pedirleAClaude(texto.trim().slice(0, 4000));
 }
 
 /** Lee uno o varios clientes de una foto (tarjeta, lista escrita a mano, captura). */
-export async function leerClientesDeFoto(mediaId: string): Promise<{ clientes: ClienteNuevo[]; error?: string }> {
+export async function leerClientesDeFoto(mediaId: string): Promise<LecturaClientes> {
   const media = await downloadMedia(mediaId);
   if (!media) {
     return { clientes: [], error: "No pude descargar la foto. ¿La mandás de nuevo?" };
@@ -142,7 +156,7 @@ export async function leerClientesDeFoto(mediaId: string): Promise<{ clientes: C
 }
 
 /** Texto de confirmación con lo que se entendió, antes de guardar nada. */
-export function resumenParaConfirmar(clientes: ClienteNuevo[]): string {
+export function resumenParaConfirmar(clientes: ClienteNuevo[], recortados = 0): string {
   const lineas = clientes.map((c, i) => {
     const partes = [`*${i + 1}. ${c.nombre}*`];
     partes.push(`   📱 ${c.telefono ?? "_sin teléfono_"}`);
@@ -154,7 +168,12 @@ export function resumenParaConfirmar(clientes: ClienteNuevo[]): string {
     return partes.join("\n");
   });
   const titulo = clientes.length === 1 ? "Esto entendí:" : `Entendí *${clientes.length}* contactos:`;
-  return `${titulo}\n\n${lineas.join("\n\n")}\n\n¿Los guardo?`;
+  const sobrante = recortados
+    ? `\n\n⚠️ Había *${recortados}* contacto(s) más de los que puedo cargar de una vez (${MAX_POR_LOTE}). ` +
+      "Guardá estos y mandame el resto en otra tanda."
+    : "";
+  const pregunta = clientes.length === 1 ? "¿Lo guardo?" : "¿Los guardo?";
+  return `${titulo}\n\n${lineas.join("\n\n")}${sobrante}\n\n${pregunta}`;
 }
 
 /**

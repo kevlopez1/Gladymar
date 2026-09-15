@@ -26,6 +26,7 @@ import {
   resumenParaConfirmar,
   guardarClientes,
   type ClienteNuevo,
+  type LecturaClientes,
 } from "./altaCliente.js";
 
 export interface AdminReply {
@@ -87,7 +88,7 @@ function menu(admin: Admin): AdminReply {
 }
 
 const MENU_ALTA: AdminReply = {
-  text: "➕ *Agregar cliente*\n\n¿Cómo lo querés cargar?",
+  text: "➕ *Agregar cliente*\n\nPodés cargar *uno o varios* de una vez.\n¿Cómo lo querés hacer?",
   options: [ALTA_ESCRIBIR, ALTA_FOTO, "Volver al menú"],
   optionsButton: "Elegir",
   optionsTitle: "Agregar cliente",
@@ -216,22 +217,25 @@ function pedirDatos(sessionId: string, modo: "texto" | "foto"): AdminReply {
   if (modo === "texto") {
     return {
       text:
-        "✍️ Mandame los datos del cliente en *un solo mensaje*. Por ejemplo:\n\n" +
-        "_Juan Pérez, 71234567, Montero, porcelanato 60x60 para 80 m²_\n\n" +
-        "Si querés cargar varios, uno por línea. Escribí *cancelar* para salir.",
+        "✍️ Mandame los datos en *un solo mensaje*. Puede ser *uno o varios* clientes.\n\n" +
+        "Uno:\n_Juan Pérez, 71234567, Montero, porcelanato 60x60 para 80 m²_\n\n" +
+        "Varios: uno por línea.\n_Juan Pérez, 71234567, Montero, porcelanato 60x60_\n" +
+        "_Rosa Limachi, 69874521, El Alto, cerámica para baño_\n\n" +
+        "Te muestro lo que entendí antes de guardar nada. Escribí *cancelar* para salir.",
     };
   }
   return {
     text:
       "📷 Mandame la *foto* con los datos: una tarjeta, la hoja donde los anotaste o una captura.\n\n" +
+      "Puede tener *uno o varios* clientes: si es una lista, los leo todos.\n\n" +
       "Te muestro lo que entendí antes de guardar nada. Escribí *cancelar* para salir.",
   };
 }
 
 /** Muestra lo leído y deja la sesión esperando el Guardar/Cancelar. */
-function pasarAConfirmar(sessionId: string, clientes: ClienteNuevo[]): AdminReply {
-  pendiente.set(sessionId, { accion: "alta_confirmar", clientes });
-  return { text: resumenParaConfirmar(clientes), ...CONFIRMAR };
+function pasarAConfirmar(sessionId: string, leido: LecturaClientes): AdminReply {
+  pendiente.set(sessionId, { accion: "alta_confirmar", clientes: leido.clientes });
+  return { text: resumenParaConfirmar(leido.clientes, leido.recortados), ...CONFIRMAR };
 }
 
 export async function handleAdminCommand(
@@ -281,7 +285,7 @@ export async function handleAdminCommand(
               : "Mandámelo así: *nombre, teléfono, ciudad, qué le interesa*."),
         };
       }
-      return pasarAConfirmar(sessionId, leido.clientes);
+      return pasarAConfirmar(sessionId, leido);
     }
 
     if (pend.accion === "alta_confirmar") {
@@ -292,7 +296,7 @@ export async function handleAdminCommand(
       }
       // Cualquier otra cosa se toma como una corrección: se relee el texto.
       const releido = await leerClientesDeTexto(raw);
-      if (releido.clientes.length) return pasarAConfirmar(sessionId, releido.clientes);
+      if (releido.clientes.length) return pasarAConfirmar(sessionId, releido);
       return { ...menu(admin), text: "No guardé nada.\n\n" + menu(admin).text };
     }
 
@@ -313,7 +317,7 @@ export async function handleAdminCommand(
   if (extra?.imageId) {
     const leido = await leerClientesDeFoto(extra.imageId);
     if (leido.error) return { text: `⚠️ ${leido.error}`, ...VOLVER };
-    if (leido.clientes.length) return pasarAConfirmar(sessionId, leido.clientes);
+    if (leido.clientes.length) return pasarAConfirmar(sessionId, leido);
     return { text: "No distinguí ningún contacto en esa foto. ¿Probás con una más nítida?", ...VOLVER };
   }
 
