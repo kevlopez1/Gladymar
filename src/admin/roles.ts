@@ -6,6 +6,7 @@
  * - Administradores regionales: uno por ciudad, ven SOLO su región y los
  *   comandos base. Sus números son los WhatsApp de las sucursales.
  */
+import { config } from "../config.js";
 import { ciudadesConSucursal } from "../knowledge/sucursales.js";
 import { departamentoDeLugar, REGION_ASESOR } from "../knowledge/departamentos.js";
 import { asesorParaLugar } from "./asesores.js";
@@ -130,15 +131,25 @@ export function adminTelefonoPorCiudad(ciudad: string): string | undefined {
   return region ? toIntlBolivia(ADMIN_REGIONAL_TELEFONO[region]) : undefined;
 }
 
-/**
- * True SOLO si el número es el del Gerente General (Andrés Tejada).
- *
- * Existe aparte de esAdmin porque la cotización en PDF quedó reservada a él por
- * decisión de Gladymar (15/09/2026): ni los clientes ni los otros seis admins
- * regionales la generan.
- */
+/** True SOLO si el número es el del Gerente General (Andrés Tejada). */
 export function esGerente(telefono: string): boolean {
   return toIntlBolivia(telefono) === toIntlBolivia(ADMIN_TELEFONO);
+}
+
+/**
+ * Quién puede emitir la cotización en PDF.
+ *
+ * Gladymar la restringió el 15/09/2026: no la genera el cliente final ni los
+ * admins regionales. Queda el Gerente General, más los números que se carguen
+ * en COTIZACION_PDF_TELEFONOS (por defecto, Soporte Prime para poder probarla).
+ *
+ * Se lee de configuración y no del código para que sumar o sacar a alguien no
+ * requiera un despliegue.
+ */
+export function puedeCotizarPDF(telefono: string): boolean {
+  if (esGerente(telefono)) return true;
+  const intl = toIntlBolivia(telefono);
+  return config.cotizacion.telefonosPDF.some((t) => toIntlBolivia(t) === intl);
 }
 
 /** True si el número (en cualquier formato) pertenece a un administrador. */

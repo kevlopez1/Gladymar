@@ -99,6 +99,17 @@ export const config = {
     backfillSheetId: optional("BACKFILL_SHEET_ID", "11UafcrSOl7YZ7G3cYfrrUvKBzM_irS7RXsq-Avdw8eE"),
   },
 
+  cotizacion: {
+    // Quiénes pueden emitir la cotización en PDF, además del Gerente General.
+    // Lo restringió Gladymar el 15/09/2026: no la genera ni el cliente final ni
+    // los admins regionales. Lista separada por comas, 8 dígitos o con 591.
+    // Por defecto entra Soporte Prime (desarrollo), que necesita probarla.
+    telefonosPDF: optional("COTIZACION_PDF_TELEFONOS", "74234380")
+      .split(",")
+      .map((t) => t.replace(/\D/g, ""))
+      .filter(Boolean),
+  },
+
   promociones: {
     // Hoja de Google con las promociones vigentes, que administra Gladymar
     // (columnas TITULO, DETALLE, CIUDAD, DESDE, HASTA, ACTIVA). Vacío => el
