@@ -21,7 +21,15 @@ export interface Admin {
   id: string;
   nombre: string;
   role: "gerente" | "regional" | "asesor";
-  region?: string; // ciudad/región, para regionales y asesores
+  region?: string; // clave interna de enrutamiento (ver REGION_ASESOR)
+  /**
+   * Departamento REAL de Bolivia (uno de los 9), que es lo que viaja al CRM.
+   *
+   * No es lo mismo que `region`: la clave de enrutamiento de Chuquisaca es
+   * "Sucre", que es una ciudad, no un departamento. Mezclarlos rompe el cruce
+   * con los leads, porque el bot le estampa "Chuquisaca" a un lead de Sucre.
+   */
+  departamento?: string;
   /** Sucursal del padrón (solo asesores y supervisores). */
   sucursal?: string;
 }
@@ -52,6 +60,24 @@ export const ADMIN_REGIONAL_TELEFONO: Record<string, string> = {
 };
 
 /**
+ * Clave de enrutamiento -> departamento real de Bolivia.
+ *
+ * Existe porque la clave de Chuquisaca es "Sucre", que es su capital y no el
+ * departamento. El bot le estampa "Chuquisaca" a un lead de Sucre, así que un
+ * padrón que dijera "Sucre" no cruzaría con sus propios clientes: la cartera
+ * del regional saldría vacía y no habría ningún error que mirar.
+ */
+const DEPARTAMENTO_DE_REGION: Record<string, string> = {
+  Sucre: "Chuquisaca",
+  "Santa Cruz": "Santa Cruz",
+  "La Paz": "La Paz",
+  Cochabamba: "Cochabamba",
+  Tarija: "Tarija",
+  Oruro: "Oruro",
+  "Potosí": "Potosí",
+};
+
+/**
  * Normaliza un número al formato internacional de Bolivia (591 + número), tal
  * como llega de WhatsApp. Los teléfonos de sucursal están cargados con 8 dígitos
  * locales; acá les anteponemos "591" para que coincidan con el remitente real.
@@ -76,6 +102,7 @@ for (const a of ASESORES) {
     nombre: a.nombre,
     role: a.esSupervisor ? "regional" : "asesor",
     region: REGION_ASESOR[a.departamento] ?? a.departamento,
+    departamento: a.departamento,
     sucursal: a.sucursalCanonica || a.sucursal,
   };
 }
@@ -92,6 +119,7 @@ for (const [ciudad, num] of Object.entries(ADMIN_REGIONAL_TELEFONO)) {
     nombre: ADMIN_REGIONAL_NOMBRE[ciudad] || `Administrador ${ciudad}`,
     role: "regional",
     region: ciudad,
+    departamento: DEPARTAMENTO_DE_REGION[ciudad] ?? ciudad,
     sucursal: ADMIN_POR_TELEFONO[tel]?.sucursal,
   };
 }
@@ -207,6 +235,7 @@ export function adminRoster(): {
   nombre: string;
   role: string;
   ciudad?: string;
+  departamento?: string;
   sucursal?: string;
   sucursal_confirmada: boolean;
 }[] {
@@ -215,6 +244,8 @@ export function adminRoster(): {
     nombre: a.nombre,
     role: a.role,
     ciudad: a.region,
+    // El que cruza con los leads: el bot manda este mismo valor en el ingest.
+    departamento: a.departamento,
     sucursal: a.sucursal,
     sucursal_confirmada: !a.sucursal || !SUCURSAL_SIN_CONFIRMAR.has(a.nombre),
   }));

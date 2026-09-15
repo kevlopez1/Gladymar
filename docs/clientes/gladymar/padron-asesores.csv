@@ -1,6 +1,7 @@
 nombre,telefono,rol,departamento,sucursal,sucursal_confirmada
 "Gerente General","59167401827","gerente","","","si"
 "Soporte Prime","59174234380","gerente","","","si"
+"Jorge Montecinos","59167900508","regional","Chuquisaca","Sucre","si"
 "María René Áviles","59167408846","regional","Cochabamba","Blanco Galindo","si"
 "José Ramos","59168225572","regional","La Paz","Calacoto (Ballivián)","si"
 "Gustavo Villegas","59172303568","regional","Oruro","","si"
@@ -9,8 +10,8 @@ nombre,telefono,rol,departamento,sucursal,sucursal_confirmada
 "Ivana Vargas","59167895527","regional","Santa Cruz","Montero","si"
 "Icelia Perez","59171656258","regional","Santa Cruz","Fábrica (Parque Industrial)","si"
 "Luis Uriona","59171625209","regional","Santa Cruz","Canal Cotoca","si"
-"Jorge Montecinos","59167900508","regional","Sucre","Sucre","si"
 "Rosana Patana","59172987241","regional","Tarija","Tarija","si"
+"Cecilia Fiorilo","59167700221","asesor","Chuquisaca","Sucre","si"
 "Zelena Maldonado","59171344413","asesor","Cochabamba","Juan de la Rosa","si"
 "Nadia Taboada","59168584245","asesor","Cochabamba","Blanco Galindo","si"
 "Grover Gomez","59172207640","asesor","Cochabamba","Blanco Galindo","si"
@@ -26,5 +27,4 @@ nombre,telefono,rol,departamento,sucursal,sucursal_confirmada
 "Ema Lilian Bautista Calla","59171654290","asesor","Santa Cruz","Fábrica (Parque Industrial)","si"
 "Laura Campero","59171622825","asesor","Santa Cruz","Canal Cotoca","si"
 "Carla Ramirez","59171325267","asesor","Santa Cruz","Canal Cotoca","si"
-"Cecilia Fiorilo","59167700221","asesor","Sucre","Sucre","si"
 "Angela Amezaga","59167371513","asesor","Tarija","Tarija","si"
