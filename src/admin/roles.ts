@@ -130,6 +130,17 @@ export function adminTelefonoPorCiudad(ciudad: string): string | undefined {
   return region ? toIntlBolivia(ADMIN_REGIONAL_TELEFONO[region]) : undefined;
 }
 
+/**
+ * True SOLO si el número es el del Gerente General (Andrés Tejada).
+ *
+ * Existe aparte de esAdmin porque la cotización en PDF quedó reservada a él por
+ * decisión de Gladymar (15/09/2026): ni los clientes ni los otros seis admins
+ * regionales la generan.
+ */
+export function esGerente(telefono: string): boolean {
+  return toIntlBolivia(telefono) === toIntlBolivia(ADMIN_TELEFONO);
+}
+
 /** True si el número (en cualquier formato) pertenece a un administrador. */
 export function esAdmin(telefono: string): boolean {
   return Boolean(ADMIN_POR_TELEFONO[toIntlBolivia(telefono)]);

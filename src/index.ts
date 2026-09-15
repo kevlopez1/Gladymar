@@ -19,7 +19,7 @@ import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./what
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
 import { CrmIngest, stageDeTipo } from "./integrations/crm.js";
-import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, adminNombrePorCiudad, ADMIN_TELEFONO, adminRoster } from "./admin/roles.js";
+import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, adminNombrePorCiudad, esGerente, ADMIN_TELEFONO, adminRoster } from "./admin/roles.js";
 import { handleAdminCommand, reportes } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
 import { ciudadesConSucursal } from "./knowledge/sucursales.js";
@@ -941,11 +941,14 @@ async function procesarTurnoCliente(
       console.log(`📄 PDF de ${from}: ${documento ? "descargado, se envía al agente" : "no se pudo leer"}`);
     }
 
-    // La cotización en PDF solo está habilitada para admins (modo prueba).
-    // La cotización ya NO es exclusiva del modo prueba: el cliente real puede
-    // pedirla y recibir el PDF. Es la función central de la propuesta ("cotiza
-    // sin que nadie conteste") y estaba apagada para clientes.
-    const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF: true, prueba, imagen, documento });
+    // La cotización en PDF está reservada al Gerente General (Andrés Tejada),
+    // probando como cliente. Lo decidió Gladymar el 15/09/2026: ni el cliente
+    // final ni los otros seis admins regionales la generan.
+    // OJO: esto NO cumple la pág. 8 de la propuesta, que promete el PDF al
+    // cliente. Está así por pedido expreso; si se revierte, alcanza con volver
+    // a poner `cotizacionPDF: true`.
+    const cotizacionPDF = prueba && esGerente(from);
+    const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF, prueba, imagen, documento });
 
     // Respuestas en bloques: muestra "escribiendo…" antes de cada bloque (y un mínimo antes del primero).
     // El último bloque, si hay opciones, se envía como LISTA interactiva (igual que el demo).
@@ -1022,7 +1025,8 @@ async function procesarTurnoCliente(
       }
     }
 
-    // Cotización en PDF, para el cliente y para el asesor de su sucursal.
+    // Cotización en PDF. Hoy solo la genera el Gerente General; el aviso al
+    // asesor queda listo para cuando se habilite para clientes reales.
     if (reply.cotizacion) {
       try {
         const rel = await generarCotizacionPDF(reply.cotizacion);
