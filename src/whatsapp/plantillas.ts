@@ -46,12 +46,15 @@ async function asegurarPlantilla(
       `${base}?name=${encodeURIComponent(nombre)}&limit=50&access_token=${encodeURIComponent(accessToken)}`,
     );
     const listJson = (await listRes.json().catch(() => ({}))) as {
-      data?: { name: string; status?: string }[];
+      data?: { name: string; status?: string; category?: string }[];
     };
     if (listRes.ok && Array.isArray(listJson.data)) {
       const ya = listJson.data.find((t) => t.name === nombre);
       if (ya) {
-        console.log(`📄 Plantilla "${nombre}" (${para}): ya existe, estado ${ya.status ?? "?"}.`);
+        console.log(
+          `📄 Plantilla "${nombre}" (${para}): ya existe, estado ${ya.status ?? "?"}, categoría ${ya.category ?? "?"}.`,
+        );
+        avisarSiEsMarketing(nombre, ya.category);
         return;
       }
     }
@@ -64,12 +67,15 @@ async function asegurarPlantilla(
     const createJson = (await createRes.json().catch(() => ({}))) as {
       id?: string;
       status?: string;
+      category?: string;
       error?: unknown;
     };
     if (createRes.ok) {
       console.log(
-        `📄 Plantilla "${nombre}" (${para}): creada y enviada a aprobación (id ${createJson.id}, ${createJson.status}).`,
+        `📄 Plantilla "${nombre}" (${para}): creada y enviada a aprobación ` +
+          `(id ${createJson.id}, ${createJson.status}, categoría ${createJson.category ?? "?"}).`,
       );
+      avisarSiEsMarketing(nombre, createJson.category);
     } else {
       console.warn(
         `📄 Plantilla "${nombre}" (${para}): no se pudo crear (HTTP ${createRes.status})`,
@@ -79,6 +85,24 @@ async function asegurarPlantilla(
   } catch (err) {
     console.warn(`📄 Plantilla "${nombre}" (${para}): fallo no crítico:`, err);
   }
+}
+
+/**
+ * Avisa si Meta clasificó la plantilla como MARKETING en vez de UTILITY.
+ *
+ * PEDIR category: "UTILITY" NO ES OBTENER UTILITY: Meta reclasifica por su
+ * cuenta leyendo el texto. El envío funciona igual, así que el problema no se
+ * nota en ningún lado — aparece en la factura un mes después, porque a Bolivia
+ * el marketing cuesta USD 0,0777 por mensaje contra USD 0,0119 el utility.
+ * Seis veces y media más caro, en silencio.
+ */
+function avisarSiEsMarketing(nombre: string, categoria?: string): void {
+  if ((categoria || "").toUpperCase() !== "MARKETING") return;
+  console.error(
+    `📄 ⚠️ Meta clasificó la plantilla "${nombre}" como MARKETING, no UTILITY. ` +
+      "Cada envío pasa a costar ~6,5x (USD 0,0777 contra 0,0119 en Bolivia). " +
+      "Revisá el texto (nada que suene promocional) o recreala a mano en Meta pidiendo la recategorización.",
+  );
 }
 
 /**
