@@ -21,7 +21,16 @@ const LOTE = 2000;
 interface PedidoIngest {
   factura: string;
   cliente?: string;
+  /** El primero, por compatibilidad. El que se usa para cruzar es `telefonos`. */
   telefono?: string;
+  /**
+   * TODOS los contactos cargados para esa factura.
+   *
+   * Va como lista porque el CRM los prueba todos contra la cartera: si el
+   * WhatsApp del cliente está segundo y solo se manda el primero, el pedido
+   * queda sin ficha y el join no falla — devuelve vacío, que es peor.
+   */
+  telefonos?: string[];
   estado: string;
   estados_mixtos: boolean;
   items?: { descripcion?: string; cantidad?: string; estado: string }[];
@@ -40,13 +49,7 @@ function telefonoInternacional(numero: string): string {
 }
 
 function aIngest(p: PedidoActual): PedidoIngest {
-  // Una factura puede tener varios contactos cargados. El contrato lleva uno
-  // solo, así que va el primero y el resto queda en `extra`: perderlos en
-  // silencio dejaría a la ficha con menos contactos de los que la hoja tiene.
   const telefonos = p.telefonos.map(telefonoInternacional).filter(Boolean);
-  const extra = { ...p.extra };
-  if (telefonos.length > 1) extra["TELEFONOS_ADICIONALES"] = telefonos.slice(1).join(", ");
-
   const item: PedidoIngest = {
     factura: p.factura,
     estado: p.estado,
@@ -54,9 +57,22 @@ function aIngest(p: PedidoActual): PedidoIngest {
   };
   if (p.nombre) item.cliente = p.nombre;
   if (telefonos[0]) item.telefono = telefonos[0];
+  if (telefonos.length) item.telefonos = telefonos;
   if (p.items.length) item.items = p.items;
-  if (Object.keys(extra).length) item.extra = extra;
+  if (Object.keys(p.extra).length) item.extra = p.extra;
   return item;
+}
+
+/**
+ * Identificador de esta lectura, igual en todas las tandas de una misma foto.
+ *
+ * Es lo que le permite al CRM barrer las facturas que ya no están: todo lo que
+ * no traiga la corrida de la última llamada dejó de venir. Sin esto, una foto
+ * partida en tandas no podía cerrar el barrido nunca y el panel mostraba una
+ * cola de pedidos que logística ya había terminado.
+ */
+function nuevaCorrida(): string {
+  return `foto-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /**
@@ -77,8 +93,18 @@ export async function enviarFotoPedidos(pedidos: PedidoActual[]): Promise<void> 
   }
 
   const url = `${config.colaAvisos.url.replace(/\/$/, "")}/api/pedidos/ingest`;
+  const corrida = nuevaCorrida();
+  let todasOk = true;
+
   for (let i = 0; i < pedidos.length; i += LOTE) {
     const tanda = pedidos.slice(i, i + LOTE);
+    const esUltima = i + LOTE >= pedidos.length;
+    // El barrido de ausentes solo puede cerrar si la foto llegó ENTERA. Si una
+    // tanda falló, sus facturas no quedaron registradas con esta corrida, y
+    // cerrar igual las marcaría como que logística las terminó. Ante la duda,
+    // la foto no se cierra: un panel un ciclo desactualizado se arregla solo;
+    // una cola de pedidos marcada ausente por error, no.
+    const cerrarFoto = esUltima && todasOk;
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -88,10 +114,8 @@ export async function enviarFotoPedidos(pedidos: PedidoActual[]): Promise<void> 
         },
         body: JSON.stringify({
           tenant: config.colaAvisos.tenant,
-          // Solo va true cuando la tanda es la hoja ENTERA. Si hubiera que
-          // partirla, el barrido de ausentes del CRM borraría de vista todo lo
-          // que quedó en las otras tandas.
-          foto_completa: pedidos.length <= LOTE,
+          corrida,
+          foto_completa: cerrarFoto,
           pedidos: tanda.map(aIngest),
         }),
         signal: AbortSignal.timeout(30_000),
@@ -99,12 +123,14 @@ export async function enviarFotoPedidos(pedidos: PedidoActual[]): Promise<void> 
       const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) {
         console.error(`📦 /api/pedidos/ingest respondió HTTP ${res.status}:`, json);
+        todasOk = false;
         continue;
       }
       const rechazados = Array.isArray(json.rechazados) ? json.rechazados : [];
       console.log(
         `📦 Foto de pedidos enviada al CRM: ${json.recibidos ?? tanda.length} recibidos, ` +
-          `${json.nuevos ?? "?"} nuevos, ${json.sin_ficha ?? "?"} sin ficha, ${json.ausentes ?? "?"} ausentes.`,
+          `${json.nuevos ?? "?"} nuevos, ${json.sin_telefono ?? "?"} sin teléfono en la hoja, ` +
+          `${json.sin_ficha ?? "?"} sin ficha, ${json.ausentes ?? "?"} ausentes.`,
       );
       // Mismo criterio que con la cola: un lote puede volver 200 con rechazos
       // adentro. Sin mirarlos, esos pedidos no aparecen en el panel y no hay
@@ -117,6 +143,14 @@ export async function enviarFotoPedidos(pedidos: PedidoActual[]): Promise<void> 
       }
     } catch (err) {
       console.error("📦 No se pudo mandar la foto de pedidos al CRM:", err);
+      todasOk = false;
     }
+  }
+
+  if (!todasOk) {
+    console.error(
+      `📦 La foto ${corrida} quedó incompleta: no se cerró, así que el CRM no va a marcar ausentes este ciclo. ` +
+        "Se completa sola en el próximo chequeo.",
+    );
   }
 }
