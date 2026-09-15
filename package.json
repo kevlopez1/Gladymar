@@ -12,7 +12,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "tsx src/index.ts",
     "chat": "tsx scripts/chat.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "precios": "tsx scripts/importarPrecios.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.69.0",

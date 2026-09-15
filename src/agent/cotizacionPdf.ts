@@ -75,10 +75,12 @@ export function generarCotizacionPDF(cot: Cotizacion): Promise<string> {
 
     doc.font("Helvetica").fontSize(9.5);
     cot.items.forEach((it, i) => {
-      const alto = Math.max(22, doc.heightOfString(it.descripcion, { width: wDesc }) + 10);
+      // (*) marca el ítem que no salió de la lista oficial (precio estimado).
+      const desc = it.oficial === false ? `${it.descripcion} (*)` : it.descripcion;
+      const alto = Math.max(22, doc.heightOfString(desc, { width: wDesc }) + 10);
       if (i % 2 === 1) doc.rect(M, y, R - M, alto).fill(CREMA);
       const ty = y + 6;
-      doc.fillColor(TINTA).font("Helvetica").text(it.descripcion, cDesc, ty, { width: wDesc });
+      doc.fillColor(TINTA).font("Helvetica").text(desc, cDesc, ty, { width: wDesc });
       doc.fillColor(TINTA).text(String(it.cantidad), cCant, ty, { width: 40, align: "right" });
       doc.fillColor(GRIS).text(it.unidad, cUni, ty, { width: 46, align: "left" });
       doc.fillColor(TINTA).text(bs(it.precioUnit), cPu, ty, { width: 70, align: "right" });
@@ -102,7 +104,13 @@ export function generarCotizacionPDF(cot: Cotizacion): Promise<string> {
     doc.fillColor(TINTA).font("Helvetica-Bold").fontSize(9).text("Condiciones", M, y);
     doc.fillColor(GRIS).font("Helvetica").fontSize(8.5).text(
       `• Esta cotización vence el ${cot.vence} (24 horas desde su emisión). Pasado ese plazo los precios se recotizan.\n` +
-      "• Precios REFERENCIALES / estimados, sujetos a confirmación del asesor de Gladymar.\n" +
+      (cot.departamento
+        ? `• Precios de la lista oficial vigente para ${cot.departamento}.\n`
+        : "• Precios de lista a nivel nacional: no se pudo determinar la región del cliente.\n") +
+      (cot.items.some((i) => i.oficial === false)
+        ? "• Los ítems marcados con (*) no figuran en la lista oficial: su precio es estimado y lo confirma el asesor.\n"
+        : "") +
+      "• Precios sujetos a confirmación de disponibilidad por el asesor de Gladymar.\n" +
       "• Este documento no constituye factura ni documento fiscal.\n" +
       "• Disponibilidad, tiempos de entrega y condiciones finales a confirmar por un asesor.",
       M, y + 14, { width: R - M, lineGap: 2 },
