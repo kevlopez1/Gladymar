@@ -28,6 +28,8 @@ export interface CotItem {
   region?: string;
   /** false cuando el precio salió del estimador por no estar en la lista. */
   oficial?: boolean;
+  /** STATUS de la lista: PORTAFOLIO, NUEVO, SEGUNDA, GRANEL, LIQUIDACIÓN... */
+  status?: string;
 }
 /** Horas que la cotización mantiene el precio. Lo fijó Gerencia en 24 h. */
 export const VIGENCIA_HORAS = 24;
@@ -74,6 +76,7 @@ export function construirCotizacion(cliente: string, ciudad: string | undefined,
         cod: oficial.cod,
         region,
         oficial: true,
+        status: oficial.status,
       };
     }
 
