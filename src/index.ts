@@ -24,7 +24,7 @@ import { handleAdminCommand, reportes } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
 import { ciudadesConSucursal } from "./knowledge/sucursales.js";
 import { chequearNotificacionesPedidos } from "./integrations/pedidoEstados.js";
-import { procesarColaAvisos } from "./integrations/colaAvisos.js";
+import { procesarColaAvisos, anotarFalloTardio } from "./integrations/colaAvisos.js";
 import { parseCSV } from "./util/csv.js";
 import { insertarConversacion, obtenerConversaciones } from "./db/index.js";
 import { pideDimensionViva } from "./knowledge/dimensionViva.js";
@@ -487,6 +487,10 @@ app.post("/webhook", async (req, res) => {
           `📬 NO ENTREGADO a ${st.destinatario} (id=${st.messageId}): ${st.error ?? "sin detalle de Meta"}`,
         );
         void reintentarAvisoPorPlantilla(st.messageId, st.error);
+        // Si ese mensaje salió por la cola del CRM, su fila ya se cerró como
+        // entregada cuando Meta lo aceptó. Le mandamos el motivo para que en la
+        // plataforma no quede como un aviso que llegó bien.
+        void anotarFalloTardio(st.messageId, st.error);
       } else if (st.estado === "delivered" || st.estado === "read") {
         console.log(`📬 ${st.estado} -> ${st.destinatario} (id=${st.messageId})`);
       }

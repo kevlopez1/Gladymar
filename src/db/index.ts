@@ -102,6 +102,13 @@ async function crearTabla(): Promise<void> {
       enviado_en BIGINT NOT NULL
     );
   `);
+  // cola_id: qué fila de la cola del CRM originó este envío. Sirve para el
+  // camino de vuelta: cuando Meta avisa MINUTOS DESPUÉS que el mensaje no se
+  // entregó, el acuse solo trae el wamid, y sin esta columna no habría forma de
+  // decirle al CRM en qué aviso anotar el motivo. Se agrega aparte porque la
+  // tabla ya existe en producción.
+  await p.query(`ALTER TABLE avisos_enviados ADD COLUMN IF NOT EXISTS cola_id TEXT;`);
+  await p.query(`CREATE INDEX IF NOT EXISTS avisos_enviados_wamid ON avisos_enviados (wamid);`);
 
   // Consumo de tokens por día (zona Bolivia). Hasta ahora el gasto solo se
   // podía estimar; con esto se mide. Se separa lo escrito en caché de lo leído
@@ -411,15 +418,50 @@ export async function reservarAviso(claveIdem: string): Promise<boolean> {
   }
 }
 
-/** Guarda el wamid del aviso ya mandado, para poder cruzarlo con el acuse. */
-export async function confirmarAviso(claveIdem: string, wamid: string | null): Promise<void> {
+/**
+ * Guarda el wamid del aviso ya mandado, para poder cruzarlo con el acuse.
+ *
+ * colaId es opcional y solo lo trae lo que salió por la cola del CRM: es el
+ * hilo que permite volver a esa fila cuando el fallo de entrega llega tarde.
+ */
+export async function confirmarAviso(
+  claveIdem: string,
+  wamid: string | null,
+  colaId?: string,
+): Promise<void> {
   const p = getPool();
   if (!p || !wamid) return;
   try {
     await tablaLista();
-    await p.query(`UPDATE avisos_enviados SET wamid = $2 WHERE clave_idem = $1`, [claveIdem, wamid]);
+    await p.query(`UPDATE avisos_enviados SET wamid = $2, cola_id = COALESCE($3, cola_id) WHERE clave_idem = $1`, [
+      claveIdem,
+      wamid,
+      colaId ?? null,
+    ]);
   } catch (err) {
     console.error("No se pudo guardar el wamid del aviso:", err);
+  }
+}
+
+/**
+ * Busca de qué fila de la cola salió el mensaje con este wamid.
+ *
+ * Devuelve null si el mensaje no salió por la cola (ej. los avisos que el bot
+ * manda leyendo la hoja de despacho): esos no tienen fila que anotar.
+ */
+export async function colaIdPorWamid(wamid: string): Promise<string | null> {
+  const p = getPool();
+  if (!p || !wamid) return null;
+  try {
+    await tablaLista();
+    const res = await p.query<{ cola_id: string | null }>(
+      `SELECT cola_id FROM avisos_enviados WHERE wamid = $1 LIMIT 1`,
+      [wamid],
+    );
+    return res.rows[0]?.cola_id ?? null;
+  } catch (err) {
+    console.error("No se pudo buscar el aviso por wamid:", err);
+    return null;
   }
 }
 

@@ -18,7 +18,13 @@
  */
 import { config, isWhatsAppConfigured } from "../config.js";
 import { sendTemplate } from "../whatsapp/client.js";
-import { reservarAviso, confirmarAviso, liberarAviso, dbHabilitada } from "../db/index.js";
+import {
+  reservarAviso,
+  confirmarAviso,
+  liberarAviso,
+  colaIdPorWamid,
+  dbHabilitada,
+} from "../db/index.js";
 
 interface AvisoEncolado {
   id: string;
@@ -162,9 +168,15 @@ export async function procesarColaAvisos(): Promise<void> {
 
     // 2) Guarda de idempotencia. Si la clave ya está tomada, este aviso salió
     //    antes: se cierra la fila sin volver a mandar ni volver a pagar.
+    //
+    //    Se reporta ENTREGADO, no descartado. El mensaje SÍ salió: lo único que
+    //    no pasó es que saliera en este intento. "Descartado" en esta cola
+    //    significa que el aviso no salió y no va a salir, y alguien que lee eso
+    //    en la plataforma llama al cliente o se lo manda de nuevo a mano. El
+    //    error_meta queda igual para que se distinga del envío de este ciclo.
     if (!(await reservarAviso(a.clave_idem))) {
       console.log(`📨 Aviso ${a.id} (${a.clave_idem}) ya se había enviado: no se repite.`);
-      await reportar(a.id, "descartado", { error_meta: "ya_enviado: la clave de idempotencia ya estaba tomada" });
+      await reportar(a.id, "entregado", { error_meta: "ya_enviado: la clave de idempotencia ya estaba tomada" });
       repetidos++;
       continue;
     }
@@ -177,7 +189,7 @@ export async function procesarColaAvisos(): Promise<void> {
         idiomaDe(a.plantilla),
         a.parametros,
       );
-      void confirmarAviso(a.clave_idem, wamid);
+      void confirmarAviso(a.clave_idem, wamid, a.id);
       console.log(`📨 Aviso ${a.id} aceptado por Meta (${a.plantilla} -> ${a.telefono})${wamid ? ` id=${wamid}` : ""}`);
       await reportar(a.id, "entregado", { wamid });
       enviados++;
@@ -196,4 +208,36 @@ export async function procesarColaAvisos(): Promise<void> {
     `📨 Lote terminado: ${enviados} enviado(s), ${repetidos} ya enviado(s) antes, ` +
       `${descartados} descartado(s), ${fallidos} con error.`,
   );
+}
+
+/**
+ * Anota en la cola un fallo de entrega que llegó DESPUÉS de cerrar la fila.
+ *
+ * Meta responde 200 al aceptar el mensaje y recién minutos más tarde avisa que
+ * no se entregó. Para entonces la fila ya se reportó como entregada, así que el
+ * motivo real se perdía: en la plataforma el aviso figuraba bien y el cliente
+ * nunca se había enterado de nada.
+ *
+ * El POST lleva solo el error_meta: la fila NO se reabre ni vuelve a la cola
+ * (reenviar se cobra igual), únicamente queda escrito por qué no llegó. Del
+ * lado del CRM va con COALESCE, así que solo escribe si la fila no tenía
+ * motivo, y la respuesta trae anotado: true.
+ *
+ * Nunca lanza: esto corre dentro del webhook de Meta, que no puede fallar por
+ * un apunte administrativo.
+ */
+export async function anotarFalloTardio(wamid: string, error?: string): Promise<void> {
+  if (!config.colaAvisos.url || !config.colaAvisos.token || !dbHabilitada()) return;
+  try {
+    const colaId = await colaIdPorWamid(wamid);
+    if (!colaId) return; // no salió por la cola: no hay fila que anotar
+    const res = await llamar(`/api/avisos/${encodeURIComponent(colaId)}/resultado`, {
+      tenant: config.colaAvisos.tenant,
+      arrendatario: config.colaAvisos.arrendatario,
+      error_meta: (error || "no entregado, sin detalle de Meta").slice(0, 500),
+    });
+    if (res?.anotado) console.log(`📨 Fallo tardío anotado en el aviso ${colaId}: ${error ?? "sin detalle"}`);
+  } catch (err) {
+    console.error("📨 No se pudo anotar el fallo tardío en la cola:", err);
+  }
 }
