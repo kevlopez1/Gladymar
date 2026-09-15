@@ -8,6 +8,7 @@
  */
 import { ciudadesConSucursal } from "../knowledge/sucursales.js";
 import { departamentoDeLugar, REGION_ASESOR } from "../knowledge/departamentos.js";
+import { asesorParaLugar } from "./asesores.js";
 
 export interface Admin {
   id: string;
@@ -106,14 +107,25 @@ export function regionAdminDeCiudad(ciudad?: string): string | undefined {
   return undefined;
 }
 
-/** Nombre del asesor que atiende ese lugar, tal cual va al CRM (con tildes). */
+/**
+ * Nombre del asesor que atiende ese lugar, tal cual va al CRM (con tildes).
+ *
+ * Primero el padrón oficial de 25 asesores, que además resuelve la sucursal
+ * (Montero no se atiende desde la capital). El padrón viejo de 7 queda como
+ * respaldo: es el único que cubre Potosí y Oruro, que no figuran en el archivo
+ * que mandó Gladymar.
+ */
 export function adminNombrePorCiudad(ciudad?: string): string | undefined {
+  const asesor = asesorParaLugar(ciudad);
+  if (asesor) return asesor.nombre;
   const region = regionAdminDeCiudad(ciudad);
   return region ? ADMIN_REGIONAL_NOMBRE[region] : undefined;
 }
 
-/** Teléfono (internacional) del administrador regional de una ciudad, si existe. */
+/** Teléfono (internacional) del asesor que atiende esa ciudad, si existe. */
 export function adminTelefonoPorCiudad(ciudad: string): string | undefined {
+  const asesor = asesorParaLugar(ciudad);
+  if (asesor?.telefono) return toIntlBolivia(asesor.telefono);
   const region = regionAdminDeCiudad(ciudad);
   return region ? toIntlBolivia(ADMIN_REGIONAL_TELEFONO[region]) : undefined;
 }

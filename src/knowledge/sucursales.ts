@@ -38,6 +38,9 @@ export const SUCURSALES: Sucursal[] = [
     horario: "Lun-Vie 08:30-18:30, Sáb 09:00-13:00",
   },
   {
+    // Internamente Gladymar la llama "Serrana": así figura en el padrón de
+    // asesores y en su certificación ISO. Confirmado por Gerencia el 15/09/2026
+    // que Serrana = Parque Industrial, no es otro showroom.
     ciudad: "Santa Cruz",
     nombre: "Fábrica (Parque Industrial)",
     direccion: "Parque Industrial Mz. 11",
