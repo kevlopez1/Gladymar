@@ -14,7 +14,7 @@ import { generarCotizacionPDF } from "./agent/cotizacionPdf.js";
 import { bs, type Cotizacion } from "./agent/cotizacion.js";
 import { resumenUso, PRECIOS_USD_POR_MILLON } from "./agent/uso.js";
 import { InMemorySessionStore } from "./session/store.js";
-import { sendText, sendDocument, sendInteractiveList, sendTemplate, downloadMedia, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
+import { sendText, sendDocument, sendInteractiveList, sendTemplate, downloadMedia, downloadDocumento, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
@@ -680,6 +680,9 @@ interface BufferCliente {
   prueba?: boolean;
   /** Última foto del grupo de mensajes (si mandó varias, vale la más reciente). */
   imageId?: string;
+  /** Último PDF del grupo de mensajes. */
+  documentId?: string;
+  documentName?: string;
 }
 const buffers = new Map<string, BufferCliente>();
 const enCurso = new Set<string>();
@@ -715,7 +718,15 @@ async function enviarPanel(
 }
 
 function programarCliente(
-  msg: { from: string; text: string; messageId: string; name?: string; imageId?: string },
+  msg: {
+    from: string;
+    text: string;
+    messageId: string;
+    name?: string;
+    imageId?: string;
+    documentId?: string;
+    documentName?: string;
+  },
   prueba = false,
 ): void {
   let buf = buffers.get(msg.from);
@@ -730,6 +741,10 @@ function programarCliente(
   buf.messageId = msg.messageId;
   buf.prueba = prueba;
   if (msg.imageId) buf.imageId = msg.imageId;
+  if (msg.documentId) {
+    buf.documentId = msg.documentId;
+    buf.documentName = msg.documentName;
+  }
   if (msg.name) buf.name = msg.name;
   // Encuesta de satisfacción desactivada por pedido de Gladymar.
   if (buf.timer) clearTimeout(buf.timer);
@@ -753,12 +768,14 @@ async function vaciarCliente(from: string): Promise<void> {
   const text = buf.textos.join("\n").trim();
   // Una foto sin texto TAMBIÉN se atiende: antes se descartaba y el cliente
   // quedaba sin respuesta.
-  if (!text && !buf.imageId) return;
+  if (!text && !buf.imageId && !buf.documentId) return;
   enCurso.add(from);
   try {
     await procesarTurnoCliente(from, text, buf.messageId, buf.name, {
       prueba: buf.prueba,
       imageId: buf.imageId,
+      documentId: buf.documentId,
+      documentName: buf.documentName,
     });
   } finally {
     enCurso.delete(from);
@@ -770,8 +787,28 @@ async function handleIncoming(msg: {
   text: string;
   messageId: string;
   name?: string;
+  esAudio?: boolean;
 }): Promise<void> {
-  console.log(`📩 ${msg.from}${msg.name ? ` (${msg.name})` : ""}: ${msg.text}`);
+  console.log(`📩 ${msg.from}${msg.name ? ` (${msg.name})` : ""}: ${msg.esAudio ? "(nota de voz)" : msg.text}`);
+
+  // NOTA DE VOZ. No se transcribe: Claude no procesa audio, hace falta un
+  // servicio de transcripción aparte (decisión pendiente, tiene costo por
+  // minuto). Hasta entonces se CONTESTA igual, que es lo que importa: antes el
+  // audio se descartaba en silencio y el cliente se quedaba esperando sin
+  // saber que nadie lo había escuchado.
+  if (msg.esAudio) {
+    void markAsRead(msg.messageId);
+    try {
+      await sendText(
+        msg.from,
+        "¡Gracias por tu mensaje! 😊 Por ahora no puedo escuchar las notas de voz. " +
+          "¿Me lo escribís en un mensaje y seguimos?",
+      );
+    } catch (err) {
+      console.error(`No se pudo responder la nota de voz de ${msg.from}:`, err);
+    }
+    return;
+  }
 
   // Si el número es de un administrador, va al panel admin (no al agente cliente).
   const admin = getAdminByPhone(msg.from);
@@ -864,7 +901,7 @@ async function procesarTurnoCliente(
   text: string,
   messageId: string,
   name?: string,
-  opts?: { prueba?: boolean; imageId?: string },
+  opts?: { prueba?: boolean; imageId?: string; documentId?: string; documentName?: string },
 ): Promise<void> {
   // En modo prueba (un admin probando como cliente) usamos una sesión aparte
   // y NO registramos nada real (ni KPIs, ni lead, ni CRM/Sheets).
@@ -894,11 +931,21 @@ async function procesarTurnoCliente(
       console.log(`🖼️  Foto de ${from}: ${imagen ? "descargada, se envía al agente" : "no se pudo leer"}`);
     }
 
+    // PDF: una cotización de otra casa, una orden, una ficha escrita. Claude lo
+    // lee directo, sin convertirlo a imágenes.
+    const docDescargado = opts?.documentId ? await downloadDocumento(opts.documentId) : null;
+    const documento = docDescargado
+      ? { base64: docDescargado.base64, nombre: opts?.documentName }
+      : undefined;
+    if (opts?.documentId) {
+      console.log(`📄 PDF de ${from}: ${documento ? "descargado, se envía al agente" : "no se pudo leer"}`);
+    }
+
     // La cotización en PDF solo está habilitada para admins (modo prueba).
     // La cotización ya NO es exclusiva del modo prueba: el cliente real puede
     // pedirla y recibir el PDF. Es la función central de la propuesta ("cotiza
     // sin que nadie conteste") y estaba apagada para clientes.
-    const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF: true, prueba, imagen });
+    const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF: true, prueba, imagen, documento });
 
     // Respuestas en bloques: muestra "escribiendo…" antes de cada bloque (y un mínimo antes del primero).
     // El último bloque, si hay opciones, se envía como LISTA interactiva (igual que el demo).
