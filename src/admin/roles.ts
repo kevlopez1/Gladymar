@@ -108,6 +108,15 @@ for (const a of ADMINS_EXTRA) {
   ADMIN_POR_TELEFONO[t] = { id: t, nombre: a.nombre, role: "gerente" };
 }
 
+/**
+ * Sucursales que NO están en el Excel de Gladymar y salieron de una deducción.
+ *
+ * Van marcadas para que del otro lado se distinga un dato cargado de uno
+ * inferido: un campo que dice "sin confirmar" es más útil que uno que parece
+ * cierto y no lo es.
+ */
+const SUCURSAL_SIN_CONFIRMAR = new Set<string>(["Claudia Quispe"]);
+
 function normCiudad(s: string): string {
   return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
@@ -199,6 +208,7 @@ export function adminRoster(): {
   role: string;
   ciudad?: string;
   sucursal?: string;
+  sucursal_confirmada: boolean;
 }[] {
   return Object.values(ADMIN_POR_TELEFONO).map((a) => ({
     external_id: a.id,
@@ -206,6 +216,7 @@ export function adminRoster(): {
     role: a.role,
     ciudad: a.region,
     sucursal: a.sucursal,
+    sucursal_confirmada: !a.sucursal || !SUCURSAL_SIN_CONFIRMAR.has(a.nombre),
   }));
 }
 
