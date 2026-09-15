@@ -18,7 +18,7 @@ import { sendText, sendDocument, sendInteractiveList, sendTemplate, downloadMedi
 import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
-import { CrmIngest, stageDeTipo } from "./integrations/crm.js";
+import { CrmIngest, stageDeTipo, tipoSolicitudCrm } from "./integrations/crm.js";
 import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, adminNombrePorCiudad, puedeCotizarPDF, ADMIN_TELEFONO, adminRoster } from "./admin/roles.js";
 import { handleAdminCommand, reportes } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
@@ -341,6 +341,7 @@ async function ejecutarBackfill(): Promise<void> {
         message,
         response,
         stage: adminFila ? undefined : (iTipo >= 0 ? stageDeTipo((f[iTipo] || "").trim()) : undefined),
+        tipo_solicitud: adminFila ? undefined : (iTipo >= 0 ? tipoSolicitudCrm((f[iTipo] || "").trim()) : undefined),
         interest: adminFila ? undefined : detalle,
         is_admin: Boolean(adminFila),
         role: adminFila?.role,
@@ -1109,6 +1110,7 @@ async function procesarTurnoCliente(
         city: adminRemitente?.region || ciudadLead,
         segment: adminRemitente ? "Administrador" : undefined,
         stage: adminRemitente ? undefined : stageDeTipo(reply.solicitud?.tipo),
+        tipo_solicitud: adminRemitente ? undefined : tipoSolicitudCrm(reply.solicitud?.tipo),
         interest: adminRemitente ? undefined : reply.solicitud?.detalle,
         asesor: adminRemitente ? undefined : adminNombrePorCiudad(ciudadLead),
         // El departamento viaja aunque NO haya asesor (Beni, Pando): así el CRM

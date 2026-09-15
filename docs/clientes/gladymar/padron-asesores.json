@@ -1,0 +1,203 @@
+{
+  "origen": "asesores-crm.xlsx + roles.ts",
+  "total": 29,
+  "admins": [
+    {
+      "external_id": "59167401827",
+      "nombre": "Gerente General",
+      "role": "gerente"
+    },
+    {
+      "external_id": "59174234380",
+      "nombre": "Soporte Prime",
+      "role": "gerente"
+    },
+    {
+      "external_id": "59167408846",
+      "nombre": "María René Áviles",
+      "role": "regional",
+      "ciudad": "Cochabamba",
+      "sucursal": "Blanco Galindo"
+    },
+    {
+      "external_id": "59168225572",
+      "nombre": "José Ramos",
+      "role": "regional",
+      "ciudad": "La Paz",
+      "sucursal": "Calacoto (Ballivián)"
+    },
+    {
+      "external_id": "59172303568",
+      "nombre": "Gustavo Villegas",
+      "role": "regional",
+      "ciudad": "Oruro"
+    },
+    {
+      "external_id": "59169612800",
+      "nombre": "Gabriel Flores",
+      "role": "regional",
+      "ciudad": "Potosí"
+    },
+    {
+      "external_id": "59167703821",
+      "nombre": "Thalía Vera",
+      "role": "regional",
+      "ciudad": "Santa Cruz",
+      "sucursal": "Gladymar Plus"
+    },
+    {
+      "external_id": "59167895527",
+      "nombre": "Ivana Vargas",
+      "role": "regional",
+      "ciudad": "Santa Cruz",
+      "sucursal": "Montero"
+    },
+    {
+      "external_id": "59171656258",
+      "nombre": "Icelia Perez",
+      "role": "regional",
+      "ciudad": "Santa Cruz",
+      "sucursal": "Fábrica (Parque Industrial)"
+    },
+    {
+      "external_id": "59171625209",
+      "nombre": "Luis Uriona",
+      "role": "regional",
+      "ciudad": "Santa Cruz",
+      "sucursal": "Canal Cotoca"
+    },
+    {
+      "external_id": "59167900508",
+      "nombre": "Jorge Montecinos",
+      "role": "regional",
+      "ciudad": "Sucre",
+      "sucursal": "Sucre"
+    },
+    {
+      "external_id": "59172987241",
+      "nombre": "Rosana Patana",
+      "role": "regional",
+      "ciudad": "Tarija",
+      "sucursal": "Tarija"
+    },
+    {
+      "external_id": "59171344413",
+      "nombre": "Zelena Maldonado",
+      "role": "asesor",
+      "ciudad": "Cochabamba",
+      "sucursal": "Juan de la Rosa"
+    },
+    {
+      "external_id": "59168584245",
+      "nombre": "Nadia Taboada",
+      "role": "asesor",
+      "ciudad": "Cochabamba",
+      "sucursal": "Blanco Galindo"
+    },
+    {
+      "external_id": "59172207640",
+      "nombre": "Grover Gomez",
+      "role": "asesor",
+      "ciudad": "Cochabamba",
+      "sucursal": "Blanco Galindo"
+    },
+    {
+      "external_id": "59171557028",
+      "nombre": "Horacio Fuentes",
+      "role": "asesor",
+      "ciudad": "La Paz",
+      "sucursal": "Calacoto (Ballivián)"
+    },
+    {
+      "external_id": "59172023533",
+      "nombre": "Itizar Vera",
+      "role": "asesor",
+      "ciudad": "La Paz",
+      "sucursal": "Montes"
+    },
+    {
+      "external_id": "59171550146",
+      "nombre": "Juan Bellido",
+      "role": "asesor",
+      "ciudad": "La Paz",
+      "sucursal": "Montes"
+    },
+    {
+      "external_id": "59167896857",
+      "nombre": "Claudia Quispe",
+      "role": "asesor",
+      "ciudad": "La Paz",
+      "sucursal": "Calacoto (Ballivián)"
+    },
+    {
+      "external_id": "59167895521",
+      "nombre": "Bricila Saucedo",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "sucursal": "Gladymar Plus"
+    },
+    {
+      "external_id": "59172149883",
+      "nombre": "J. Carlos Gutierrez",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "sucursal": "Gladymar Plus"
+    },
+    {
+      "external_id": "59172152425",
+      "nombre": "Alcides Paniagua",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "sucursal": "Gladymar Plus"
+    },
+    {
+      "external_id": "59172168520",
+      "nombre": "Wilson Montalvan",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "sucursal": "Fábrica (Parque Industrial)"
+    },
+    {
+      "external_id": "59172158212",
+      "nombre": "Felix Guayao",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "sucursal": "Fábrica (Parque Industrial)"
+    },
+    {
+      "external_id": "59171654290",
+      "nombre": "Ema Lilian Bautista Calla",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "sucursal": "Fábrica (Parque Industrial)"
+    },
+    {
+      "external_id": "59171622825",
+      "nombre": "Laura Campero",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "sucursal": "Canal Cotoca"
+    },
+    {
+      "external_id": "59171325267",
+      "nombre": "Carla Ramirez",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "sucursal": "Canal Cotoca"
+    },
+    {
+      "external_id": "59167700221",
+      "nombre": "Cecilia Fiorilo",
+      "role": "asesor",
+      "ciudad": "Sucre",
+      "sucursal": "Sucre"
+    },
+    {
+      "external_id": "59167371513",
+      "nombre": "Angela Amezaga",
+      "role": "asesor",
+      "ciudad": "Tarija",
+      "sucursal": "Tarija"
+    }
+  ]
+}

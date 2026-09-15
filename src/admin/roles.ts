@@ -80,7 +80,11 @@ for (const a of ASESORES) {
   };
 }
 
-// 2) Líneas de WhatsApp de las sucursales (el padrón viejo de 7).
+// 2) Líneas de WhatsApp de las sucursales (el padrón viejo de 7). Pisa lo del
+//    padrón para quedarse con el nombre con tildes y la región ya resuelta,
+//    pero conserva la sucursal si el padrón la traía: varios de estos números
+//    son a la vez la línea de la sucursal y el celular de su supervisor, y
+//    perder el dato dejaba a Thalía y a Ma. René sin showroom asignado.
 for (const [ciudad, num] of Object.entries(ADMIN_REGIONAL_TELEFONO)) {
   const tel = toIntlBolivia(num);
   ADMIN_POR_TELEFONO[tel] = {
@@ -88,6 +92,7 @@ for (const [ciudad, num] of Object.entries(ADMIN_REGIONAL_TELEFONO)) {
     nombre: ADMIN_REGIONAL_NOMBRE[ciudad] || `Administrador ${ciudad}`,
     role: "regional",
     region: ciudad,
+    sucursal: ADMIN_POR_TELEFONO[tel]?.sucursal,
   };
 }
 // 3) El Gerente General tiene prioridad (acceso nacional).
@@ -188,12 +193,19 @@ export function esAdmin(telefono: string): boolean {
  * marque como "Administrador" en vez de tratarlos como un cliente más).
  * external_id va en formato internacional, igual que llega de WhatsApp.
  */
-export function adminRoster(): { external_id: string; nombre: string; role: string; ciudad?: string }[] {
+export function adminRoster(): {
+  external_id: string;
+  nombre: string;
+  role: string;
+  ciudad?: string;
+  sucursal?: string;
+}[] {
   return Object.values(ADMIN_POR_TELEFONO).map((a) => ({
     external_id: a.id,
     nombre: a.nombre,
     role: a.role,
     ciudad: a.region,
+    sucursal: a.sucursal,
   }));
 }
 

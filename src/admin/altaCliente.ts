@@ -212,6 +212,7 @@ export async function guardarClientes(clientes: ClienteNuevo[], quien: Admin): P
         // Minúscula, igual que las que devuelve stageDeTipo(): el CRM compara
         // el valor literal, así que "Nuevo" y "nuevo" son dos columnas distintas.
         stage: "nuevo",
+        tipo_solicitud: "contactar_asesor",
         interest: c.interes,
         asesor: adminNombrePorCiudad(c.ciudad),
         departamento: departamentoDeLugar(c.ciudad),
