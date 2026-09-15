@@ -38,7 +38,7 @@ import {
 } from "../db/index.js";
 import { sendText } from "../whatsapp/client.js";
 import { ADMIN_TELEFONO, esAdmin } from "../admin/roles.js";
-import { encolarAviso, colaAvisosHabilitada } from "./colaAvisos.js";
+import { encolarAvisos, colaAvisosHabilitada, type AvisoParaEncolar } from "./colaAvisos.js";
 
 /**
  * Estados que disparan aviso -> plantilla de Meta a usar (nombre + idioma).
@@ -271,6 +271,45 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
  * Revisa la hoja y manda las notificaciones de los pedidos que cambiaron de
  * estado desde el último chequeo. Nunca lanza.
  */
+/**
+ * Manda un aviso directo por Meta, con la guarda de idempotencia puesta.
+ *
+ * Es el camino de siempre y también el respaldo de la cola. La reserva se toma
+ * ANTES de llamar a Meta: si la clave ya estaba tomada, el aviso salió antes y
+ * no se repite. Eso también cubre el caso feo de encolar — si el POST llegó y
+ * solo se perdió la respuesta, el consumidor va a encontrar la clave tomada y
+ * no va a mandar de nuevo.
+ */
+async function mandarDirecto(a: AvisoParaEncolar): Promise<"enviado" | "fallido" | "sin_cambios"> {
+  const template = templateDeEstado(a.estado || "");
+  if (!template) return "sin_cambios";
+  if (!(await reservarAviso(a.claveIdem))) return "sin_cambios";
+  try {
+    const wamid = await sendTemplate(
+      telefonoInternacional(a.telefono),
+      template.nombre,
+      template.idioma,
+      a.parametros,
+    );
+    void confirmarAviso(a.claveIdem, wamid);
+    // El wamid es lo que después permite cruzar este envío con el acuse de
+    // entrega que manda Meta al webhook ("delivered" / "failed"): sin él,
+    // "enviado" solo quiere decir que Meta lo aceptó.
+    console.log(
+      `📦 Aviso "${a.estado}" aceptado por Meta (factura ${a.factura} -> ${a.telefono})${wamid ? ` id=${wamid}` : ""}`,
+    );
+    if (a.factura && a.estado) await guardarEstadoPedido(a.factura, a.telefono, a.estado);
+    return "enviado";
+  } catch (err) {
+    // Meta rechazó el envío: se libera la reserva para poder reintentar. Solo
+    // acá. Si Meta aceptó y después no entregó, la reserva se queda: el mensaje
+    // salió y reenviarlo se cobra igual.
+    await liberarAviso(a.claveIdem);
+    console.error(`📦 No se pudo enviar el aviso (factura ${a.factura} -> ${a.telefono}):`, err);
+    return "fallido";
+  }
+}
+
 export async function chequearNotificacionesPedidos(): Promise<void> {
   if (!isWhatsAppConfigured()) {
     console.warn("📦 Avisos de pedido en pausa: faltan credenciales de WhatsApp.");
@@ -342,6 +381,11 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
     let omitidos = 0;
     let fallidos = 0;
 
+    // Si la cola está habilitada, los avisos se juntan acá y se encolan al
+    // final del ciclo. Si no, queda en null y cada uno se manda en el momento,
+    // que es como funcionaba antes de que existiera la cola.
+    const porEncolar: AvisoParaEncolar[] | null = colaAvisosHabilitada() ? [] : null;
+
     for (const pedido of pedidos) {
       const template = templateDeEstado(pedido.estado);
 
@@ -375,50 +419,56 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
         // consumidor. No es una vuelta al pescuezo por gusto — es lo que hace
         // que cada envío quede en la ficha del cliente en la plataforma.
         // Mandando directo, el mensaje sale y en el CRM no queda rastro.
-        if (colaAvisosHabilitada()) {
-          if (await encolarAviso({ claveIdem, telefono: tel, plantilla: template.nombre, parametros, factura: pedido.factura, estado: pedido.estado })) {
-            await guardarEstadoPedido(pedido.factura, tel, pedido.estado);
-            encolados++;
-            continue;
-          }
-          // El CRM no recibió el aviso (caído, token, red). Se sigue de largo y
-          // se manda directo: que el aviso no quede registrado en la ficha es
-          // un problema; que el cliente no se entere de que su pedido está
-          // listo es el problema que vinimos a resolver.
-          console.warn(`📦 No pude encolar el aviso ${claveIdem} en el CRM: lo mando directo.`);
-        }
-
-        // Guarda de idempotencia: se reserva ANTES de llamar a Meta. Si la
-        // clave ya estaba tomada, el aviso salió antes y no se repite aunque
-        // este ciclo crea que hace falta. También cubre el caso feo del párrafo
-        // de arriba: si el encolar SÍ llegó y solo se perdió la respuesta, el
-        // consumidor va a encontrar la clave tomada y no va a mandar de nuevo.
-        if (!(await reservarAviso(claveIdem))) {
-          sinCambios++;
+        //
+        // Se junta todo el ciclo y se encola de una: el endpoint admite 200 por
+        // llamada, así que una tanda de transiciones entra en un solo POST.
+        if (porEncolar) {
+          porEncolar.push({
+            claveIdem,
+            telefono: tel,
+            plantilla: template.nombre,
+            parametros,
+            factura: pedido.factura,
+            estado: pedido.estado,
+          });
           continue;
         }
 
-        try {
-          const wamid = await sendTemplate(telefonoInternacional(tel), template.nombre, template.idioma, parametros);
-          void confirmarAviso(claveIdem, wamid);
-          // El wamid es lo que después permite cruzar este envío con el acuse
-          // de entrega que manda Meta al webhook ("delivered" / "failed"): sin
-          // él, "enviado" solo quiere decir que Meta lo aceptó.
-          console.log(
-            `📦 Aviso "${pedido.estado}" aceptado por Meta (factura ${pedido.factura} -> ${tel})` +
-              `${wamid ? ` id=${wamid}` : ""}`,
-          );
-          enviados++;
-        } catch (err) {
-          // Meta rechazó el envío: se libera la reserva para poder reintentar.
-          // Solo acá. Si Meta aceptó y después no entregó, la reserva se queda:
-          // el mensaje salió y reenviarlo se cobra igual.
-          await liberarAviso(claveIdem);
-          console.error(`📦 No se pudo enviar el aviso (factura ${pedido.factura} -> ${tel}):`, err);
-          fallidos++;
+        const r = await mandarDirecto({
+          claveIdem,
+          telefono: tel,
+          plantilla: template.nombre,
+          parametros,
+          factura: pedido.factura,
+          estado: pedido.estado,
+        });
+        if (r === "enviado") enviados++;
+        else if (r === "fallido") fallidos++;
+        else sinCambios++;
+      }
+    }
+
+    // Se encola TODO el ciclo de una sola vez.
+    if (porEncolar?.length) {
+      const res = await encolarAvisos(porEncolar);
+      for (const a of porEncolar) {
+        if (res?.aceptados.has(a.claveIdem)) {
+          await guardarEstadoPedido(a.factura as string, a.telefono, a.estado as string);
+          encolados++;
           continue;
         }
-        await guardarEstadoPedido(pedido.factura, tel, pedido.estado);
+        // Dos motivos para caer acá, y los dos terminan igual: el CRM no
+        // recibió nada (res === null), o lo recibió y rechazó ESE aviso por un
+        // campo faltante — que contesta 200, así que sin mirar la lista de
+        // rechazados el aviso desaparecería sin un solo error en el log.
+        // Se manda directo: que el envío no quede en la ficha es un problema;
+        // que el cliente no se entere de que su pedido está listo es EL problema.
+        const motivo = res ? `el CRM lo rechazó (falta ${res.rechazados.get(a.claveIdem)})` : "el CRM no respondió";
+        console.warn(`📦 Aviso ${a.claveIdem}: ${motivo}. Lo mando directo.`);
+        const r = await mandarDirecto(a);
+        if (r === "enviado") enviados++;
+        else if (r === "fallido") fallidos++;
+        else sinCambios++;
       }
     }
 

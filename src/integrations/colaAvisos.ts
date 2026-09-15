@@ -262,14 +262,26 @@ export function colaAvisosHabilitada(): boolean {
   return Boolean(config.colaAvisos.url && config.colaAvisos.token && dbHabilitada());
 }
 
-interface AvisoParaEncolar {
+export interface AvisoParaEncolar {
   claveIdem: string;
+  /** Local u 8 dígitos: acá se normaliza a internacional antes de encolar. */
   telefono: string;
   plantilla: string;
   parametros: string[];
   factura?: string;
   estado?: string;
+  idContacto?: string;
 }
+
+export interface ResultadoEncolar {
+  /** Claves que quedaron en la cola (nuevas o que ya estaban). */
+  aceptados: Set<string>;
+  /** Clave -> campo que faltaba, para las que el CRM rechazó. */
+  rechazados: Map<string, string>;
+}
+
+/** Tope de avisos por POST que admite el endpoint. */
+const LOTE_ENCOLAR = 200;
 
 /**
  * Avisos que encolamos y todavía no vimos salir.
@@ -285,32 +297,82 @@ const VIGILANCIA_MS = 15 * 60 * 1000;
 let ultimaAlertaCola = 0;
 
 /**
- * Encola un aviso en el CRM.
+ * Encola un lote de avisos en el CRM.
  *
- * Devuelve true si quedó encolado (incluye `repetido`: la fila ya existía, que
- * también significa "no lo mandes vos"). Ante cualquier otra cosa devuelve
- * false y el que llama manda directo: un aviso que no sale es peor que un
- * aviso que sale sin quedar registrado en la ficha.
+ * Devuelve null si la llamada entera falló (red, HTTP, token): ahí el que llama
+ * manda todo directo. Si la llamada salió bien devuelve qué quedó encolado y
+ * qué rechazó el CRM.
+ *
+ * OJO CON EL 200: un lote con rechazados contesta 200 igual. Tratar cualquier
+ * 200 como éxito haría desaparecer esos avisos sin un solo error en el log, sin
+ * disparar el respaldo de mandar directo, y recién los levantaría el vigilante
+ * quince minutos después. Por eso la lista de rechazados se mira en el momento.
  */
-export async function encolarAviso(a: AvisoParaEncolar): Promise<boolean> {
-  if (!colaAvisosHabilitada()) return false;
-  const res = await llamar("/api/avisos/encolar", {
-    tenant: config.colaAvisos.tenant,
-    clave_idem: a.claveIdem,
-    telefono: a.telefono,
-    plantilla: a.plantilla,
-    parametros: a.parametros,
-    ...(a.factura ? { factura: a.factura } : {}),
-    ...(a.estado ? { estado: a.estado } : {}),
-  });
-  if (!res) return false;
-  if (res.repetido) {
-    console.log(`📨 Aviso ${a.claveIdem} ya estaba en la cola: no se encola de nuevo.`);
-    return true;
+export async function encolarAvisos(avisos: AvisoParaEncolar[]): Promise<ResultadoEncolar | null> {
+  if (!colaAvisosHabilitada() || !avisos.length) return null;
+
+  const aceptados = new Set<string>();
+  const rechazados = new Map<string, string>();
+
+  // Un aviso sin teléfono se rechaza ACÁ y no se manda. telefonoInternacional("")
+  // devuelve "591", que no es un número inválido evidente sino un prefijo
+  // suelto: el CRM podría darlo por bueno y quedaría encolado un aviso dirigido
+  // a nadie. Se saca del lote y sigue el mismo camino que un rechazo del CRM.
+  const utiles: AvisoParaEncolar[] = [];
+  for (const a of avisos) {
+    if (!a.telefono.replace(/\D/g, "").replace(/^591/, "")) {
+      rechazados.set(a.claveIdem, "telefono");
+      console.error(`📨 No encolo el aviso ${a.claveIdem}: viene sin teléfono.`);
+      continue;
+    }
+    utiles.push(a);
   }
-  encolados.set(a.claveIdem, { ...a, encoladoEn: Date.now() });
-  console.log(`📨 Aviso ${a.claveIdem} encolado en el CRM (${a.plantilla} -> ${a.telefono}).`);
-  return true;
+
+  for (let i = 0; i < utiles.length; i += LOTE_ENCOLAR) {
+    const tanda = utiles.slice(i, i + LOTE_ENCOLAR);
+    const res = await llamar("/api/avisos/encolar", {
+      tenant: config.colaAvisos.tenant,
+      avisos: tanda.map((a) => ({
+        clave_idem: a.claveIdem,
+        // El código de país tiene que ir en el cuerpo: el CRM normaliza a
+        // dígitos pero no adivina el 591.
+        telefono: telefonoInternacional(a.telefono),
+        plantilla: a.plantilla,
+        parametros: a.parametros.map((p) => String(p)),
+        ...(a.factura ? { factura: a.factura } : {}),
+        ...(a.estado ? { estado: a.estado } : {}),
+        ...(a.idContacto ? { id_contacto: a.idContacto } : {}),
+      })),
+    });
+    if (!res) return null; // la llamada falló entera: que el que llama mande directo
+
+    const listaRechazos = Array.isArray(res.rechazados) ? (res.rechazados as { clave?: string; falta?: string }[]) : [];
+    for (const r of listaRechazos) {
+      if (!r?.clave) continue;
+      rechazados.set(r.clave, r.falta || "campo obligatorio");
+      console.error(`📨 El CRM rechazó el aviso ${r.clave}: falta "${r.falta || "?"}". Lo mando directo.`);
+    }
+    for (const a of tanda) {
+      if (rechazados.has(a.claveIdem)) continue;
+      aceptados.add(a.claveIdem);
+      encolados.set(a.claveIdem, { ...a, encoladoEn: Date.now() });
+    }
+
+    // Chequeo de integridad: los conteos tienen que cerrar contra lo que
+    // mandamos. Si no cierran, algo se perdió en el camino y no sabemos cuál,
+    // así que al menos queda dicho: el vigilante es el que lo va a levantar.
+    const nuevos = Number(res.encolados ?? 0);
+    const repetidos = Number(res.repetidos ?? 0);
+    if (nuevos + repetidos + listaRechazos.length !== tanda.length) {
+      console.error(
+        `📨 Los conteos de encolar no cierran: mandé ${tanda.length} y volvieron ` +
+          `${nuevos} encolados + ${repetidos} repetidos + ${listaRechazos.length} rechazados.`,
+      );
+    }
+    console.log(`📨 ${nuevos} aviso(s) encolados en el CRM, ${repetidos} ya estaban, ${listaRechazos.length} rechazados.`);
+  }
+
+  return { aceptados, rechazados };
 }
 
 /** Avisa al Gerente que la cola se está tragando los avisos. Máx. una vez al día. */
