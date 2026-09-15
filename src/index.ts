@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { config, isWhatsAppConfigured } from "./config.js";
 import { GladymarAgent, type AgentReply } from "./agent/brain.js";
 import { generarCotizacionPDF } from "./agent/cotizacionPdf.js";
+import { bs, type Cotizacion } from "./agent/cotizacion.js";
 import { resumenUso, PRECIOS_USD_POR_MILLON } from "./agent/uso.js";
 import { InMemorySessionStore } from "./session/store.js";
 import { sendText, sendDocument, sendInteractiveList, sendTemplate, downloadMedia, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
@@ -575,6 +576,48 @@ async function notificarAsesor(
 }
 
 /**
+ * Le pasa al asesor la MISMA cotización que recibió el cliente.
+ *
+ * Sin esto el asesor llama a ciegas: el cliente le menciona un total que él no
+ * tiene a mano y queda en offside. Va el detalle y el enlace al PDF, no un
+ * aviso genérico.
+ */
+async function avisarCotizacionAlAsesor(
+  from: string,
+  nombreCliente: string | undefined,
+  cot: Cotizacion,
+  urlPdf: string,
+): Promise<void> {
+  const destino = adminTelefonoPorCiudad(cot.ciudad || "") || ADMIN_TELEFONO;
+  const lineas = [
+    `🧾 *Cotización ${cot.numero}*${cot.ciudad ? " · " + cot.ciudad : ""}`,
+    `👤 ${cot.cliente || nombreCliente || "Cliente"}`,
+    `📱 ${from}  (wa.me/${from})`,
+    "",
+    ...cot.items.map((i) => `• ${i.descripcion}: ${i.cantidad} ${i.unidad} × ${bs(i.precioUnit)} = ${bs(i.subtotal)}`),
+    `*TOTAL: ${bs(cot.total)}*`,
+    "",
+    cot.departamento ? `Precios de ${cot.departamento}.` : "Precios de lista nacional (no se pudo determinar la región).",
+    `Vence: ${cot.vence}`,
+    urlPdf,
+  ];
+  try {
+    const wamid = await sendText(destino, lineas.join("\n"));
+    console.log(`🧾 Cotización ${cot.numero} enviada al asesor ${destino}`);
+    if (wamid) {
+      recordarAviso(wamid, destino, resumenLead({
+        nombre: cot.cliente || nombreCliente,
+        telefono: from,
+        tipo: `cotizacion ${cot.numero}`,
+        detalle: `${cot.items.length} item(s), total ${bs(cot.total)}`,
+      }));
+    }
+  } catch (err) {
+    console.error(`No se pudo pasarle la cotización ${cot.numero} al asesor ${destino}:`, err);
+  }
+}
+
+/**
  * Avisos al equipo que salieron como texto libre y podrían rebotar por la
  * ventana de 24 h, indexados por wamid para reintentarlos con plantilla.
  *
@@ -852,7 +895,10 @@ async function procesarTurnoCliente(
     }
 
     // La cotización en PDF solo está habilitada para admins (modo prueba).
-    const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF: prueba, prueba, imagen });
+    // La cotización ya NO es exclusiva del modo prueba: el cliente real puede
+    // pedirla y recibir el PDF. Es la función central de la propuesta ("cotiza
+    // sin que nadie conteste") y estaba apagada para clientes.
+    const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF: true, prueba, imagen });
 
     // Respuestas en bloques: muestra "escribiendo…" antes de cada bloque (y un mínimo antes del primero).
     // El último bloque, si hay opciones, se envía como LISTA interactiva (igual que el demo).
@@ -929,13 +975,15 @@ async function procesarTurnoCliente(
       }
     }
 
-    // Cotización en PDF: SOLO para admins (modo prueba). Un cliente real nunca
-    // recibe el documento (la herramienta ni siquiera está disponible para él).
-    if (reply.cotizacion && prueba) {
+    // Cotización en PDF, para el cliente y para el asesor de su sucursal.
+    if (reply.cotizacion) {
       try {
         const rel = await generarCotizacionPDF(reply.cotizacion);
         const url = `${config.publicBaseUrl.replace(/\/$/, "")}/${rel}`;
         await sendDocument(from, url, `Cotización ${reply.cotizacion.numero}.pdf`, "Cotización referencial ◆ Gladymar");
+        // El asesor tiene que ver lo mismo que vio el cliente ANTES de llamarlo:
+        // si no, el cliente le habla de un precio que el asesor no conoce.
+        if (!prueba) void avisarCotizacionAlAsesor(from, name, reply.cotizacion, url);
       } catch (err) {
         console.error(`No se pudo generar/enviar la cotización a ${from}:`, err);
       }
