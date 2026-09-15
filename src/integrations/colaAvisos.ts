@@ -18,13 +18,16 @@
  */
 import { config, isWhatsAppConfigured } from "../config.js";
 import { sendTemplate } from "../whatsapp/client.js";
+import { sendText } from "../whatsapp/client.js";
 import {
   reservarAviso,
   confirmarAviso,
   liberarAviso,
   colaIdPorWamid,
+  avisoYaTomado,
   dbHabilitada,
 } from "../db/index.js";
+import { ADMIN_TELEFONO } from "../admin/roles.js";
 
 interface AvisoEncolado {
   id: string;
@@ -115,6 +118,8 @@ async function reportar(
  * reclamar en el próximo ciclo.
  */
 export async function procesarColaAvisos(): Promise<void> {
+  await vigilarEncolados();
+
   if (!config.colaAvisos.url || !config.colaAvisos.token) return; // sin configurar: apagado
   if (!isWhatsAppConfigured()) {
     console.warn("📨 Cola de avisos en pausa: faltan credenciales de WhatsApp.");
@@ -240,4 +245,123 @@ export async function anotarFalloTardio(wamid: string, error?: string): Promise<
   } catch (err) {
     console.error("📨 No se pudo anotar el fallo tardío en la cola:", err);
   }
+}
+
+// ── Productor: encolar los avisos que detecta el bot ─────────────────────────
+//
+// Quién detecta el cambio de estado de un pedido es el bot, no el CRM: la hoja
+// de despacho la lee pedidoEstados.ts cada N minutos. Así que el productor de
+// la cola somos nosotros, y esta es la puerta de entrada.
+//
+// POR QUÉ PASAR POR LA COLA SI IGUAL PODEMOS MANDAR SOLOS: porque así cada
+// aviso queda en la ficha del cliente en el CRM. Mandando directo, el mensaje
+// sale y en la plataforma no queda rastro de que salió.
+
+/** Habilitada = hay a quién encolarle. Si no, pedidoEstados manda directo. */
+export function colaAvisosHabilitada(): boolean {
+  return Boolean(config.colaAvisos.url && config.colaAvisos.token && dbHabilitada());
+}
+
+interface AvisoParaEncolar {
+  claveIdem: string;
+  telefono: string;
+  plantilla: string;
+  parametros: string[];
+  factura?: string;
+  estado?: string;
+}
+
+/**
+ * Avisos que encolamos y todavía no vimos salir.
+ *
+ * Existe por el punto ciego de encolar: si la cola los traga (token cambiado
+ * de un solo lado, consumidor apagado, fila que nadie reclama), el aviso nunca
+ * sale y NO hay error en ningún log — se ve idéntico a "no había nada que
+ * avisar". Es exactamente la forma en que esto ya estuvo un mes sin funcionar.
+ */
+const encolados = new Map<string, AvisoParaEncolar & { encoladoEn: number }>();
+/** Cuánto se espera antes de dar por tragado un aviso encolado. */
+const VIGILANCIA_MS = 15 * 60 * 1000;
+let ultimaAlertaCola = 0;
+
+/**
+ * Encola un aviso en el CRM.
+ *
+ * Devuelve true si quedó encolado (incluye `repetido`: la fila ya existía, que
+ * también significa "no lo mandes vos"). Ante cualquier otra cosa devuelve
+ * false y el que llama manda directo: un aviso que no sale es peor que un
+ * aviso que sale sin quedar registrado en la ficha.
+ */
+export async function encolarAviso(a: AvisoParaEncolar): Promise<boolean> {
+  if (!colaAvisosHabilitada()) return false;
+  const res = await llamar("/api/avisos/encolar", {
+    tenant: config.colaAvisos.tenant,
+    clave_idem: a.claveIdem,
+    telefono: a.telefono,
+    plantilla: a.plantilla,
+    parametros: a.parametros,
+    ...(a.factura ? { factura: a.factura } : {}),
+    ...(a.estado ? { estado: a.estado } : {}),
+  });
+  if (!res) return false;
+  if (res.repetido) {
+    console.log(`📨 Aviso ${a.claveIdem} ya estaba en la cola: no se encola de nuevo.`);
+    return true;
+  }
+  encolados.set(a.claveIdem, { ...a, encoladoEn: Date.now() });
+  console.log(`📨 Aviso ${a.claveIdem} encolado en el CRM (${a.plantilla} -> ${a.telefono}).`);
+  return true;
+}
+
+/** Avisa al Gerente que la cola se está tragando los avisos. Máx. una vez al día. */
+async function alertarColaMuda(cuantos: number): Promise<void> {
+  if (Date.now() - ultimaAlertaCola < 24 * 60 * 60 * 1000) return;
+  ultimaAlertaCola = Date.now();
+  try {
+    await sendText(
+      ADMIN_TELEFONO,
+      `⚠️ *Avisos de pedido*\n\n${cuantos} aviso(s) quedaron encolados en el CRM y nadie los mandó en 15 minutos. ` +
+        "Los estoy mandando yo directo para que el cliente no se quede sin su aviso, pero la cola no está saliendo: " +
+        "hay que revisar el token o el consumidor.",
+    );
+  } catch (err) {
+    console.error("📨 No se pudo alertar que la cola no está saliendo:", err);
+  }
+}
+
+/**
+ * Manda por su cuenta lo que la cola se tragó.
+ *
+ * Corre al principio de cada ciclo. Solo toca avisos encolados hace más de 15
+ * minutos cuya clave sigue libre: si la clave está tomada, el aviso salió y
+ * acá no se hace nada.
+ */
+async function vigilarEncolados(): Promise<void> {
+  if (!encolados.size) return;
+  const vencidos = [...encolados.values()].filter((e) => Date.now() - e.encoladoEn > VIGILANCIA_MS);
+  if (!vencidos.length) return;
+
+  let rescatados = 0;
+  for (const e of vencidos) {
+    encolados.delete(e.claveIdem);
+    if (await avisoYaTomado(e.claveIdem)) continue; // salió: nada que hacer
+    if (!(await reservarAviso(e.claveIdem))) continue; // se lo llevó otro entre medio
+    try {
+      const wamid = await sendTemplate(
+        telefonoInternacional(e.telefono),
+        e.plantilla,
+        idiomaDe(e.plantilla),
+        e.parametros,
+      );
+      void confirmarAviso(e.claveIdem, wamid);
+      console.error(
+        `📨 RESCATE: el aviso ${e.claveIdem} llevaba 15 min encolado sin salir. Lo mandé directo${wamid ? ` id=${wamid}` : ""}.`,
+      );
+      rescatados++;
+    } catch (err) {
+      await liberarAviso(e.claveIdem);
+      console.error(`📨 El aviso ${e.claveIdem} quedó encolado sin salir y tampoco pude mandarlo directo:`, err);
+    }
+  }
+  if (rescatados) void alertarColaMuda(rescatados);
 }

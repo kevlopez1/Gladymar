@@ -466,6 +466,27 @@ export async function colaIdPorWamid(wamid: string): Promise<string | null> {
 }
 
 /**
+ * ¿La clave de este aviso ya está reservada, o sea el aviso ya salió?
+ *
+ * Lo usa el vigilante de la cola: si encolamos un aviso hace rato y su clave
+ * sigue libre, nadie lo mandó. Ante un fallo de base devuelve TRUE (="ya
+ * salió"), que es el lado prudente: el vigilante se calla en vez de mandar un
+ * aviso que quizá ya se mandó.
+ */
+export async function avisoYaTomado(claveIdem: string): Promise<boolean> {
+  const p = getPool();
+  if (!p) return true;
+  try {
+    await tablaLista();
+    const res = await p.query(`SELECT 1 FROM avisos_enviados WHERE clave_idem = $1`, [claveIdem]);
+    return (res.rowCount ?? 0) > 0;
+  } catch (err) {
+    console.error("No se pudo verificar si el aviso ya estaba tomado:", err);
+    return true;
+  }
+}
+
+/**
  * Libera la reserva cuando el envío falló de verdad (Meta lo rechazó).
  *
  * Solo para fallos del ENVÍO. Si Meta aceptó y después no se entregó, la

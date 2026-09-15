@@ -38,6 +38,7 @@ import {
 } from "../db/index.js";
 import { sendText } from "../whatsapp/client.js";
 import { ADMIN_TELEFONO, esAdmin } from "../admin/roles.js";
+import { encolarAviso, colaAvisosHabilitada } from "./colaAvisos.js";
 
 /**
  * Estados que disparan aviso -> plantilla de Meta a usar (nombre + idioma).
@@ -336,6 +337,7 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
     }
 
     let enviados = 0;
+    let encolados = 0;
     let sinCambios = 0;
     let omitidos = 0;
     let fallidos = 0;
@@ -365,20 +367,39 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
           continue;
         }
 
+        const claveIdem = `${pedido.factura}:${tel}:${pedido.estado}`;
+        const parametros = [pedido.nombre || "Cliente", pedido.factura];
+
+        // La detección del cambio de estado vive acá, así que el PRODUCTOR de
+        // la cola del CRM somos nosotros: el aviso se encola y lo manda el
+        // consumidor. No es una vuelta al pescuezo por gusto — es lo que hace
+        // que cada envío quede en la ficha del cliente en la plataforma.
+        // Mandando directo, el mensaje sale y en el CRM no queda rastro.
+        if (colaAvisosHabilitada()) {
+          if (await encolarAviso({ claveIdem, telefono: tel, plantilla: template.nombre, parametros, factura: pedido.factura, estado: pedido.estado })) {
+            await guardarEstadoPedido(pedido.factura, tel, pedido.estado);
+            encolados++;
+            continue;
+          }
+          // El CRM no recibió el aviso (caído, token, red). Se sigue de largo y
+          // se manda directo: que el aviso no quede registrado en la ficha es
+          // un problema; que el cliente no se entere de que su pedido está
+          // listo es el problema que vinimos a resolver.
+          console.warn(`📦 No pude encolar el aviso ${claveIdem} en el CRM: lo mando directo.`);
+        }
+
         // Guarda de idempotencia: se reserva ANTES de llamar a Meta. Si la
         // clave ya estaba tomada, el aviso salió antes y no se repite aunque
-        // este ciclo crea que hace falta.
-        const claveIdem = `${pedido.factura}:${tel}:${pedido.estado}`;
+        // este ciclo crea que hace falta. También cubre el caso feo del párrafo
+        // de arriba: si el encolar SÍ llegó y solo se perdió la respuesta, el
+        // consumidor va a encontrar la clave tomada y no va a mandar de nuevo.
         if (!(await reservarAviso(claveIdem))) {
           sinCambios++;
           continue;
         }
 
         try {
-          const wamid = await sendTemplate(telefonoInternacional(tel), template.nombre, template.idioma, [
-            pedido.nombre || "Cliente",
-            pedido.factura,
-          ]);
+          const wamid = await sendTemplate(telefonoInternacional(tel), template.nombre, template.idioma, parametros);
           void confirmarAviso(claveIdem, wamid);
           // El wamid es lo que después permite cruzar este envío con el acuse
           // de entrega que manda Meta al webhook ("delivered" / "failed"): sin
@@ -404,8 +425,8 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
     // Cierre SIEMPRE presente: sin esto, un chequeo correcto en el que no hubo
     // nada que avisar se ve igual que uno que se colgó a mitad de camino.
     console.log(
-      `📦 Chequeo terminado: ${enviados} aviso(s) enviado(s), ${sinCambios} sin cambios, ` +
-        `${omitidos} omitido(s), ${fallidos} con error.`,
+      `📦 Chequeo terminado: ${encolados} encolado(s) en el CRM, ${enviados} enviado(s) directo, ` +
+        `${sinCambios} sin cambios, ${omitidos} omitido(s), ${fallidos} con error.`,
     );
   } catch (err) {
     console.error("📦 No se pudo chequear las notificaciones de pedidos:", err);
