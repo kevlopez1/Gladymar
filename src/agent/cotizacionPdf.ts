@@ -6,6 +6,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { bs, type Cotizacion } from "./cotizacion.js";
 
+/**
+ * ¿El material no es de primera calidad? En la lista de Gladymar conviven
+ * "PORTAFOLIO" (primera) con "SEGUNDA", "GRANEL" y "LIQUIDACIÓN". Cotizar una
+ * segunda sin decirlo es venderle al cliente algo distinto de lo que cree
+ * comprar: el mismo modelo de primera cuesta bastante más.
+ */
+function esSegunda(status?: string): boolean {
+  const s = (status || "").toUpperCase();
+  return s === "SEGUNDA" || s === "GRANEL" || s === "LIQUIDACIÓN" || s === "LIQUIDACION";
+}
+
 const ROJO = "#d8232a";
 const ROJO2 = "#b51d23";
 const TINTA = "#161a1f";
@@ -76,7 +87,9 @@ export function generarCotizacionPDF(cot: Cotizacion): Promise<string> {
     doc.font("Helvetica").fontSize(9.5);
     cot.items.forEach((it, i) => {
       // (*) marca el ítem que no salió de la lista oficial (precio estimado).
-      const desc = it.oficial === false ? `${it.descripcion} (*)` : it.descripcion;
+      // (2ª) segunda selección · (*) precio estimado, fuera de la lista oficial.
+      const marcas = [esSegunda(it.status) ? "(2ª)" : "", it.oficial === false ? "(*)" : ""].filter(Boolean).join(" ");
+      const desc = marcas ? `${it.descripcion} ${marcas}` : it.descripcion;
       const alto = Math.max(22, doc.heightOfString(desc, { width: wDesc }) + 10);
       if (i % 2 === 1) doc.rect(M, y, R - M, alto).fill(CREMA);
       const ty = y + 6;
@@ -107,6 +120,9 @@ export function generarCotizacionPDF(cot: Cotizacion): Promise<string> {
       (cot.departamento
         ? `• Precios de la lista oficial vigente para ${cot.departamento}.\n`
         : "• Precios de lista a nivel nacional: no se pudo determinar la región del cliente.\n") +
+      (cot.items.some((i) => esSegunda(i.status))
+        ? "• Los ítems marcados con (2ª) son de SEGUNDA SELECCIÓN: material comercial, no de primera calidad.\n"
+        : "") +
       (cot.items.some((i) => i.oficial === false)
         ? "• Los ítems marcados con (*) no figuran en la lista oficial: su precio es estimado y lo confirma el asesor.\n"
         : "") +

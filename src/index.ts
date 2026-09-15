@@ -1032,7 +1032,7 @@ async function procesarTurnoCliente(
       try {
         const rel = await generarCotizacionPDF(reply.cotizacion);
         const url = `${config.publicBaseUrl.replace(/\/$/, "")}/${rel}`;
-        await sendDocument(from, url, `Cotización ${reply.cotizacion.numero}.pdf`, "Cotización referencial ◆ Gladymar");
+        await sendDocument(from, url, `Cotización ${reply.cotizacion.numero}.pdf`, "Precios de lista vigentes hoy ◆ Gladymar");
         // El asesor tiene que ver lo mismo que vio el cliente ANTES de llamarlo:
         // si no, el cliente le habla de un precio que el asesor no conoce.
         if (!prueba) void avisarCotizacionAlAsesor(from, name, reply.cotizacion, url);

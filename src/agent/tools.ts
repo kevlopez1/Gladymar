@@ -353,12 +353,36 @@ export async function executeTool(
         return { content: "No hay ítems para cotizar. Pídele al cliente qué productos y cantidades desea." };
       }
       const cot = construirCotizacion(nombre, ciudad, items);
-      const resumen = cot.items.map((i) => `• ${i.descripcion}: ${i.cantidad} ${i.unidad} × ${bs(i.precioUnit)} = ${bs(i.subtotal)}`).join("\n");
+      const resumen = cot.items
+        .map((i) => `• ${i.descripcion}: ${i.cantidad} ${i.unidad} × ${bs(i.precioUnit)} = ${bs(i.subtotal)}`)
+        .join("\n");
+
+      // Las cajas se calculan ACÁ y se le entregan ya escritas al modelo. Antes
+      // dependía de que se acordara de llamar calcular_material, y cuando no lo
+      // hacía las sacaba de cabeza: en una cotización real dijo 7 cajas donde
+      // eran 8, y el cliente se habría quedado sin material.
+      const material = cot.items
+        .filter((i) => i.unidad === "m²")
+        .map((i) => `Para ${i.descripcion}:\n${resumenMaterial(i.cantidad, i.descripcion)}`)
+        .join("\n\n");
+
+      // Un material que no es de primera tiene que decirse: el cliente cree que
+      // compra el modelo de catálogo y la segunda cuesta (y es) distinta.
+      const segundas = cot.items.filter((i) =>
+        ["SEGUNDA", "GRANEL", "LIQUIDACIÓN", "LIQUIDACION"].includes((i.status || "").toUpperCase()),
+      );
+
       console.log(`🧾 Cotización ${cot.numero} para ${nombre} — Total ${bs(cot.total)}`);
       return {
         content:
           `Cotización *${cot.numero}* generada. Se le está enviando el PDF al cliente.\n${resumen}\nTOTAL: ${bs(cot.total)}\n\n` +
-          "Al responder, confirmá que le enviaste la cotización y aclarale que los precios son *referenciales* y que un asesor confirma el precio y la disponibilidad final.",
+          (material ? `CÁLCULO DE MATERIAL (usá EXACTAMENTE estos números, no los recalcules):\n${material}\n\n` : "") +
+          (segundas.length
+            ? `⚠️ AVISO OBLIGATORIO: ${segundas.map((i) => i.descripcion).join(", ")} es material de SEGUNDA SELECCIÓN (comercial), no de primera. ` +
+              "Decíselo al cliente con naturalidad, sin que suene a letra chica, y ofrecele el equivalente de primera por si lo prefiere.\n\n"
+            : "") +
+          "Al responder, confirmá que le enviaste la cotización y aclarale que son los *precios de lista vigentes hoy* para su región, " +
+          "y que el asesor confirma la disponibilidad. NO digas que los precios son 'referenciales' o 'estimados': salen de la lista oficial de Gladymar.",
         cotizacion: cot,
       };
     }
