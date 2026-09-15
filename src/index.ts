@@ -24,6 +24,7 @@ import { handleAdminCommand, reportes } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
 import { ciudadesConSucursal } from "./knowledge/sucursales.js";
 import { chequearNotificacionesPedidos } from "./integrations/pedidoEstados.js";
+import { procesarColaAvisos } from "./integrations/colaAvisos.js";
 import { parseCSV } from "./util/csv.js";
 import { insertarConversacion, obtenerConversaciones } from "./db/index.js";
 import { pideDimensionViva } from "./knowledge/dimensionViva.js";
@@ -1196,6 +1197,20 @@ void loguearUso();
 // Meta falla, el bot arranca igual y los avisos siguen saliendo como texto
 // libre (que es lo que ya hacía).
 void asegurarPlantillaAvisos();
+
+// ── Cola de avisos del CRM de Prime ─────────────────────────────────────────
+// El CRM encola los avisos de estado de pedido; acá se reclaman y se mandan.
+// Convive con el chequeo de la hoja: la hoja se apaga recién cuando el módulo
+// logístico del CRM esté cargando pedidos de verdad.
+if (config.colaAvisos.token) {
+  const colaTimer = setInterval(
+    () => void procesarColaAvisos(),
+    config.colaAvisos.chequeoMinutos * 60 * 1000,
+  );
+  if (typeof colaTimer.unref === "function") colaTimer.unref();
+  void procesarColaAvisos();
+  console.log(`📨 Cola de avisos activa (cada ${config.colaAvisos.chequeoMinutos} min, lote ${config.colaAvisos.lote}).`);
+}
 
 // Red de seguridad global: un error no capturado en cualquier punto (ej. una
 // promesa "en segundo plano" que nadie esperó) NUNCA debe tumbar el proceso
