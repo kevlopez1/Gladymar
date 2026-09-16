@@ -160,24 +160,41 @@ function limpiar(crudos: unknown): { clientes: ClienteNuevo[]; recortados: numbe
   return { clientes: out, recortados };
 }
 
+async function leerCon(modelo: string, contenido: Anthropic.MessageParam["content"]): Promise<LecturaClientes> {
+  const res = await anthropic.messages.create({
+    model: modelo,
+    max_tokens: 1500,
+    system: INSTRUCCION,
+    messages: [{ role: "user", content: contenido }],
+  });
+  const texto = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("\n");
+  const { contactos, transcripcion } = extraerJson(texto);
+  return { ...limpiar(contactos), transcripcion };
+}
+
 async function pedirleAClaude(contenido: Anthropic.MessageParam["content"]): Promise<LecturaClientes> {
   try {
-    const res = await anthropic.messages.create({
-      // El modelo de LEER, no el de conversar (ver config.anthropic.modelVision).
-      model: config.anthropic.modelVision,
-      max_tokens: 1500,
-      system: INSTRUCCION,
-      messages: [{ role: "user", content: contenido }],
-    });
-    const texto = res.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("\n");
-    const { contactos, transcripcion } = extraerJson(texto);
-    return { ...limpiar(contactos), transcripcion };
+    // El modelo de LEER, no el de conversar (ver config.anthropic.modelVision).
+    return await leerCon(config.anthropic.modelVision, contenido);
   } catch (err) {
-    console.error("No se pudieron leer los datos del cliente nuevo:", err);
-    return { clientes: [], error: "No pude leer los datos en este momento. Probá de nuevo en un minuto." };
+    // Si el modelo de lectura no está habilitado en la cuenta, la función
+    // entera quedaría muerta. Se reintenta con el de conversar: es peor
+    // leyendo, pero ahora lleva la instrucción estricta, que es lo que evitaba
+    // el error grave — inventar una ficha en vez de decir que no pudo leer.
+    console.error(
+      `No se pudo leer con "${config.anthropic.modelVision}", reintento con "${config.anthropic.model}". ` +
+        "Si esto se repite, revisá ANTHROPIC_MODEL_VISION:",
+      err,
+    );
+    try {
+      return await leerCon(config.anthropic.model, contenido);
+    } catch (err2) {
+      console.error("Tampoco se pudo leer con el modelo de conversación:", err2);
+      return { clientes: [], error: "No pude leer los datos en este momento. Probá de nuevo en un minuto." };
+    }
   }
 }
 
