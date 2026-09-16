@@ -20,6 +20,7 @@ import {
   type SolicitudReg,
 } from "./data.js";
 import { obtenerStatsHoy } from "../integrations/sheetsStats.js";
+import type { SeccionLista } from "../whatsapp/client.js";
 import {
   leerClientesDeTexto,
   leerClientesDeFoto,
@@ -36,6 +37,14 @@ export interface AdminReply {
   options?: string[];
   optionsButton?: string;
   optionsTitle?: string;
+  /**
+   * El menú agrupado, cuando conviene mostrarlo por secciones.
+   *
+   * `options` sigue yendo con la lista plana: es lo que usa el atajo numérico y
+   * el respaldo cuando la lista interactiva falla. Las dos tienen que decir lo
+   * mismo, así que las secciones se arman primero y la plana sale de ellas.
+   */
+  secciones?: SeccionLista[];
 }
 
 // Estado para flujos de varios pasos (comunicado, ver región, alta de
@@ -43,6 +52,14 @@ export interface AdminReply {
 const pendiente = new Map<string, { accion: string; clientes?: ClienteNuevo[] }>();
 
 const AGREGAR = "➕ Agregar cliente";
+const LEADS = "🧾 Leads del día";
+const RECLAMOS = "🚨 Reclamos prioritarios";
+const RESUMEN = "📊 Resumen del día";
+const REPORTES = "📈 Reportes globales";
+const SEMANAL = "📅 Reporte semanal";
+const COMUNICADO = "📢 Enviar comunicado";
+const REGION = "🌎 Ver una región";
+const PRUEBA = "🧪 Probar como cliente";
 const ALTA_ESCRIBIR = "✍️ Escribiendo los datos";
 const ALTA_FOTO = "📷 Con una foto";
 const ALTA_EXCEL = "📄 Con un Excel";
@@ -60,21 +77,53 @@ function norm(s: string): string {
 }
 
 /**
- * Menú según el rol.
+ * Menú según el rol, agrupado por secciones.
  *
- * OJO con el largo: la lista tappable de WhatsApp admite 10 filas como máximo y
- * lo que sobra se cae en silencio. El menú del Gerente General tiene 9.
+ * Nueve opciones en una lista plana no se leen: hay que recorrerlas todas para
+ * encontrar la que uno busca, y el nombre solo no dice qué hace cada una. Por
+ * eso van en grupos y cada una lleva una línea que la explica.
+ *
+ * OJO con el largo: Meta admite 10 filas EN TOTAL sumando las secciones, y lo
+ * que sobra se cae sin avisar. El menú del Gerente General tiene 9.
  */
 function menu(admin: Admin): AdminReply {
-  const leads = ["Leads del día"];
-  const supervision = ["Reclamos prioritarios", "Resumen del día"];
-  const gm = ["Reportes globales", "Reporte semanal de leads", "Enviar comunicado", "Ver una región"];
-  const prueba = ["🧪 Probar como cliente"];
+  const secciones: SeccionLista[] = [];
 
-  let opciones: string[];
-  if (admin.role === "gerente") opciones = [...leads, ...supervision, AGREGAR, ...gm, ...prueba];
-  else if (admin.role === "regional") opciones = [...leads, ...supervision, AGREGAR, ...prueba];
-  else opciones = [...leads, AGREGAR];
+  const delDia: SeccionLista = {
+    titulo: "Tu día",
+    filas: [{ id: LEADS, titulo: LEADS, descripcion: "Los clientes nuevos de hoy" }],
+  };
+  if (admin.role !== "asesor") {
+    delDia.filas.push(
+      { id: RECLAMOS, titulo: RECLAMOS, descripcion: "Casos que hay que atender primero" },
+      { id: RESUMEN, titulo: RESUMEN, descripcion: "Leads, reclamos y seguimientos de hoy" },
+    );
+  }
+  secciones.push(delDia);
+
+  secciones.push({
+    titulo: "Cargar clientes",
+    filas: [{ id: AGREGAR, titulo: AGREGAR, descripcion: "Escribiendo, con una foto o con un Excel" }],
+  });
+
+  if (admin.role === "gerente") {
+    secciones.push({
+      titulo: "Gerencia",
+      filas: [
+        { id: REPORTES, titulo: REPORTES, descripcion: "Conversaciones y leads por ciudad" },
+        { id: SEMANAL, titulo: SEMANAL, descripcion: "Todos los leads de los últimos 7 días" },
+        { id: COMUNICADO, titulo: COMUNICADO, descripcion: "Un mensaje para todos los asesores" },
+        { id: REGION, titulo: REGION, descripcion: "Leads y reclamos de otra ciudad" },
+      ],
+    });
+  }
+
+  if (admin.role !== "asesor") {
+    secciones.push({
+      titulo: "Pruebas",
+      filas: [{ id: PRUEBA, titulo: PRUEBA, descripcion: "Ver el bot como lo ve un cliente" }],
+    });
+  }
 
   const ambito =
     admin.role === "gerente"
@@ -82,9 +131,12 @@ function menu(admin: Admin): AdminReply {
       : admin.sucursal && admin.role === "asesor"
         ? `${admin.sucursal} · ${admin.region}`
         : admin.region;
+
   return {
-    text: `*Panel Gladymar* · ${admin.nombre}\nÁmbito: *${ambito}*\n\n¿Qué deseas ver?`,
-    options: opciones,
+    text: `*Panel Gladymar*\n${admin.nombre} · ${ambito}\n\n¿Qué necesitás?`,
+    // La plana sale de las secciones para que no puedan decir cosas distintas.
+    options: secciones.flatMap((s) => s.filas.map((f) => f.id)),
+    secciones,
     optionsButton: "Ver comandos",
     optionsTitle: "Comandos disponibles",
   };
@@ -93,6 +145,20 @@ function menu(admin: Admin): AdminReply {
 const MENU_ALTA: AdminReply = {
   text: "➕ *Agregar cliente*\n\nPodés cargar *uno o varios* de una vez.\n¿Cómo lo querés hacer?",
   options: [ALTA_ESCRIBIR, ALTA_FOTO, ALTA_EXCEL, "Volver al menú"],
+  secciones: [
+    {
+      titulo: "Uno o pocos",
+      filas: [
+        { id: ALTA_ESCRIBIR, titulo: ALTA_ESCRIBIR, descripcion: "Nombre, teléfono, ciudad y qué le interesa" },
+        { id: ALTA_FOTO, titulo: ALTA_FOTO, descripcion: "Una tarjeta o la hoja donde los anotaste" },
+      ],
+    },
+    {
+      titulo: "Una lista larga",
+      filas: [{ id: ALTA_EXCEL, titulo: ALTA_EXCEL, descripcion: "Un archivo .xlsx o .csv con tus contactos" }],
+    },
+    { titulo: "Salir", filas: [{ id: "Volver al menú", titulo: "Volver al menú" }] },
+  ],
   optionsButton: "Elegir",
   optionsTitle: "Agregar cliente",
 };
@@ -388,6 +454,19 @@ export async function handleAdminCommand(
   }
   if (/(agregar|a[nñ]adir|cargar|nuevo|alta).*(cliente|contacto)|^agregar cliente/.test(text)) {
     return MENU_ALTA;
+  }
+
+  // "Probar como cliente" lo atiende index.ts ANTES de llegar acá, porque
+  // necesita prender el modo demo en el estado de la sesión de WhatsApp. Esta
+  // rama es solo para el simulador web, donde ese modo no existe: sin ella, una
+  // opción que figura en el menú contestaba "No reconocí ese comando".
+  if (/probar/.test(text) && /(cliente|crm|agente|sistema|demo)/.test(text)) {
+    return {
+      text:
+        "🧪 *Probar como cliente* funciona desde WhatsApp: ahí te atiendo como si fueras un cliente " +
+        "y volvés al panel escribiendo *salir*.",
+      ...VOLVER,
+    };
   }
 
   if (/semanal/.test(text)) {
