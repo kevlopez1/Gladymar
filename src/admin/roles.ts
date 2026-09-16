@@ -32,6 +32,8 @@ export interface Admin {
   departamento?: string;
   /** Sucursal del padrón (solo asesores y supervisores). */
   sucursal?: string;
+  /** Correo del padrón. Es como se entra a la plataforma del CRM. */
+  email?: string;
 }
 
 /** Número del Gerente General (formato internacional sin "+", como llega de WhatsApp). */
@@ -104,6 +106,7 @@ for (const a of ASESORES) {
     region: REGION_ASESOR[a.departamento] ?? a.departamento,
     departamento: a.departamento,
     sucursal: a.sucursalCanonica || a.sucursal,
+    email: a.email,
   };
 }
 
@@ -114,13 +117,22 @@ for (const a of ASESORES) {
 //    perder el dato dejaba a Thalía y a Ma. René sin showroom asignado.
 for (const [ciudad, num] of Object.entries(ADMIN_REGIONAL_TELEFONO)) {
   const tel = toIntlBolivia(num);
+  const delPadron = ADMIN_POR_TELEFONO[tel];
   ADMIN_POR_TELEFONO[tel] = {
     id: tel,
-    nombre: ADMIN_REGIONAL_NOMBRE[ciudad] || `Administrador ${ciudad}`,
+    // El NOMBRE DEL PADRÓN gana, aunque el de acá esté mejor escrito.
+    //
+    // No es una preferencia estética: ese mismo string viaja en `asesor` al
+    // CRM, y del otro lado la comparación es exacta. Este mapa dice
+    // "Thalía Vera" y el padrón dice "Thalia Vera"; con la versión linda, la
+    // regional abría su cartera y no veía ninguno de sus clientes, sin un solo
+    // error. Un nombre bonito que no cruza es peor que uno feo que sí.
+    nombre: delPadron?.nombre || ADMIN_REGIONAL_NOMBRE[ciudad] || `Administrador ${ciudad}`,
     role: "regional",
     region: ciudad,
     departamento: DEPARTAMENTO_DE_REGION[ciudad] ?? ciudad,
-    sucursal: ADMIN_POR_TELEFONO[tel]?.sucursal,
+    sucursal: delPadron?.sucursal,
+    email: delPadron?.email,
   };
 }
 // 3) El Gerente General tiene prioridad (acceso nacional).
@@ -237,6 +249,7 @@ export function adminRoster(): {
   ciudad?: string;
   departamento?: string;
   sucursal?: string;
+  email?: string;
   sucursal_confirmada: boolean;
 }[] {
   return Object.values(ADMIN_POR_TELEFONO).map((a) => ({
@@ -247,6 +260,7 @@ export function adminRoster(): {
     // El que cruza con los leads: el bot manda este mismo valor en el ingest.
     departamento: a.departamento,
     sucursal: a.sucursal,
+    email: a.email,
     sucursal_confirmada: !a.sucursal || !SUCURSAL_SIN_CONFIRMAR.has(a.nombre),
   }));
 }
