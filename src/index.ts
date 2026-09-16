@@ -14,13 +14,13 @@ import { generarCotizacionPDF } from "./agent/cotizacionPdf.js";
 import { bs, type Cotizacion } from "./agent/cotizacion.js";
 import { resumenUso, PRECIOS_USD_POR_MILLON } from "./agent/uso.js";
 import { InMemorySessionStore } from "./session/store.js";
-import { sendText, sendDocument, sendInteractiveList, sendTemplate, downloadMedia, downloadDocumento, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
+import { sendText, sendDocument, sendInteractiveList, sendInteractiveSections, sendTemplate, downloadMedia, downloadDocumento, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
 import { CrmIngest, stageDeTipo, tipoSolicitudCrm } from "./integrations/crm.js";
 import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, adminNombrePorCiudad, puedeCotizarPDF, ADMIN_TELEFONO, adminRoster } from "./admin/roles.js";
-import { handleAdminCommand, reportes } from "./admin/commands.js";
+import { handleAdminCommand, reportes, type AdminReply } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
 import { ciudadesConSucursal } from "./knowledge/sucursales.js";
 import { chequearNotificacionesPedidos } from "./integrations/pedidoEstados.js";
@@ -696,14 +696,16 @@ const enCurso = new Set<string>();
 const testCliente = new Set<string>();
 
 /** Envía una respuesta del panel admin (menú corto como lista tappable; listas largas partidas). */
-async function enviarPanel(
-  to: string,
-  r: { text: string; options?: string[]; optionsButton?: string; optionsTitle?: string },
-): Promise<void> {
+async function enviarPanel(to: string, r: AdminReply): Promise<void> {
   const corto = r.text.length < 900;
   if (r.options?.length && corto) {
     try {
-      await sendInteractiveList(to, r.text, r.optionsButton || "Ver comandos", r.optionsTitle || "Panel", r.options);
+      // Agrupado si el menú trae secciones; si no, la lista plana de siempre.
+      if (r.secciones?.length) {
+        await sendInteractiveSections(to, r.text, r.optionsButton || "Ver comandos", r.secciones);
+      } else {
+        await sendInteractiveList(to, r.text, r.optionsButton || "Ver comandos", r.optionsTitle || "Panel", r.options);
+      }
     } catch (err) {
       console.error("Lista admin falló; envío como texto:", err);
       await sendText(to, `${r.text}\n\n${r.options.map((o, i) => `*${i + 1}.* ${o}`).join("\n")}`);

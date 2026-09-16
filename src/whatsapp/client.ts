@@ -278,6 +278,78 @@ export async function sendInteractiveList(
   }
 }
 
+export interface FilaLista {
+  /** Lo que vuelve cuando el usuario toca la fila. Es el comando. */
+  id: string;
+  titulo: string;
+  /** Segunda línea, más chica. Sirve para explicar qué hace la opción. */
+  descripcion?: string;
+}
+
+export interface SeccionLista {
+  titulo: string;
+  filas: FilaLista[];
+}
+
+/**
+ * Lista interactiva agrupada en secciones, con una descripción por fila.
+ *
+ * Una lista plana de nueve opciones no se lee: hay que recorrerla entera para
+ * encontrar la que uno quiere, y los nombres solos no dicen qué hace cada una.
+ *
+ * LÍMITES DE META, que no avisan cuando se pasan: 10 filas EN TOTAL sumando
+ * todas las secciones, 24 caracteres el título de cada fila y de cada sección,
+ * 72 la descripción. Lo que sobra se recorta acá y no allá: si Meta lo rechaza,
+ * el admin se queda sin menú y el único rastro es un 400 en el log.
+ */
+export async function sendInteractiveSections(
+  to: string,
+  body: string,
+  buttonLabel: string,
+  secciones: SeccionLista[],
+): Promise<void> {
+  let restantes = 10;
+  const sections = [];
+  for (const sec of secciones) {
+    if (restantes <= 0) break;
+    const filas = sec.filas.slice(0, restantes);
+    restantes -= filas.length;
+    sections.push({
+      title: sec.titulo.slice(0, 24),
+      rows: filas.map((f) => ({
+        id: f.id.slice(0, 200),
+        title: f.titulo.length > 24 ? f.titulo.slice(0, 23) + "…" : f.titulo,
+        ...(f.descripcion ? { description: f.descripcion.slice(0, 72) } : {}),
+      })),
+    });
+  }
+
+  const url = `${BASE}/${config.whatsapp.phoneNumberId}/messages`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.whatsapp.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "list",
+        body: { text: (body || "Selecciona una opción:").slice(0, 1024) },
+        action: { button: (buttonLabel || "Ver opciones").slice(0, 20), sections },
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Error enviando lista con secciones (${res.status}): ${detail}`);
+  }
+}
+
 /**
  * Marca un mensaje entrante como leído (doble check azul).
  */
