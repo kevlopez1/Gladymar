@@ -107,3 +107,25 @@ export function asesoresDeSucursal(sucursal: string): Asesor[] {
     (a, b) => Number(b.esSupervisor) - Number(a.esSupervisor),
   );
 }
+
+/**
+ * Asesores de un departamento, para poder elegir a mano a quién se le asigna.
+ *
+ * Los supervisores van primero porque son los que reciben por defecto, y
+ * después el resto ordenado por sucursal: la pregunta que se hace quien elige
+ * es "de qué showroom", no "en qué orden estaban en el Excel".
+ */
+export function asesoresDeDepartamento(departamento?: string): Asesor[] {
+  if (!departamento) return [];
+  return ASESORES.filter((a) => a.departamento === departamento).sort(
+    (a, b) =>
+      Number(b.esSupervisor) - Number(a.esSupervisor) ||
+      a.sucursalCanonica.localeCompare(b.sucursalCanonica) ||
+      a.nombre.localeCompare(b.nombre),
+  );
+}
+
+/** Todos los departamentos que tienen al menos un asesor cargado. */
+export function departamentosConAsesores(): string[] {
+  return [...new Set(ASESORES.map((a) => a.departamento))].sort();
+}

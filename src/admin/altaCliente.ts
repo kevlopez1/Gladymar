@@ -46,6 +46,14 @@ export interface ClienteNuevo {
   interes?: string;
   /** Qué no se pudo usar del dato original (ej. un teléfono que no cierra). */
   aviso?: string;
+  /**
+   * Asesor elegido a mano en el panel.
+   *
+   * Cuando está, gana sobre el que sugiere la zona: el que carga el contacto
+   * sabe con quién habló el cliente, y la zona es una regla general que no
+   * conoce ese detalle. Vacío => se usa el sugerido.
+   */
+  asesor?: string;
 }
 
 const crm = new CrmIngest(config.crm.ingestUrl, config.crm.ingestToken);
@@ -237,8 +245,14 @@ export function resumenParaConfirmar(clientes: ClienteNuevo[], recortados = 0, t
     partes.push(`   📱 ${c.telefono ?? "_sin teléfono_"}`);
     if (c.ciudad) partes.push(`   📍 ${c.ciudad}`);
     if (c.interes) partes.push(`   🧱 ${c.interes}`);
-    const asesor = adminNombrePorCiudad(c.ciudad);
-    partes.push(`   ➡️ ${asesor ? `Queda con *${asesor}*` : "_Sin asesor: esa zona no tiene uno asignado_"}`);
+    // El elegido a mano gana sobre el de la zona, y se dice cuál de los dos es:
+    // "queda con X" a secas no deja ver si alguien lo cambió o si es el default.
+    const sugerido = adminNombrePorCiudad(c.ciudad);
+    const asesor = c.asesor || sugerido;
+    const comoSeEligio = c.asesor && c.asesor !== sugerido ? " _(elegido)_" : "";
+    partes.push(
+      `   ➡️ ${asesor ? `Queda con *${asesor}*${comoSeEligio}` : "_Sin asesor: esa zona no tiene uno asignado_"}`,
+    );
     if (c.aviso) partes.push(`   ⚠️ ${c.aviso}`);
     return partes.join("\n");
   });
@@ -294,7 +308,7 @@ export async function guardarClientes(clientes: ClienteNuevo[], quien: Admin): P
         stage: "nuevo",
         tipo_solicitud: "contactar_asesor",
         interest: c.interes,
-        asesor: adminNombrePorCiudad(c.ciudad),
+        asesor: c.asesor || adminNombrePorCiudad(c.ciudad),
         departamento: departamentoDeLugar(c.ciudad),
         message: `Cliente cargado desde el panel por ${quien.nombre}.`,
       });
