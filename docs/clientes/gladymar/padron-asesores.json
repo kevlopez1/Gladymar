@@ -6,13 +6,15 @@
       "external_id": "59167401827",
       "nombre": "Gerente General",
       "role": "gerente",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59174234380",
       "nombre": "Soporte Prime",
       "role": "gerente",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59167900508",
@@ -22,7 +24,8 @@
       "departamento": "Chuquisaca",
       "sucursal": "Sucre",
       "email": "jmontecinos@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
     },
     {
       "external_id": "59167408846",
@@ -32,7 +35,8 @@
       "departamento": "Cochabamba",
       "sucursal": "Blanco Galindo",
       "email": "maviles@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
     },
     {
       "external_id": "59168225572",
@@ -42,7 +46,8 @@
       "departamento": "La Paz",
       "sucursal": "Calacoto (Ballivián)",
       "email": "jramos@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
     },
     {
       "external_id": "59172303568",
@@ -50,7 +55,8 @@
       "role": "regional",
       "ciudad": "Oruro",
       "departamento": "Oruro",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
     },
     {
       "external_id": "59169612800",
@@ -58,7 +64,8 @@
       "role": "regional",
       "ciudad": "Potosí",
       "departamento": "Potosí",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
     },
     {
       "external_id": "59167703821",
@@ -68,7 +75,8 @@
       "departamento": "Santa Cruz",
       "sucursal": "Gladymar Plus",
       "email": "tvera@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
     },
     {
       "external_id": "59167895527",
@@ -78,7 +86,8 @@
       "departamento": "Santa Cruz",
       "sucursal": "Montero",
       "email": "ivargas@grupoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
     },
     {
       "external_id": "59171656258",
@@ -88,7 +97,8 @@
       "departamento": "Santa Cruz",
       "sucursal": "Fábrica (Parque Industrial)",
       "email": "iperez@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59171625209",
@@ -98,7 +108,8 @@
       "departamento": "Santa Cruz",
       "sucursal": "Canal Cotoca",
       "email": "luriona@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59172987241",
@@ -108,7 +119,8 @@
       "departamento": "Tarija",
       "sucursal": "Tarija",
       "email": "rpatana@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
     },
     {
       "external_id": "59167700221",
@@ -118,7 +130,8 @@
       "departamento": "Chuquisaca",
       "sucursal": "Sucre",
       "email": "sfiorilo@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59171344413",
@@ -128,7 +141,8 @@
       "departamento": "Cochabamba",
       "sucursal": "Juan de la Rosa",
       "email": "zmaldonado@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59168584245",
@@ -138,7 +152,8 @@
       "departamento": "Cochabamba",
       "sucursal": "Blanco Galindo",
       "email": "ntaboada@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59172207640",
@@ -148,7 +163,8 @@
       "departamento": "Cochabamba",
       "sucursal": "Blanco Galindo",
       "email": "gagomez@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59171557028",
@@ -158,7 +174,8 @@
       "departamento": "La Paz",
       "sucursal": "Calacoto (Ballivián)",
       "email": "hfuentes@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59172023533",
@@ -168,7 +185,8 @@
       "departamento": "La Paz",
       "sucursal": "Montes",
       "email": "ivera@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59171550146",
@@ -178,7 +196,8 @@
       "departamento": "La Paz",
       "sucursal": "Montes",
       "email": "jbellido@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59167896857",
@@ -188,7 +207,8 @@
       "departamento": "La Paz",
       "sucursal": "Calacoto (Ballivián)",
       "email": "cquispe@gruporoda.com",
-      "sucursal_confirmada": false
+      "sucursal_confirmada": false,
+      "emite_el_bot": false
     },
     {
       "external_id": "59167895521",
@@ -198,7 +218,8 @@
       "departamento": "Santa Cruz",
       "sucursal": "Gladymar Plus",
       "email": "bsaucedo@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59172149883",
@@ -208,7 +229,8 @@
       "departamento": "Santa Cruz",
       "sucursal": "Gladymar Plus",
       "email": "jcgutierrez@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59172152425",
@@ -218,7 +240,8 @@
       "departamento": "Santa Cruz",
       "sucursal": "Gladymar Plus",
       "email": "apaniagua@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59172168520",
@@ -228,7 +251,8 @@
       "departamento": "Santa Cruz",
       "sucursal": "Fábrica (Parque Industrial)",
       "email": "wmontalvan@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59172158212",
@@ -238,7 +262,8 @@
       "departamento": "Santa Cruz",
       "sucursal": "Fábrica (Parque Industrial)",
       "email": "fguayao@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59171654290",
@@ -248,7 +273,8 @@
       "departamento": "Santa Cruz",
       "sucursal": "Fábrica (Parque Industrial)",
       "email": "ebautista@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59171622825",
@@ -258,7 +284,8 @@
       "departamento": "Santa Cruz",
       "sucursal": "Canal Cotoca",
       "email": "lcampero@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59171325267",
@@ -268,7 +295,8 @@
       "departamento": "Santa Cruz",
       "sucursal": "Canal Cotoca",
       "email": "cramirez@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     },
     {
       "external_id": "59167371513",
@@ -278,7 +306,8 @@
       "departamento": "Tarija",
       "sucursal": "Tarija",
       "email": "aamezaga@gruporoda.com",
-      "sucursal_confirmada": true
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
     }
   ]
 }

@@ -14,7 +14,7 @@
  */
 import { config } from "../config.js";
 import { ciudadesConSucursal } from "../knowledge/sucursales.js";
-import { departamentoDeLugar, REGION_ASESOR } from "../knowledge/departamentos.js";
+import { departamentoDeLugar, REGION_ASESOR, mapaMunicipios } from "../knowledge/departamentos.js";
 import { asesorParaLugar, ASESORES } from "./asesores.js";
 
 export interface Admin {
@@ -251,7 +251,19 @@ export function adminRoster(): {
   sucursal?: string;
   email?: string;
   sucursal_confirmada: boolean;
+  /**
+   * Si el bot puede poner ESTE nombre en el campo `asesor` del ingest.
+   *
+   * Solo 8 de los 29 pueden. El bot deriva al SUPERVISOR de la sucursal, así
+   * que el nombre de un asesor comercial nunca viaja; y como todo lo urbano de
+   * Santa Cruz cae hoy en Plus, tampoco viajan los supervisores de Serrana y
+   * Canal Cotoca. Importa para el CRM: una cartera que se resuelve por nombre
+   * de responsable va a salir vacía para los que nunca aparecen, y eso no es un
+   * problema de escritura sino de que nadie les deriva nada.
+   */
+  emite_el_bot: boolean;
 }[] {
+  const emitibles = nombresQueEmiteElBot();
   return Object.values(ADMIN_POR_TELEFONO).map((a) => ({
     external_id: a.id,
     nombre: a.nombre,
@@ -262,7 +274,25 @@ export function adminRoster(): {
     sucursal: a.sucursal,
     email: a.email,
     sucursal_confirmada: !a.sucursal || !SUCURSAL_SIN_CONFIRMAR.has(a.nombre),
+    emite_el_bot: emitibles.has(a.nombre),
   }));
+}
+
+/**
+ * Los nombres que el bot puede llegar a escribir en `asesor`.
+ *
+ * Se CALCULA recorriendo el mapa de municipios y preguntando a quién se deriva
+ * cada uno, que es exactamente lo que hace el bot en vivo. No se escribe a
+ * mano: una lista a mano se desactualiza el día que alguien cambia una regla de
+ * derivación, y el síntoma sería una cartera vacía sin ningún error.
+ */
+export function nombresQueEmiteElBot(): Set<string> {
+  const out = new Set<string>();
+  for (const lugar of Object.keys(mapaMunicipios())) {
+    const n = adminNombrePorCiudad(lugar);
+    if (n) out.add(n);
+  }
+  return out;
 }
 
 /** Construye un Admin para el demo: "gerente" = Gerente General; una ciudad = su administrador regional. */
