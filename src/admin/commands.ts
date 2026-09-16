@@ -313,7 +313,7 @@ function pedirDatos(sessionId: string, modo: "texto" | "foto" | "excel"): AdminR
 /** Muestra lo leído y deja la sesión esperando el Guardar/Cancelar. */
 function pasarAConfirmar(sessionId: string, leido: LecturaClientes): AdminReply {
   pendiente.set(sessionId, { accion: "alta_confirmar", clientes: leido.clientes });
-  return { text: resumenParaConfirmar(leido.clientes, leido.recortados), ...CONFIRMAR };
+  return { text: resumenParaConfirmar(leido.clientes, leido.recortados, leido.transcripcion), ...CONFIRMAR };
 }
 
 export async function handleAdminCommand(
@@ -378,12 +378,18 @@ export async function handleAdminCommand(
       }
       if (!leido.clientes.length) {
         pendiente.set(sessionId, { accion: pend.accion });
+        // Se muestra lo poco que se leyó: "no pude" a secas no dice si el
+        // problema es la foto, la letra o que apuntó a otra cosa.
+        const pista = leido.transcripcion?.trim()
+          ? `\n\n_Alcancé a leer:_ "${leido.transcripcion.trim().slice(0, 200)}"`
+          : "";
         return {
           text:
-            "No distinguí ningún contacto ahí. " +
+            "No pude leer los datos con seguridad, así que no guardo nada." +
             (esperaFoto
-              ? "¿Probás con una foto más nítida, o me lo escribís?"
-              : "Mandámelo así: *nombre, teléfono, ciudad, qué le interesa*."),
+              ? " Probá con la foto *derecha* (sin girar) y más cerca del papel, o escribime los datos."
+              : " Mandámelo así: *nombre, teléfono, ciudad, qué le interesa*.") +
+            pista,
         };
       }
       return pasarAConfirmar(sessionId, leido);
