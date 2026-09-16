@@ -222,6 +222,11 @@ export interface LecturaDespachos {
   motivo?: string;
 }
 
+/** Mayúsculas y sin tildes, para comparar encabezados sin depender de cómo se escribieron. */
+function sinTildes(s: string): string {
+  return (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
+}
+
 /** Arma un pedido por factura (una factura tiene varias filas, una por producto). */
 export function leerPedidos(filas: string[][]): LecturaDespachos {
   const vacio: LecturaDespachos = {
@@ -231,12 +236,16 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     estadosVistos: {},
     facturasConEstadosMixtos: {},
   };
-  const encIdx = filas.findIndex((f) => f.some((c) => c.trim().toUpperCase() === "FACTURA"));
+  const encIdx = filas.findIndex((f) => f.some((c) => sinTildes(c) === "FACTURA"));
   if (encIdx === -1) {
     const primeras = filas.slice(0, 3).map((f) => f.join(" | ")).join("  //  ");
     return { ...vacio, motivo: `no se encontró ninguna fila con la columna FACTURA. Primeras filas: ${primeras}` };
   }
-  const enc = filas[encIdx].map((c) => c.trim().toUpperCase());
+  // Se comparan los encabezados SIN tildes. La columna del teléfono viene sin
+  // tilde en una hoja donde el resto sí la lleva, así que hoy coincide por
+  // casualidad: el día que alguien la escriba "TELÉFONO" el lector dejaría de
+  // encontrarla y todos los pedidos saldrían sin número, sin ningún error.
+  const enc = filas[encIdx].map((c) => sinTildes(c));
   const col = (nombre: string) => enc.indexOf(nombre);
   const iFactura = col("FACTURA");
   const iTelefono = col("TELEFONO DEL CLIENTE");
@@ -451,6 +460,21 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
     if (!dbHabilitada()) {
       console.warn("📦 Avisos de pedido en pausa: falta DATABASE_URL (sin ella se reenviarían en cada chequeo).");
       return;
+    }
+
+    // La fecha de programación es lo único que falta para el tercer aviso, el de
+    // dos días antes. Se loguea una muestra en vez de suponer qué trae: una
+    // columna que existe y viene vacía se ve igual que una que no existe.
+    const iFecha = encabezado.findIndex((c) => /FECHA DE PROGRAMACI/.test(c));
+    if (iFecha >= 0) {
+      const muestra = filas
+        .slice(1)
+        .map((f) => (f[iFecha] ?? "").trim())
+        .filter(Boolean)
+        .slice(0, 5);
+      console.log(
+        `📦 [hoja] FECHA DE PROGRAMACIÓN: ${muestra.length ? `ejemplos ${muestra.join(" | ")}` : "la columna existe pero viene VACÍA"}`,
+      );
     }
 
     const mixtas = Object.entries(facturasConEstadosMixtos);
