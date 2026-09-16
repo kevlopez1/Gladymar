@@ -28,6 +28,15 @@ export interface LecturaClientes {
   recortados?: number;
   /** Cuántas filas de la planilla se descartaron por no tener nombre. */
   filasVacias?: number;
+  /**
+   * Lo que el modelo dice haber leído, letra por letra.
+   *
+   * Se muestra junto a los datos extraídos porque es lo ÚNICO que deja ver un
+   * dato inventado: un teléfono de ocho dígitos que empieza con 7 pasa todas
+   * las validaciones aunque no tenga nada que ver con el papel. Comparar contra
+   * la transcripción es lo que lo delata.
+   */
+  transcripcion?: string;
 }
 
 export interface ClienteNuevo {
@@ -52,29 +61,65 @@ const anthropic = new Anthropic({ apiKey: config.anthropic.apiKey });
  */
 const MAX_POR_LOTE = 25;
 
-const INSTRUCCION = `Extraé los datos de contacto de clientes que aparezcan en lo que te mandan.
+/**
+ * Instrucción de extracción.
+ *
+ * La versión anterior decía: "si un contacto no tiene nombre legible, poné
+ * Cliente". Eso es pedirle que emita una ficha que NO pudo leer, y una vez
+ * comprometido con esa ficha completa el resto como puede. Pasó exactamente
+ * eso con una foto girada: nombre "Cliente", un teléfono inventado que además
+ * era válido, la ciudad cambiada y el producto cambiado. Ninguna validación
+ * podía atajarlo, porque el dato estaba bien formado; solo estaba mal.
+ *
+ * Ahora la regla es la contraria y es la única que sirve: lo que no se lee, no
+ * se emite. Media ficha inventada es peor que ninguna ficha.
+ */
+const INSTRUCCION = `Transcribí y extraé datos de contacto de clientes. Tu trabajo es LEER, no interpretar.
 
-Devolvé SOLO un array JSON, sin texto alrededor, sin markdown, con esta forma:
-[{"nombre":"...","telefono":"...","ciudad":"...","interes":"..."}]
+Devolvé SOLO este JSON, sin texto alrededor y sin markdown:
+{"transcripcion":"...","contactos":[{"nombre":"...","telefono":"...","ciudad":"...","interes":"..."}]}
 
-Reglas:
-- "nombre" es lo único obligatorio. Si un contacto no tiene nombre legible, poné "Cliente".
-- "telefono": solo los dígitos, sin +591 ni espacios. Si no hay, omitilo.
-- "ciudad": la ciudad o municipio de Bolivia que figure. Si no hay, omitilo.
-- "interes": qué producto o metraje le interesa, en pocas palabras. Si no hay, omitilo.
-- Puede haber UN contacto o VARIOS: devolvé uno por cada persona que distingas, sin fusionar dos en uno ni partir uno en dos.
-- NO inventes ningún dato. Un campo que no está, no va.
-- Si no se distingue ningún contacto, devolvé [].`;
+"transcripcion" es el texto que ves, LETRA POR LETRA, tal cual, sin ordenarlo ni corregirlo.
+Escribila ANTES de armar los contactos: los contactos salen de ahí, no de lo que te parezca probable.
 
-function extraerJson(texto: string): unknown {
+Reglas, en orden de importancia:
+1. NO INVENTES NADA. Ni un dígito. Si no podés leer un dato con seguridad, ese campo NO VA.
+2. El "nombre" es obligatorio. Si no podés leer el nombre con seguridad, NO devuelvas ese contacto.
+   Nunca pongas "Cliente", "Sin nombre" ni nada parecido como relleno.
+3. Si la imagen está girada, borrosa, cortada o la letra no se entiende, devolvé "contactos": []
+   y poné en "transcripcion" lo poco que hayas podido leer. Devolver vacío es una respuesta
+   correcta y esperada; adivinar no lo es nunca.
+4. "telefono": los dígitos tal cual están escritos. Si dudás entre dos dígitos, omitilo entero.
+   Un teléfono equivocado le manda el mensaje de un cliente a un desconocido.
+5. "ciudad": la ciudad o municipio de Bolivia tal como figura. Las abreviaturas van tal cual
+   (CBBA, SCZ, LP): no las expandas ni las cambies por otra ciudad.
+6. "interes": qué producto o metraje quiere, en pocas palabras y con las palabras del papel.
+7. Puede haber UN contacto o VARIOS: uno por persona, sin fusionar dos ni partir uno en dos.`;
+
+function extraerJson(texto: string): { contactos: unknown; transcripcion?: string } {
   const limpio = texto.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  const desdeObj = limpio.indexOf("{");
+  const hastaObj = limpio.lastIndexOf("}");
+  if (desdeObj !== -1 && hastaObj > desdeObj) {
+    try {
+      const obj = JSON.parse(limpio.slice(desdeObj, hastaObj + 1)) as Record<string, unknown>;
+      if (Array.isArray(obj.contactos)) {
+        return {
+          contactos: obj.contactos,
+          transcripcion: typeof obj.transcripcion === "string" ? obj.transcripcion : undefined,
+        };
+      }
+    } catch {
+      // Sigue abajo: puede haber devuelto el array pelado.
+    }
+  }
   const desde = limpio.indexOf("[");
   const hasta = limpio.lastIndexOf("]");
-  if (desde === -1 || hasta === -1) return null;
+  if (desde === -1 || hasta === -1) return { contactos: null };
   try {
-    return JSON.parse(limpio.slice(desde, hasta + 1));
+    return { contactos: JSON.parse(limpio.slice(desde, hasta + 1)) };
   } catch {
-    return null;
+    return { contactos: null };
   }
 }
 
@@ -118,7 +163,8 @@ function limpiar(crudos: unknown): { clientes: ClienteNuevo[]; recortados: numbe
 async function pedirleAClaude(contenido: Anthropic.MessageParam["content"]): Promise<LecturaClientes> {
   try {
     const res = await anthropic.messages.create({
-      model: config.anthropic.model,
+      // El modelo de LEER, no el de conversar (ver config.anthropic.modelVision).
+      model: config.anthropic.modelVision,
       max_tokens: 1500,
       system: INSTRUCCION,
       messages: [{ role: "user", content: contenido }],
@@ -127,7 +173,8 @@ async function pedirleAClaude(contenido: Anthropic.MessageParam["content"]): Pro
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("\n");
-    return limpiar(extraerJson(texto));
+    const { contactos, transcripcion } = extraerJson(texto);
+    return { ...limpiar(contactos), transcripcion };
   } catch (err) {
     console.error("No se pudieron leer los datos del cliente nuevo:", err);
     return { clientes: [], error: "No pude leer los datos en este momento. Probá de nuevo en un minuto." };
@@ -159,8 +206,15 @@ export async function leerClientesDeFoto(mediaId: string): Promise<LecturaClient
   ]);
 }
 
-/** Texto de confirmación con lo que se entendió, antes de guardar nada. */
-export function resumenParaConfirmar(clientes: ClienteNuevo[], recortados = 0): string {
+/**
+ * Texto de confirmación con lo que se entendió, antes de guardar nada.
+ *
+ * Arriba va la TRANSCRIPCIÓN literal, y recién debajo los datos ya ordenados.
+ * Es el único modo de que el asesor pueda comparar contra el papel que tiene en
+ * la mano: un teléfono inventado pasa todas las validaciones, y contra la ficha
+ * sola no hay contra qué contrastarlo.
+ */
+export function resumenParaConfirmar(clientes: ClienteNuevo[], recortados = 0, transcripcion?: string): string {
   const lineas = clientes.map((c, i) => {
     const partes = [`*${i + 1}. ${c.nombre}*`];
     partes.push(`   📱 ${c.telefono ?? "_sin teléfono_"}`);
@@ -171,13 +225,18 @@ export function resumenParaConfirmar(clientes: ClienteNuevo[], recortados = 0): 
     if (c.aviso) partes.push(`   ⚠️ ${c.aviso}`);
     return partes.join("\n");
   });
+  const leido = transcripcion?.trim()
+    ? `📖 *Esto leí en la foto:*\n_"${transcripcion.trim().slice(0, 400)}"_\n\n`
+    : "";
   const titulo = clientes.length === 1 ? "Esto entendí:" : `Entendí *${clientes.length}* contactos:`;
   const sobrante = recortados
     ? `\n\n⚠️ Había *${recortados}* contacto(s) más de los que puedo cargar de una vez (${MAX_POR_LOTE}). ` +
       "Guardá estos y mandame el resto en otra tanda."
     : "";
-  const pregunta = clientes.length === 1 ? "¿Lo guardo?" : "¿Los guardo?";
-  return `${titulo}\n\n${lineas.join("\n\n")}${sobrante}\n\n${pregunta}`;
+  const pregunta =
+    (clientes.length === 1 ? "¿Lo guardo?" : "¿Los guardo?") +
+    (leido ? "\n_Comparalo con el papel antes de confirmar._" : "");
+  return `${leido}${titulo}\n\n${lineas.join("\n\n")}${sobrante}\n\n${pregunta}`;
 }
 
 /**

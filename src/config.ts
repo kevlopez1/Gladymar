@@ -28,6 +28,21 @@ export const config = {
   anthropic: {
     apiKey: required("ANTHROPIC_API_KEY"),
     model: optional("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+    /**
+     * Modelo para LEER datos de una foto o un papel, separado del de conversar.
+     *
+     * No es lo mismo charlar que transcribir. En una conversación, un modelo
+     * rápido que se equivoca se corrige en el mensaje siguiente; leyendo el
+     * teléfono de un papel escrito a mano, equivocarse significa mandarle el
+     * seguimiento de un cliente al WhatsApp de un desconocido, y nadie se
+     * entera. Pasó: de una foto girada salió un teléfono inventado que además
+     * era válido, así que ninguna validación lo podía atajar.
+     *
+     * Es una operación rara —un asesor cargando contactos— así que acá el
+     * modelo bueno cuesta centavos al mes y evita el único error que no tiene
+     * vuelta atrás.
+     */
+    modelVision: optional("ANTHROPIC_MODEL_VISION", "claude-sonnet-5"),
   },
 
   whatsapp: {
