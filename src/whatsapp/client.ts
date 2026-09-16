@@ -67,6 +67,29 @@ export async function downloadDocumento(mediaId: string): Promise<MediaDescargad
 }
 
 /**
+ * Planillas que un asesor puede mandar con su lista de clientes.
+ *
+ * Van aparte de DOCUMENTOS_SOPORTADOS porque esas las lee Claude y estas no:
+ * un Excel se parsea exacto, celda por celda. Se aceptan los tres formatos con
+ * los que sale una lista en la práctica, incluido el .xls viejo que todavía
+ * exporta más de un sistema.
+ */
+const PLANILLAS_SOPORTADAS = [
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+  "application/vnd.ms-excel", // .xls
+  "text/csv",
+  "application/csv",
+  "text/plain", // WhatsApp a veces manda un .csv así
+];
+/** Tope por planilla. Una lista de cientos de filas pesa poco: es texto. */
+const MAX_PLANILLA_BYTES = 5_000_000;
+
+/** Descarga una planilla (Excel o CSV) que mandó un asesor desde el panel. */
+export async function downloadPlanilla(mediaId: string): Promise<MediaDescargada | null> {
+  return downloadMedia(mediaId, PLANILLAS_SOPORTADAS, MAX_PLANILLA_BYTES);
+}
+
+/**
  * Descarga una imagen que mandó el cliente por WhatsApp.
  *
  * Meta lo hace en dos pasos: primero se consulta el id del media para obtener

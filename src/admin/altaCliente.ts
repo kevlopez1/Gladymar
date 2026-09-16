@@ -1,5 +1,5 @@
 /**
- * Alta de clientes desde el panel: escribiendo los datos o mandando una foto.
+ * Alta de clientes desde el panel: escribiendo, por foto o por planilla.
  *
  * El asesor está en el mostrador o en obra y anota el contacto en un papel, en
  * una tarjeta o en la libreta. Hasta ahora eso terminaba en un cuaderno y el
@@ -13,7 +13,9 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
-import { downloadMedia } from "../whatsapp/client.js";
+import ExcelJS from "exceljs";
+import { downloadMedia, downloadPlanilla } from "../whatsapp/client.js";
+import { parseCSV } from "../util/csv.js";
 import { recordSolicitud } from "./data.js";
 import { CrmIngest } from "../integrations/crm.js";
 import { adminNombrePorCiudad, toIntlBolivia, type Admin } from "./roles.js";
@@ -24,6 +26,8 @@ export interface LecturaClientes {
   error?: string;
   /** Cuántos contactos se leyeron de más y quedaron fuera del lote. */
   recortados?: number;
+  /** Cuántas filas de la planilla se descartaron por no tener nombre. */
+  filasVacias?: number;
 }
 
 export interface ClienteNuevo {
@@ -234,4 +238,207 @@ export async function guardarClientes(clientes: ClienteNuevo[], quien: Admin): P
       `${sinTelefono === 1 ? "Agregalo" : "Agregalos"} de nuevo con el número cuando lo tengas.`;
   }
   return out;
+}
+
+// ── Planillas (Excel o CSV) ──────────────────────────────────────────────────
+//
+// Una lista larga NO pasa por Claude. Una planilla ya viene en columnas: leerla
+// celda por celda es exacto, gratis y no se cansa a la fila doscientos. Claude
+// queda para lo que de verdad no tiene estructura — un papel escrito a mano.
+
+/** Tope de filas por planilla. Más alto que a mano: acá el trabajo lo hace el archivo. */
+const MAX_POR_PLANILLA = 300;
+
+/** Cómo se llama cada dato en la planilla. Se busca por nombre, nunca por posición. */
+const COLUMNAS: Record<"nombre" | "telefono" | "ciudad" | "interes", RegExp> = {
+  nombre: /NOMBRE|CLIENTE|RAZ[OÓ]N/,
+  telefono: /TEL[EÉ]FONO|TELEFONO|CELULAR|WHATSAPP|M[OÓ]VIL|MOVIL|N[UÚ]MERO|NRO/,
+  ciudad: /CIUDAD|LOCALIDAD|MUNICIPIO|DEPARTAMENTO|ZONA/,
+  interes: /INTER[EÉ]S|INTERES|PRODUCTO|DETALLE|OBSERVAC|REQUERIM|NOTA/,
+};
+
+function normEnc(s: string): string {
+  return (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+}
+
+/**
+ * Convierte las filas de una planilla en clientes.
+ *
+ * Busca el encabezado en las primeras filas en vez de asumir que es la primera:
+ * casi toda planilla real arranca con un título o una fila en blanco, y leer el
+ * título como encabezado deja todas las columnas sin identificar.
+ */
+/**
+ * Cuántas de las columnas conocidas reconoce esta fila como encabezado.
+ *
+ * Se puntúa en vez de tomar la primera coincidencia porque casi toda planilla
+ * real arranca con un título, y un título como "LISTA DE CLIENTES - EXPOCRUZ"
+ * contiene la palabra CLIENTES: tomarlo como encabezado hacía que la columna
+ * de nombre fuera la del número de fila, y se cargaban siete clientes llamados
+ * "1", "2", "3". Un encabezado de verdad reconoce VARIAS columnas y sus celdas
+ * son etiquetas cortas, no frases.
+ */
+function puntajeEncabezado(fila: string[]): number {
+  const celdas = fila.map(normEnc).filter((c) => c !== "" && c.length <= 40);
+  if (celdas.length < 2) return 0; // una sola celda es un título, no un encabezado
+  let puntos = 0;
+  for (const re of Object.values(COLUMNAS)) {
+    if (celdas.some((c) => re.test(c))) puntos++;
+  }
+  return puntos;
+}
+
+function clientesDeFilas(filas: string[][]): LecturaClientes {
+  // Se busca en las primeras filas nomás: un encabezado que aparezca en la 40
+  // no es un encabezado, es un dato.
+  let encIdx = -1;
+  let mejor = 0;
+  for (let r = 0; r < Math.min(filas.length, 20); r++) {
+    const p = puntajeEncabezado(filas[r]);
+    if (p > mejor) {
+      mejor = p;
+      encIdx = r;
+    }
+  }
+  // Sin una columna de nombre no hay nada que cargar, por mucho que matcheen
+  // las otras: el nombre es el único dato obligatorio de un cliente.
+  if (encIdx >= 0 && !filas[encIdx].map(normEnc).some((c) => c.length <= 40 && COLUMNAS.nombre.test(c))) {
+    encIdx = -1;
+  }
+  if (encIdx === -1) {
+    return {
+      clientes: [],
+      error:
+        "No encontré una columna de nombre en la planilla. " +
+        "Necesito al menos una columna que diga *NOMBRE* o *CLIENTE*, y de preferencia otra con el teléfono.",
+    };
+  }
+  const enc = filas[encIdx].map(normEnc);
+  const col = (re: RegExp) => enc.findIndex((c) => c.length <= 40 && re.test(c));
+  const iNombre = col(COLUMNAS.nombre);
+  const iTel = col(COLUMNAS.telefono);
+  const iCiudad = col(COLUMNAS.ciudad);
+  const iInteres = col(COLUMNAS.interes);
+
+  const out: ClienteNuevo[] = [];
+  let filasVacias = 0;
+  let leidas = 0;
+  for (let r = encIdx + 1; r < filas.length; r++) {
+    const f = filas[r];
+    if (!f.some((c) => (c || "").trim() !== "")) continue; // fila en blanco, no cuenta
+    leidas++;
+    const nombre = (f[iNombre] ?? "").trim();
+    if (!nombre) {
+      filasVacias++;
+      continue;
+    }
+    if (out.length >= MAX_POR_PLANILLA) continue;
+    const { tel, aviso } = normalizarTelefono(iTel >= 0 ? (f[iTel] ?? "").trim() : undefined);
+    out.push({
+      nombre: nombre.slice(0, 80),
+      telefono: tel,
+      ciudad: iCiudad >= 0 ? (f[iCiudad] ?? "").trim().slice(0, 60) || undefined : undefined,
+      interes: iInteres >= 0 ? (f[iInteres] ?? "").trim().slice(0, 200) || undefined : undefined,
+      aviso,
+    });
+  }
+  return {
+    clientes: out,
+    recortados: Math.max(0, leidas - filasVacias - out.length),
+    filasVacias,
+  };
+}
+
+/** Lee una planilla de Excel (.xlsx / .xls) desde su contenido. */
+async function filasDeExcel(buf: Buffer): Promise<string[][]> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf as unknown as ArrayBuffer);
+  const hoja = wb.worksheets[0];
+  if (!hoja) return [];
+  const filas: string[][] = [];
+  hoja.eachRow({ includeEmpty: false }, (row) => {
+    const celdas: string[] = [];
+    // row.values viene con un hueco en el índice 0: ExcelJS numera desde 1.
+    const vals = row.values as unknown[];
+    for (let c = 1; c < vals.length; c++) {
+      const v = vals[c];
+      celdas.push(v == null ? "" : typeof v === "object" ? String((v as { text?: string }).text ?? v) : String(v));
+    }
+    filas.push(celdas);
+  });
+  return filas;
+}
+
+/**
+ * Lee la lista de clientes de una planilla que mandó un asesor.
+ *
+ * Nunca lanza: un archivo raro devuelve un error legible, no una excepción que
+ * deje al asesor mirando el panel sin respuesta.
+ */
+export async function leerClientesDePlanilla(mediaId: string, nombreArchivo?: string): Promise<LecturaClientes> {
+  const media = await downloadPlanilla(mediaId);
+  if (!media) {
+    return {
+      clientes: [],
+      error: "No pude abrir ese archivo. Mandámelo como *Excel (.xlsx)* o *CSV*, y que pese menos de 5 MB.",
+    };
+  }
+  return leerPlanilla(Buffer.from(media.base64, "base64"), nombreArchivo, media.mimeType);
+}
+
+/**
+ * Parsea una planilla ya descargada. Separada de la descarga a propósito: es la
+ * parte con reglas (dónde está el encabezado, qué columna es cuál) y así se
+ * puede probar con un archivo de verdad sin tocar WhatsApp.
+ */
+export async function leerPlanilla(
+  buf: Buffer,
+  nombreArchivo?: string,
+  mimeType = "",
+): Promise<LecturaClientes> {
+  try {
+    const esCsv =
+      /\.csv$/i.test(nombreArchivo || "") || mimeType.includes("csv") || mimeType === "text/plain";
+    const filas = esCsv ? parseCSV(buf.toString("utf8")) : await filasDeExcel(buf);
+    if (!filas.length) return { clientes: [], error: "La planilla llegó vacía: no tiene ninguna fila." };
+    return clientesDeFilas(filas);
+  } catch (err) {
+    console.error("No se pudo leer la planilla de clientes:", err);
+    return {
+      clientes: [],
+      error: "No pude leer esa planilla. Si es un .xls viejo, guardalo como *.xlsx* o como *CSV* y mandámelo de nuevo.",
+    };
+  }
+}
+
+/**
+ * Resumen de una planilla larga, para confirmar sin hacer scroll infinito.
+ *
+ * Una lista de doscientos no se revisa fila por fila en un teléfono: se aprueba
+ * de un toque, que es lo que la confirmación viene a evitar. Así que se
+ * muestran los totales, lo que falta, y una muestra de las primeras.
+ */
+export function resumenPlanilla(lectura: LecturaClientes): string {
+  const cs = lectura.clientes;
+  const conTel = cs.filter((c) => c.telefono).length;
+  const sinTel = cs.length - conTel;
+  const conAviso = cs.filter((c) => c.aviso).length;
+
+  const lineas = [`📄 Leí *${cs.length}* cliente(s) de la planilla.`, ""];
+  lineas.push(`   📱 Con teléfono: *${conTel}*`);
+  if (sinTel) lineas.push(`   ⚠️ Sin teléfono: *${sinTel}* (quedan registrados, pero sin seguimiento automático)`);
+  if (conAviso) lineas.push(`   ⚠️ Con un teléfono que no pude usar: *${conAviso}*`);
+  if (lectura.filasVacias) lineas.push(`   ↩️ Filas sin nombre que salté: *${lectura.filasVacias}*`);
+  if (lectura.recortados) {
+    lineas.push(`   ✂️ No entraron: *${lectura.recortados}* (el máximo por planilla es ${MAX_POR_PLANILLA})`);
+  }
+
+  lineas.push("", "*Las primeras, para que revises que se entendió bien:*");
+  for (const c of cs.slice(0, 5)) {
+    const partes = [`• *${c.nombre}*`, c.telefono ?? "sin teléfono", c.ciudad ?? "sin ciudad"];
+    lineas.push(partes.join(" · "));
+  }
+  if (cs.length > 5) lineas.push(`_...y ${cs.length - 5} más._`);
+  lineas.push("", "¿Los guardo?");
+  return lineas.join("\n");
 }
