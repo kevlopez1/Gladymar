@@ -103,7 +103,15 @@ export const config = {
     // Cola de avisos del CRM de Prime: el CRM encola, el bot reclama y manda.
     // Contrato en docs/clientes/gladymar/cola-avisos.md (repo prime-agent-whatsapp).
     // Vacío => el consumidor queda apagado y el bot sigue leyendo la hoja.
-    url: optional("AVISOS_URL", "https://primebusiness.live"),
+    //
+    // CON www, igual que CRM_INGEST_URL. No es un detalle cosmético: el dominio
+    // sin www redirige al de www, y una redirección a OTRO HOST hace que fetch
+    // BORRE el encabezado Authorization — es lo que manda el estándar, para no
+    // filtrarle el token a un dominio distinto del que uno quiso. El pedido
+    // llegaba sin credencial y del otro lado se veía como un 401 de token que
+    // no coincide. Si alguna vez hay que apuntar a otro dominio, que sea el
+    // definitivo: el que redirige no sirve.
+    url: optional("AVISOS_URL", "https://www.primebusiness.live"),
     // Token PROPIO de esta cola, distinto del de publicaciones de Prime: si hay
     // que rotar uno, el otro no se cae. Vacío => apagado.
     token: optional("AVISOS_TOKEN", ""),

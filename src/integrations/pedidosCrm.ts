@@ -145,8 +145,18 @@ export async function enviarFotoPedidos(pedidos: PedidoActual[]): Promise<void> 
           foto_completa: cerrarFoto,
           pedidos: tanda.map(aIngest),
         }),
+        // Ver colaAvisos.ts: una redirección a otro host borra el Authorization.
+        redirect: "manual",
         signal: AbortSignal.timeout(30_000),
       });
+      if (res.status >= 300 && res.status < 400) {
+        console.error(
+          `📦 /api/pedidos/ingest respondió una redirección (${res.status}) a "${res.headers.get("location") ?? "?"}". ` +
+            "No la sigo: la llamada llegaría sin token. Hay que apuntar AVISOS_URL al dominio definitivo.",
+        );
+        todasOk = false;
+        continue;
+      }
       const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) {
         console.error(`📦 /api/pedidos/ingest respondió HTTP ${res.status}:`, json);
