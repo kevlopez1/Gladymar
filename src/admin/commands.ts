@@ -11,6 +11,8 @@
  */
 import type { Admin } from "./roles.js";
 import { ciudadesAdmin, adminNombrePorCiudad } from "./roles.js";
+import { asesoresDeDepartamento, departamentosConAsesores } from "./asesores.js";
+import { departamentoDeLugar } from "../knowledge/departamentos.js";
 import {
   getLeads,
   getReclamos,
@@ -49,7 +51,18 @@ export interface AdminReply {
 
 // Estado para flujos de varios pasos (comunicado, ver región, alta de
 // cliente), por sesión. `clientes` solo lo usa la confirmación del alta.
-const pendiente = new Map<string, { accion: string; clientes?: ClienteNuevo[] }>();
+const pendiente = new Map<
+  string,
+  { accion: string; clientes?: ClienteNuevo[]; transcripcion?: string; departamento?: string }
+>();
+
+// Prefijos de los ids de la lista. El título de la fila es el nombre a secas,
+// para que se lea; el prefijo viaja en el id, que es lo que vuelve al tocarla.
+const P_ASESOR = "ASESOR::";
+const P_SUCURSAL = "SUCURSAL::";
+const P_DEPTO = "DEPTO::";
+const AUTO = `${P_ASESOR}__sugerido__`;
+const OTRO_DEPTO = `${P_DEPTO}__elegir__`;
 
 const AGREGAR = "➕ Agregar cliente";
 const LEADS = "🧾 Leads del día";
@@ -280,6 +293,104 @@ export async function reportes(): Promise<string> {
   return out;
 }
 
+/** Cuántas filas quedan libres en la lista de WhatsApp (máximo 10). */
+const TOPE_FILAS = 10;
+
+/**
+ * Paso de asignación: muestra lo leído y deja elegir a quién se le asigna.
+ *
+ * Va DESPUÉS de leer y ANTES de guardar, porque quien carga el contacto sabe
+ * con quién habló el cliente y la zona no: la regla por zona es un buen valor
+ * por defecto, no una verdad. Un asesor casi siempre se lo asigna a sí mismo;
+ * un gerente reparte.
+ */
+function pasarAElegirAsesor(
+  sessionId: string,
+  admin: Admin,
+  clientes: ClienteNuevo[],
+  transcripcion: string | undefined,
+  cuerpo: string,
+): AdminReply {
+  const depto = departamentoDeLugar(clientes[0]?.ciudad);
+  pendiente.set(sessionId, { accion: "alta_asesor", clientes, transcripcion, departamento: depto });
+  return listaDeAsesores(admin, depto, cuerpo, clientes.length);
+}
+
+/**
+ * Arma la lista de a quién asignar, respetando el tope de filas de WhatsApp.
+ * Exportada para poder verificar el tope sin levantar WhatsApp: Santa Cruz
+ * tiene doce asesores y la lista admite diez filas, así que es el caso que hay
+ * que probar y el que nunca se ve hasta que Meta rechaza el mensaje.
+ */
+export function listaDeAsesores(admin: Admin, depto: string | undefined, cuerpo: string, cuantos: number): AdminReply {
+  const secciones: SeccionLista[] = [];
+  const sugerido = adminNombrePorCiudad(cuerpoCiudad(depto));
+
+  if (sugerido) {
+    secciones.push({
+      titulo: "Sugerido por la zona",
+      filas: [{ id: AUTO, titulo: sugerido, descripcion: cuantos > 1 ? "El que corresponde a cada uno" : "El que corresponde por zona" }],
+    });
+  }
+  // "Yo mismo" solo si quien carga figura en el padrón: el Gerente General y
+  // Soporte Prime no atienden clientes, asignárselos sería inventar una cartera.
+  const yo = admin.role !== "gerente" ? admin.nombre : undefined;
+  if (yo && yo !== sugerido) {
+    secciones.push({
+      titulo: "Yo",
+      filas: [{ id: `${P_ASESOR}${yo}`, titulo: `👤 ${yo}`, descripcion: admin.sucursal ?? "Me lo asigno a mí" }],
+    });
+  }
+
+  const usadas = secciones.reduce((n, s) => n + s.filas.length, 0);
+  const libres = TOPE_FILAS - usadas - 1; // -1 para "otro departamento"
+  const delDepto = asesoresDeDepartamento(depto).filter((a) => a.nombre !== sugerido && a.nombre !== yo);
+
+  if (depto && delDepto.length && delDepto.length <= libres) {
+    secciones.push({
+      titulo: depto,
+      filas: delDepto.map((a) => ({
+        id: `${P_ASESOR}${a.nombre}`,
+        titulo: a.nombre,
+        descripcion: a.sucursalCanonica || a.sucursal,
+      })),
+    });
+  } else if (depto && delDepto.length) {
+    // No entran: se elige primero la sucursal. Santa Cruz tiene doce asesores
+    // y la lista de WhatsApp admite diez filas en total.
+    const sucursales = [...new Set(delDepto.map((a) => a.sucursalCanonica || a.sucursal))];
+    secciones.push({
+      titulo: `${depto} · elegí el showroom`,
+      filas: sucursales.slice(0, libres).map((suc) => ({
+        id: `${P_SUCURSAL}${suc}`,
+        titulo: suc,
+        descripcion: (() => {
+          const n = delDepto.filter((a) => (a.sucursalCanonica || a.sucursal) === suc).length;
+          return n === 1 ? "1 asesor" : `${n} asesores`;
+        })(),
+      })),
+    });
+  }
+
+  secciones.push({
+    titulo: "Otro",
+    filas: [{ id: OTRO_DEPTO, titulo: "🌎 Otro departamento", descripcion: "Buscar el asesor en otra región" }],
+  });
+
+  return {
+    text: cuerpo,
+    options: secciones.flatMap((s) => s.filas.map((f) => f.id)),
+    secciones,
+    optionsButton: "Asignar a",
+    optionsTitle: "¿A quién se lo asigno?",
+  };
+}
+
+/** Un lugar cualquiera del departamento, para preguntarle al padrón por él. */
+function cuerpoCiudad(depto?: string): string | undefined {
+  return depto;
+}
+
 /** Arranca el paso de "esperando los datos" o "esperando la foto". */
 function pedirDatos(sessionId: string, modo: "texto" | "foto" | "excel"): AdminReply {
   pendiente.set(sessionId, { accion: `alta_${modo}` });
@@ -310,10 +421,22 @@ function pedirDatos(sessionId: string, modo: "texto" | "foto" | "excel"): AdminR
   };
 }
 
-/** Muestra lo leído y deja la sesión esperando el Guardar/Cancelar. */
-function pasarAConfirmar(sessionId: string, leido: LecturaClientes): AdminReply {
-  pendiente.set(sessionId, { accion: "alta_confirmar", clientes: leido.clientes });
-  return { text: resumenParaConfirmar(leido.clientes, leido.recortados, leido.transcripcion), ...CONFIRMAR };
+/**
+ * Muestra lo leído y abre la elección de asesor.
+ *
+ * El texto con los datos va en el cuerpo del mismo mensaje que la lista: así el
+ * asesor verifica y asigna en un solo paso, y recién después confirma.
+ */
+function pasarAConfirmar(sessionId: string, leido: LecturaClientes, admin: Admin): AdminReply {
+  const cuerpo =
+    leido.clientes.length > 5
+      ? resumenPlanilla(leido)
+          .replace(/\n\n¿Los guardo\?$/, "")
+          .replace(/\n_Comparalo con el papel antes de confirmar\._$/, "")
+      : resumenParaConfirmar(leido.clientes, leido.recortados, leido.transcripcion)
+          .replace(/\n\n¿Lo guardo\?[\s\S]*$/, "")
+          .replace(/\n\n¿Los guardo\?[\s\S]*$/, "");
+  return pasarAElegirAsesor(sessionId, admin, leido.clientes, leido.transcripcion, `${cuerpo}\n\n*¿A quién se lo asigno?*`);
 }
 
 export async function handleAdminCommand(
@@ -353,8 +476,7 @@ export async function handleAdminCommand(
         pendiente.set(sessionId, { accion: "alta_excel" });
         return { text: "No encontré ninguna fila con nombre en esa planilla. ¿Revisás que tenga datos debajo del encabezado?" };
       }
-      pendiente.set(sessionId, { accion: "alta_confirmar", clientes: leido.clientes });
-      return { text: resumenPlanilla(leido), ...CONFIRMAR };
+      return pasarAConfirmar(sessionId, leido, admin);
     }
 
     if (pend.accion === "alta_texto" || pend.accion === "alta_foto") {
@@ -392,7 +514,80 @@ export async function handleAdminCommand(
             pista,
         };
       }
-      return pasarAConfirmar(sessionId, leido);
+      return pasarAConfirmar(sessionId, leido, admin);
+    }
+
+    if (pend.accion === "alta_asesor") {
+      const clientes = pend.clientes ?? [];
+      const crudo = raw.trim();
+
+      // Elegir otro departamento: se lista y se vuelve a preguntar.
+      if (crudo === OTRO_DEPTO) {
+        pendiente.set(sessionId, { ...pend, accion: "alta_depto" });
+        return {
+          text: "¿De qué departamento es el asesor?",
+          options: departamentosConAsesores().map((d) => `${P_DEPTO}${d}`),
+          secciones: [
+            {
+              titulo: "Departamentos",
+              filas: departamentosConAsesores().map((d) => ({ id: `${P_DEPTO}${d}`, titulo: d })),
+            },
+          ],
+          optionsButton: "Elegir",
+          optionsTitle: "Departamento",
+        };
+      }
+
+      // Elegir primero el showroom, cuando el departamento tiene muchos.
+      if (crudo.startsWith(P_SUCURSAL)) {
+        const suc = crudo.slice(P_SUCURSAL.length);
+        const deLaSucursal = asesoresDeDepartamento(pend.departamento).filter(
+          (a) => (a.sucursalCanonica || a.sucursal) === suc,
+        );
+        pendiente.set(sessionId, { ...pend, accion: "alta_asesor" });
+        return {
+          text: `*${suc}*\n\n¿A quién se lo asigno?`,
+          options: deLaSucursal.map((a) => `${P_ASESOR}${a.nombre}`),
+          secciones: [
+            {
+              titulo: suc,
+              filas: deLaSucursal.map((a) => ({
+                id: `${P_ASESOR}${a.nombre}`,
+                titulo: a.nombre,
+                descripcion: a.esSupervisor ? "Supervisor" : undefined,
+              })),
+            },
+          ],
+          optionsButton: "Asignar a",
+          optionsTitle: suc,
+        };
+      }
+
+      // Elección hecha (o "dejar el sugerido").
+      if (crudo === AUTO || crudo.startsWith(P_ASESOR)) {
+        const elegido = crudo === AUTO ? undefined : crudo.slice(P_ASESOR.length);
+        const conAsesor = clientes.map((c) => ({ ...c, asesor: elegido }));
+        pendiente.set(sessionId, { accion: "alta_confirmar", clientes: conAsesor });
+        return {
+          text: resumenParaConfirmar(conAsesor, 0, pend.transcripcion),
+          ...CONFIRMAR,
+        };
+      }
+
+      // Cualquier otra cosa: se vuelve a preguntar en vez de asumir.
+      pendiente.set(sessionId, pend);
+      return listaDeAsesores(admin, pend.departamento, "No entendí a quién asignárselo.\n\n*¿A quién se lo asigno?*", clientes.length);
+    }
+
+    if (pend.accion === "alta_depto") {
+      const crudo = raw.trim();
+      if (!crudo.startsWith(P_DEPTO)) {
+        pendiente.set(sessionId, pend);
+        return { text: "Elegí un departamento de la lista, o escribí *cancelar*." };
+      }
+      const depto = crudo.slice(P_DEPTO.length);
+      pendiente.set(sessionId, { ...pend, accion: "alta_asesor", departamento: depto });
+      return listaDeAsesores(admin, depto, `*${depto}*\n\n¿A quién se lo asigno?`, pend.clientes?.length ?? 1);
     }
 
     if (pend.accion === "alta_confirmar") {
@@ -403,7 +598,7 @@ export async function handleAdminCommand(
       }
       // Cualquier otra cosa se toma como una corrección: se relee el texto.
       const releido = await leerClientesDeTexto(raw);
-      if (releido.clientes.length) return pasarAConfirmar(sessionId, releido);
+      if (releido.clientes.length) return pasarAConfirmar(sessionId, releido, admin);
       return { ...menu(admin), text: "No guardé nada.\n\n" + menu(admin).text };
     }
 
@@ -426,8 +621,7 @@ export async function handleAdminCommand(
     const leido = await leerClientesDePlanilla(extra.documentId, extra.documentName);
     if (leido.error) return { text: `⚠️ ${leido.error}`, ...VOLVER };
     if (leido.clientes.length) {
-      pendiente.set(sessionId, { accion: "alta_confirmar", clientes: leido.clientes });
-      return { text: resumenPlanilla(leido), ...CONFIRMAR };
+      return pasarAConfirmar(sessionId, leido, admin);
     }
     return { text: "No encontré ninguna fila con nombre en esa planilla.", ...VOLVER };
   }
@@ -435,7 +629,7 @@ export async function handleAdminCommand(
   if (extra?.imageId) {
     const leido = await leerClientesDeFoto(extra.imageId);
     if (leido.error) return { text: `⚠️ ${leido.error}`, ...VOLVER };
-    if (leido.clientes.length) return pasarAConfirmar(sessionId, leido);
+    if (leido.clientes.length) return pasarAConfirmar(sessionId, leido, admin);
     return { text: "No distinguí ningún contacto en esa foto. ¿Probás con una más nítida?", ...VOLVER };
   }
 
