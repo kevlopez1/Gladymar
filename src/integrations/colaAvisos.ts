@@ -79,8 +79,23 @@ async function llamar(ruta: string, cuerpo: unknown): Promise<Record<string, unk
         "Content-Type": "application/json",
       },
       body: JSON.stringify(cuerpo),
+      // NO seguir redirecciones. Una redirección a otro host hace que fetch
+      // borre el Authorization, así que la llamada llega sin credencial y del
+      // otro lado se ve como un token que no coincide: un fallo de
+      // configuración disfrazado de fallo de permisos. Tampoco se sigue a mano
+      // reenviando el token: el estándar lo prohíbe por una buena razón, que es
+      // no entregarle la credencial a un dominio que uno no eligió.
+      redirect: "manual",
       signal: AbortSignal.timeout(20_000),
     });
+    if (res.status >= 300 && res.status < 400) {
+      console.error(
+        `📨 ${ruta} respondió una redirección (${res.status}) a "${res.headers.get("location") ?? "?"}". ` +
+          "No la sigo: fetch borra el Authorization al cambiar de host y la llamada llegaría sin token. " +
+          "Hay que apuntar AVISOS_URL al dominio definitivo (normalmente el que lleva www).",
+      );
+      return null;
+    }
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) {
       // 409 arriendo_ajeno no es un error nuestro: otro proceso tiene la fila.
