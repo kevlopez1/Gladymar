@@ -9,6 +9,7 @@
  */
 import { nowBolivia } from "../integrations/sheets.js";
 import { insertarSolicitud, obtenerSolicitudes } from "../db/index.js";
+import { departamentoDeLugar, REGION_ASESOR } from "../knowledge/departamentos.js";
 
 export interface SolicitudReg {
   tipo: string;
@@ -39,10 +40,25 @@ const registros: SolicitudReg[] = [];
 function norm(s?: string): string {
   return (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
+/**
+ * Filtra los registros de una región.
+ *
+ * El cliente dice el municipio ("Montero", "El Alto", "Quillacollo"), no el
+ * departamento, así que comparar el texto contra "Santa Cruz" dejaba fuera
+ * justamente los leads del interior: el asesor de Montero abría su panel y
+ * veía cero, con los leads ahí guardados. Primero se resuelve el departamento
+ * del lugar y se compara contra la región; la comparación literal queda de
+ * respaldo para lo que el mapa de municipios no cubra.
+ */
 function scope(list: SolicitudReg[], ciudad?: string): SolicitudReg[] {
   if (!ciudad) return list;
   const q = norm(ciudad);
-  return list.filter((r) => norm(r.ciudad).includes(q));
+  const regionPedida = norm(REGION_ASESOR[departamentoDeLugar(ciudad) ?? ""] ?? ciudad);
+  return list.filter((r) => {
+    if (norm(r.ciudad).includes(q)) return true;
+    const depto = departamentoDeLugar(r.ciudad);
+    return Boolean(depto) && norm(REGION_ASESOR[depto as string] ?? depto) === regionPedida;
+  });
 }
 
 /** Fecha de hoy (parte de día) en formato de nowBolivia, ej. "2/7/2026". */

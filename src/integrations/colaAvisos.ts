@@ -18,7 +18,16 @@
  */
 import { config, isWhatsAppConfigured } from "../config.js";
 import { sendTemplate } from "../whatsapp/client.js";
-import { reservarAviso, confirmarAviso, liberarAviso, dbHabilitada } from "../db/index.js";
+import { sendText } from "../whatsapp/client.js";
+import {
+  reservarAviso,
+  confirmarAviso,
+  liberarAviso,
+  colaIdPorWamid,
+  avisoYaTomado,
+  dbHabilitada,
+} from "../db/index.js";
+import { ADMIN_TELEFONO } from "../admin/roles.js";
 
 interface AvisoEncolado {
   id: string;
@@ -109,6 +118,8 @@ async function reportar(
  * reclamar en el próximo ciclo.
  */
 export async function procesarColaAvisos(): Promise<void> {
+  await vigilarEncolados();
+
   if (!config.colaAvisos.url || !config.colaAvisos.token) return; // sin configurar: apagado
   if (!isWhatsAppConfigured()) {
     console.warn("📨 Cola de avisos en pausa: faltan credenciales de WhatsApp.");
@@ -162,9 +173,15 @@ export async function procesarColaAvisos(): Promise<void> {
 
     // 2) Guarda de idempotencia. Si la clave ya está tomada, este aviso salió
     //    antes: se cierra la fila sin volver a mandar ni volver a pagar.
+    //
+    //    Se reporta ENTREGADO, no descartado. El mensaje SÍ salió: lo único que
+    //    no pasó es que saliera en este intento. "Descartado" en esta cola
+    //    significa que el aviso no salió y no va a salir, y alguien que lee eso
+    //    en la plataforma llama al cliente o se lo manda de nuevo a mano. El
+    //    error_meta queda igual para que se distinga del envío de este ciclo.
     if (!(await reservarAviso(a.clave_idem))) {
       console.log(`📨 Aviso ${a.id} (${a.clave_idem}) ya se había enviado: no se repite.`);
-      await reportar(a.id, "descartado", { error_meta: "ya_enviado: la clave de idempotencia ya estaba tomada" });
+      await reportar(a.id, "entregado", { error_meta: "ya_enviado: la clave de idempotencia ya estaba tomada" });
       repetidos++;
       continue;
     }
@@ -177,7 +194,7 @@ export async function procesarColaAvisos(): Promise<void> {
         idiomaDe(a.plantilla),
         a.parametros,
       );
-      void confirmarAviso(a.clave_idem, wamid);
+      void confirmarAviso(a.clave_idem, wamid, a.id);
       console.log(`📨 Aviso ${a.id} aceptado por Meta (${a.plantilla} -> ${a.telefono})${wamid ? ` id=${wamid}` : ""}`);
       await reportar(a.id, "entregado", { wamid });
       enviados++;
@@ -196,4 +213,217 @@ export async function procesarColaAvisos(): Promise<void> {
     `📨 Lote terminado: ${enviados} enviado(s), ${repetidos} ya enviado(s) antes, ` +
       `${descartados} descartado(s), ${fallidos} con error.`,
   );
+}
+
+/**
+ * Anota en la cola un fallo de entrega que llegó DESPUÉS de cerrar la fila.
+ *
+ * Meta responde 200 al aceptar el mensaje y recién minutos más tarde avisa que
+ * no se entregó. Para entonces la fila ya se reportó como entregada, así que el
+ * motivo real se perdía: en la plataforma el aviso figuraba bien y el cliente
+ * nunca se había enterado de nada.
+ *
+ * El POST lleva solo el error_meta: la fila NO se reabre ni vuelve a la cola
+ * (reenviar se cobra igual), únicamente queda escrito por qué no llegó. Del
+ * lado del CRM va con COALESCE, así que solo escribe si la fila no tenía
+ * motivo, y la respuesta trae anotado: true.
+ *
+ * Nunca lanza: esto corre dentro del webhook de Meta, que no puede fallar por
+ * un apunte administrativo.
+ */
+export async function anotarFalloTardio(wamid: string, error?: string): Promise<void> {
+  if (!config.colaAvisos.url || !config.colaAvisos.token || !dbHabilitada()) return;
+  try {
+    const colaId = await colaIdPorWamid(wamid);
+    if (!colaId) return; // no salió por la cola: no hay fila que anotar
+    const res = await llamar(`/api/avisos/${encodeURIComponent(colaId)}/resultado`, {
+      tenant: config.colaAvisos.tenant,
+      arrendatario: config.colaAvisos.arrendatario,
+      error_meta: (error || "no entregado, sin detalle de Meta").slice(0, 500),
+    });
+    if (res?.anotado) console.log(`📨 Fallo tardío anotado en el aviso ${colaId}: ${error ?? "sin detalle"}`);
+  } catch (err) {
+    console.error("📨 No se pudo anotar el fallo tardío en la cola:", err);
+  }
+}
+
+// ── Productor: encolar los avisos que detecta el bot ─────────────────────────
+//
+// Quién detecta el cambio de estado de un pedido es el bot, no el CRM: la hoja
+// de despacho la lee pedidoEstados.ts cada N minutos. Así que el productor de
+// la cola somos nosotros, y esta es la puerta de entrada.
+//
+// POR QUÉ PASAR POR LA COLA SI IGUAL PODEMOS MANDAR SOLOS: porque así cada
+// aviso queda en la ficha del cliente en el CRM. Mandando directo, el mensaje
+// sale y en la plataforma no queda rastro de que salió.
+
+/** Habilitada = hay a quién encolarle. Si no, pedidoEstados manda directo. */
+export function colaAvisosHabilitada(): boolean {
+  return Boolean(config.colaAvisos.url && config.colaAvisos.token && dbHabilitada());
+}
+
+export interface AvisoParaEncolar {
+  claveIdem: string;
+  /** Local u 8 dígitos: acá se normaliza a internacional antes de encolar. */
+  telefono: string;
+  plantilla: string;
+  parametros: string[];
+  factura?: string;
+  estado?: string;
+  idContacto?: string;
+}
+
+export interface ResultadoEncolar {
+  /** Claves que quedaron en la cola (nuevas o que ya estaban). */
+  aceptados: Set<string>;
+  /** Clave -> campo que faltaba, para las que el CRM rechazó. */
+  rechazados: Map<string, string>;
+}
+
+/** Tope de avisos por POST que admite el endpoint. */
+const LOTE_ENCOLAR = 200;
+
+/**
+ * Avisos que encolamos y todavía no vimos salir.
+ *
+ * Existe por el punto ciego de encolar: si la cola los traga (token cambiado
+ * de un solo lado, consumidor apagado, fila que nadie reclama), el aviso nunca
+ * sale y NO hay error en ningún log — se ve idéntico a "no había nada que
+ * avisar". Es exactamente la forma en que esto ya estuvo un mes sin funcionar.
+ */
+const encolados = new Map<string, AvisoParaEncolar & { encoladoEn: number }>();
+/** Cuánto se espera antes de dar por tragado un aviso encolado. */
+const VIGILANCIA_MS = 15 * 60 * 1000;
+let ultimaAlertaCola = 0;
+
+/**
+ * Encola un lote de avisos en el CRM.
+ *
+ * Devuelve null si la llamada entera falló (red, HTTP, token): ahí el que llama
+ * manda todo directo. Si la llamada salió bien devuelve qué quedó encolado y
+ * qué rechazó el CRM.
+ *
+ * OJO CON EL 200: un lote con rechazados contesta 200 igual. Tratar cualquier
+ * 200 como éxito haría desaparecer esos avisos sin un solo error en el log, sin
+ * disparar el respaldo de mandar directo, y recién los levantaría el vigilante
+ * quince minutos después. Por eso la lista de rechazados se mira en el momento.
+ */
+export async function encolarAvisos(avisos: AvisoParaEncolar[]): Promise<ResultadoEncolar | null> {
+  if (!colaAvisosHabilitada() || !avisos.length) return null;
+
+  const aceptados = new Set<string>();
+  const rechazados = new Map<string, string>();
+
+  // Un aviso sin teléfono se rechaza ACÁ y no se manda. telefonoInternacional("")
+  // devuelve "591", que no es un número inválido evidente sino un prefijo
+  // suelto: el CRM podría darlo por bueno y quedaría encolado un aviso dirigido
+  // a nadie. Se saca del lote y sigue el mismo camino que un rechazo del CRM.
+  const utiles: AvisoParaEncolar[] = [];
+  for (const a of avisos) {
+    if (!a.telefono.replace(/\D/g, "").replace(/^591/, "")) {
+      rechazados.set(a.claveIdem, "telefono");
+      console.error(`📨 No encolo el aviso ${a.claveIdem}: viene sin teléfono.`);
+      continue;
+    }
+    utiles.push(a);
+  }
+
+  for (let i = 0; i < utiles.length; i += LOTE_ENCOLAR) {
+    const tanda = utiles.slice(i, i + LOTE_ENCOLAR);
+    const res = await llamar("/api/avisos/encolar", {
+      tenant: config.colaAvisos.tenant,
+      avisos: tanda.map((a) => ({
+        clave_idem: a.claveIdem,
+        // El código de país tiene que ir en el cuerpo: el CRM normaliza a
+        // dígitos pero no adivina el 591.
+        telefono: telefonoInternacional(a.telefono),
+        plantilla: a.plantilla,
+        parametros: a.parametros.map((p) => String(p)),
+        ...(a.factura ? { factura: a.factura } : {}),
+        ...(a.estado ? { estado: a.estado } : {}),
+        ...(a.idContacto ? { id_contacto: a.idContacto } : {}),
+      })),
+    });
+    if (!res) return null; // la llamada falló entera: que el que llama mande directo
+
+    const listaRechazos = Array.isArray(res.rechazados) ? (res.rechazados as { clave?: string; falta?: string }[]) : [];
+    for (const r of listaRechazos) {
+      if (!r?.clave) continue;
+      rechazados.set(r.clave, r.falta || "campo obligatorio");
+      console.error(`📨 El CRM rechazó el aviso ${r.clave}: falta "${r.falta || "?"}". Lo mando directo.`);
+    }
+    for (const a of tanda) {
+      if (rechazados.has(a.claveIdem)) continue;
+      aceptados.add(a.claveIdem);
+      encolados.set(a.claveIdem, { ...a, encoladoEn: Date.now() });
+    }
+
+    // Chequeo de integridad: los conteos tienen que cerrar contra lo que
+    // mandamos. Si no cierran, algo se perdió en el camino y no sabemos cuál,
+    // así que al menos queda dicho: el vigilante es el que lo va a levantar.
+    const nuevos = Number(res.encolados ?? 0);
+    const repetidos = Number(res.repetidos ?? 0);
+    if (nuevos + repetidos + listaRechazos.length !== tanda.length) {
+      console.error(
+        `📨 Los conteos de encolar no cierran: mandé ${tanda.length} y volvieron ` +
+          `${nuevos} encolados + ${repetidos} repetidos + ${listaRechazos.length} rechazados.`,
+      );
+    }
+    console.log(`📨 ${nuevos} aviso(s) encolados en el CRM, ${repetidos} ya estaban, ${listaRechazos.length} rechazados.`);
+  }
+
+  return { aceptados, rechazados };
+}
+
+/** Avisa al Gerente que la cola se está tragando los avisos. Máx. una vez al día. */
+async function alertarColaMuda(cuantos: number): Promise<void> {
+  if (Date.now() - ultimaAlertaCola < 24 * 60 * 60 * 1000) return;
+  ultimaAlertaCola = Date.now();
+  try {
+    await sendText(
+      ADMIN_TELEFONO,
+      `⚠️ *Avisos de pedido*\n\n${cuantos} aviso(s) quedaron encolados en el CRM y nadie los mandó en 15 minutos. ` +
+        "Los estoy mandando yo directo para que el cliente no se quede sin su aviso, pero la cola no está saliendo: " +
+        "hay que revisar el token o el consumidor.",
+    );
+  } catch (err) {
+    console.error("📨 No se pudo alertar que la cola no está saliendo:", err);
+  }
+}
+
+/**
+ * Manda por su cuenta lo que la cola se tragó.
+ *
+ * Corre al principio de cada ciclo. Solo toca avisos encolados hace más de 15
+ * minutos cuya clave sigue libre: si la clave está tomada, el aviso salió y
+ * acá no se hace nada.
+ */
+async function vigilarEncolados(): Promise<void> {
+  if (!encolados.size) return;
+  const vencidos = [...encolados.values()].filter((e) => Date.now() - e.encoladoEn > VIGILANCIA_MS);
+  if (!vencidos.length) return;
+
+  let rescatados = 0;
+  for (const e of vencidos) {
+    encolados.delete(e.claveIdem);
+    if (await avisoYaTomado(e.claveIdem)) continue; // salió: nada que hacer
+    if (!(await reservarAviso(e.claveIdem))) continue; // se lo llevó otro entre medio
+    try {
+      const wamid = await sendTemplate(
+        telefonoInternacional(e.telefono),
+        e.plantilla,
+        idiomaDe(e.plantilla),
+        e.parametros,
+      );
+      void confirmarAviso(e.claveIdem, wamid);
+      console.error(
+        `📨 RESCATE: el aviso ${e.claveIdem} llevaba 15 min encolado sin salir. Lo mandé directo${wamid ? ` id=${wamid}` : ""}.`,
+      );
+      rescatados++;
+    } catch (err) {
+      await liberarAviso(e.claveIdem);
+      console.error(`📨 El aviso ${e.claveIdem} quedó encolado sin salir y tampoco pude mandarlo directo:`, err);
+    }
+  }
+  if (rescatados) void alertarColaMuda(rescatados);
 }

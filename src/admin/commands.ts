@@ -2,11 +2,15 @@
  * Manejo de comandos del panel de administradores (determinista, sin IA).
  *
  * Comandos base (regionales, solo su ciudad): leads, reclamos, resumen.
+ * Asesores comerciales: leads de su región y alta de clientes, nada más.
  * Exclusivos del Gerente General (nacional): reportes globales, comunicado,
  * ver cualquier región.
+ *
+ * "Agregar cliente" lo tienen los tres roles: es el que más lo usa el asesor de
+ * mostrador, que hoy anota el contacto en un papel y ahí se queda.
  */
 import type { Admin } from "./roles.js";
-import { ciudadesAdmin, ADMIN_REGIONAL_NOMBRE } from "./roles.js";
+import { ciudadesAdmin, adminNombrePorCiudad } from "./roles.js";
 import {
   getLeads,
   getReclamos,
@@ -16,6 +20,14 @@ import {
   type SolicitudReg,
 } from "./data.js";
 import { obtenerStatsHoy } from "../integrations/sheetsStats.js";
+import {
+  leerClientesDeTexto,
+  leerClientesDeFoto,
+  resumenParaConfirmar,
+  guardarClientes,
+  type ClienteNuevo,
+  type LecturaClientes,
+} from "./altaCliente.js";
 
 export interface AdminReply {
   text: string;
@@ -24,8 +36,15 @@ export interface AdminReply {
   optionsTitle?: string;
 }
 
-// Estado para flujos de varios pasos (comunicado, ver región), por sesión.
-const pendiente = new Map<string, { accion: string }>();
+// Estado para flujos de varios pasos (comunicado, ver región, alta de
+// cliente), por sesión. `clientes` solo lo usa la confirmación del alta.
+const pendiente = new Map<string, { accion: string; clientes?: ClienteNuevo[] }>();
+
+const AGREGAR = "➕ Agregar cliente";
+const ALTA_ESCRIBIR = "✍️ Escribiendo los datos";
+const ALTA_FOTO = "📷 Con una foto";
+const GUARDAR = "✅ Guardar";
+const CANCELAR = "✖️ Cancelar";
 
 const VOLVER: Pick<AdminReply, "options" | "optionsButton" | "optionsTitle"> = {
   options: ["Volver al menú"],
@@ -37,11 +56,29 @@ function norm(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
 
+/**
+ * Menú según el rol.
+ *
+ * OJO con el largo: la lista tappable de WhatsApp admite 10 filas como máximo y
+ * lo que sobra se cae en silencio. El menú del Gerente General tiene 9.
+ */
 function menu(admin: Admin): AdminReply {
-  const base = ["Leads del día", "Reclamos prioritarios", "Resumen del día"];
-  const gm = ["Reportes globales", "Reporte semanal de leads", "Enviar comunicado", "Ver una región", "🧪 Probar como cliente"];
-  const opciones = admin.role === "gerente" ? [...base, ...gm] : base;
-  const ambito = admin.role === "gerente" ? "Nacional 🇧🇴" : admin.region;
+  const leads = ["Leads del día"];
+  const supervision = ["Reclamos prioritarios", "Resumen del día"];
+  const gm = ["Reportes globales", "Reporte semanal de leads", "Enviar comunicado", "Ver una región"];
+  const prueba = ["🧪 Probar como cliente"];
+
+  let opciones: string[];
+  if (admin.role === "gerente") opciones = [...leads, ...supervision, AGREGAR, ...gm, ...prueba];
+  else if (admin.role === "regional") opciones = [...leads, ...supervision, AGREGAR, ...prueba];
+  else opciones = [...leads, AGREGAR];
+
+  const ambito =
+    admin.role === "gerente"
+      ? "Nacional 🇧🇴"
+      : admin.sucursal && admin.role === "asesor"
+        ? `${admin.sucursal} · ${admin.region}`
+        : admin.region;
   return {
     text: `*Panel Gladymar* · ${admin.nombre}\nÁmbito: *${ambito}*\n\n¿Qué deseas ver?`,
     options: opciones,
@@ -50,15 +87,30 @@ function menu(admin: Admin): AdminReply {
   };
 }
 
-/** Asesor al que se deriva automáticamente un lead según su ciudad. */
+const MENU_ALTA: AdminReply = {
+  text: "➕ *Agregar cliente*\n\nPodés cargar *uno o varios* de una vez.\n¿Cómo lo querés hacer?",
+  options: [ALTA_ESCRIBIR, ALTA_FOTO, "Volver al menú"],
+  optionsButton: "Elegir",
+  optionsTitle: "Agregar cliente",
+};
+
+const CONFIRMAR: Pick<AdminReply, "options" | "optionsButton" | "optionsTitle"> = {
+  options: [GUARDAR, CANCELAR],
+  optionsButton: "Confirmar",
+  optionsTitle: "Agregar cliente",
+};
+
+/**
+ * Asesor al que se deriva automáticamente un lead según su ciudad.
+ *
+ * Usa el mismo padrón que hace la derivación de verdad (25 asesores, con la
+ * sucursal resuelta). Antes miraba el mapa viejo de 7 nombres, así que el panel
+ * podía decir "Derivado a Thalía Vera" mientras el aviso le había salido al
+ * supervisor de Montero: el asesor leía un nombre y pasaba otra cosa.
+ */
 function asesorDe(ciudad?: string): string {
   if (!ciudad) return "Gerencia (sin ciudad)";
-  const q = norm(ciudad);
-  for (const [c, nombre] of Object.entries(ADMIN_REGIONAL_NOMBRE)) {
-    const cn = norm(c);
-    if (cn === q || q.includes(cn) || cn.includes(q)) return nombre;
-  }
-  return "Gerencia (ciudad sin asesor)";
+  return adminNombrePorCiudad(ciudad) ?? "Gerencia (ciudad sin asesor)";
 }
 
 function fmtItem(r: SolicitudReg): string {
@@ -159,13 +211,95 @@ export async function reportes(): Promise<string> {
   return out;
 }
 
-export async function handleAdminCommand(sessionId: string, admin: Admin, raw: string): Promise<AdminReply> {
+/** Arranca el paso de "esperando los datos" o "esperando la foto". */
+function pedirDatos(sessionId: string, modo: "texto" | "foto"): AdminReply {
+  pendiente.set(sessionId, { accion: modo === "texto" ? "alta_texto" : "alta_foto" });
+  if (modo === "texto") {
+    return {
+      text:
+        "✍️ Mandame los datos en *un solo mensaje*. Puede ser *uno o varios* clientes.\n\n" +
+        "Uno:\n_Juan Pérez, 71234567, Montero, porcelanato 60x60 para 80 m²_\n\n" +
+        "Varios: uno por línea.\n_Juan Pérez, 71234567, Montero, porcelanato 60x60_\n" +
+        "_Rosa Limachi, 69874521, El Alto, cerámica para baño_\n\n" +
+        "Te muestro lo que entendí antes de guardar nada. Escribí *cancelar* para salir.",
+    };
+  }
+  return {
+    text:
+      "📷 Mandame la *foto* con los datos: una tarjeta, la hoja donde los anotaste o una captura.\n\n" +
+      "Puede tener *uno o varios* clientes: si es una lista, los leo todos.\n\n" +
+      "Te muestro lo que entendí antes de guardar nada. Escribí *cancelar* para salir.",
+  };
+}
+
+/** Muestra lo leído y deja la sesión esperando el Guardar/Cancelar. */
+function pasarAConfirmar(sessionId: string, leido: LecturaClientes): AdminReply {
+  pendiente.set(sessionId, { accion: "alta_confirmar", clientes: leido.clientes });
+  return { text: resumenParaConfirmar(leido.clientes, leido.recortados), ...CONFIRMAR };
+}
+
+export async function handleAdminCommand(
+  sessionId: string,
+  admin: Admin,
+  raw: string,
+  extra?: { imageId?: string },
+): Promise<AdminReply> {
   const text = norm(raw);
   const region = admin.role === "gerente" ? undefined : admin.region;
 
-  // Flujos pendientes (solo Gerente General)
+  // Flujos pendientes de varios pasos.
   const pend = pendiente.get(sessionId);
   if (pend) {
+    const cancelado = /^(cancelar|salir|volver|volver al menu|menu|menú)$/.test(text) || text === norm(CANCELAR);
+    if (cancelado) {
+      pendiente.delete(sessionId);
+      return { ...menu(admin), text: "Listo, no guardé nada.\n\n" + menu(admin).text };
+    }
+
+    if (pend.accion === "alta_texto" || pend.accion === "alta_foto") {
+      pendiente.delete(sessionId);
+      const esperaFoto = pend.accion === "alta_foto";
+      if (esperaFoto && !extra?.imageId) {
+        // Se queda esperando: perder el paso obligaría a empezar de cero.
+        pendiente.set(sessionId, { accion: "alta_foto" });
+        return { text: "Necesito la *foto* para leer los datos. Mandámela, o escribí *cancelar*." };
+      }
+      // Si mandó foto cuando dijo "escribiendo", se lee la foto igual: lo que
+      // quiere es cargar el cliente, no cumplir el formulario.
+      const leido =
+        esperaFoto || extra?.imageId
+          ? await leerClientesDeFoto(extra!.imageId as string)
+          : await leerClientesDeTexto(raw);
+
+      if (leido.error) {
+        pendiente.set(sessionId, { accion: pend.accion });
+        return { text: `⚠️ ${leido.error}` };
+      }
+      if (!leido.clientes.length) {
+        pendiente.set(sessionId, { accion: pend.accion });
+        return {
+          text:
+            "No distinguí ningún contacto ahí. " +
+            (esperaFoto
+              ? "¿Probás con una foto más nítida, o me lo escribís?"
+              : "Mandámelo así: *nombre, teléfono, ciudad, qué le interesa*."),
+        };
+      }
+      return pasarAConfirmar(sessionId, leido);
+    }
+
+    if (pend.accion === "alta_confirmar") {
+      pendiente.delete(sessionId);
+      if (/(guardar|si|s[ií]|ok|dale|confirmar)/.test(text) || text === norm(GUARDAR)) {
+        const res = await guardarClientes(pend.clientes ?? [], admin);
+        return { text: res, ...VOLVER };
+      }
+      // Cualquier otra cosa se toma como una corrección: se relee el texto.
+      const releido = await leerClientesDeTexto(raw);
+      if (releido.clientes.length) return pasarAConfirmar(sessionId, releido);
+      return { ...menu(admin), text: "No guardé nada.\n\n" + menu(admin).text };
+    }
+
     pendiente.delete(sessionId);
     if (pend.accion === "comunicado") {
       return { text: `✅ Comunicado enviado a los asesores (simulado):\n\n"${raw.trim()}"`, ...VOLVER };
@@ -176,21 +310,51 @@ export async function handleAdminCommand(sessionId: string, admin: Admin, raw: s
     }
   }
 
+  // Una foto suelta, sin haber pedido nada: se asume que es un cliente para
+  // cargar. Es lo único que un admin manda por foto, y pedirle que primero
+  // entre al menú sería hacerlo repetir el envío. Vale con o sin epígrafe: el
+  // epígrafe de una foto de contacto es una nota, no un comando.
+  if (extra?.imageId) {
+    const leido = await leerClientesDeFoto(extra.imageId);
+    if (leido.error) return { text: `⚠️ ${leido.error}`, ...VOLVER };
+    if (leido.clientes.length) return pasarAConfirmar(sessionId, leido);
+    return { text: "No distinguí ningún contacto en esa foto. ¿Probás con una más nítida?", ...VOLVER };
+  }
+
   // Atajo numérico: si responde con un número, lo mapeamos a la opción del menú.
   if (/^\d+$/.test(text)) {
     const opciones = menu(admin).options || [];
     const sel = opciones[parseInt(text, 10) - 1];
-    if (sel) return handleAdminCommand(sessionId, admin, sel);
+    if (sel) return handleAdminCommand(sessionId, admin, sel, extra);
   }
 
   if (!text || /(menu|menú|ayuda|hola|inicio|volver|comandos)/.test(text)) return menu(admin);
+
+  // Alta de clientes: la tienen los tres roles.
+  if (text === norm(ALTA_ESCRIBIR) || /^(escribiendo|escribir|escrito|texto)/.test(text)) {
+    return pedirDatos(sessionId, "texto");
+  }
+  if (text === norm(ALTA_FOTO) || /^(con una foto|foto|imagen|captura)/.test(text)) {
+    return pedirDatos(sessionId, "foto");
+  }
+  if (/(agregar|a[nñ]adir|cargar|nuevo|alta).*(cliente|contacto)|^agregar cliente/.test(text)) {
+    return MENU_ALTA;
+  }
+
   if (/semanal/.test(text)) {
     if (admin.role === "gerente") return { text: await reporteSemanalLeads(), ...VOLVER };
     return { text: "Ese comando es exclusivo del Gerente General. Tu panel cubre solo tu región.", ...VOLVER };
   }
   if (/(lead|cotiz)/.test(text)) return { text: await listLeads(region), ...VOLVER };
-  if (/reclamo/.test(text)) return { text: await listReclamos(region), ...VOLVER };
-  if (/(resumen|kpi|del dia)/.test(text)) return { text: await resumen(region), ...VOLVER };
+
+  // Reclamos y resumen son de supervisión: el asesor comercial no los ve.
+  if (/(reclamo)/.test(text) || /(resumen|kpi|del dia)/.test(text)) {
+    if (admin.role === "asesor") {
+      return { text: "Ese comando es de los supervisores. Tu panel cubre tus leads y el alta de clientes.", ...VOLVER };
+    }
+    if (/reclamo/.test(text)) return { text: await listReclamos(region), ...VOLVER };
+    return { text: await resumen(region), ...VOLVER };
+  }
 
   if (admin.role === "gerente") {
     if (/(reporte|global)/.test(text)) return { text: await reportes(), ...VOLVER };

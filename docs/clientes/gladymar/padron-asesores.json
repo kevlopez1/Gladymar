@@ -1,0 +1,313 @@
+{
+  "origen": "asesores-crm.xlsx + roles.ts",
+  "total": 29,
+  "admins": [
+    {
+      "external_id": "59167401827",
+      "nombre": "Gerente General",
+      "role": "gerente",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59174234380",
+      "nombre": "Soporte Prime",
+      "role": "gerente",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59167900508",
+      "nombre": "Jorge Montecinos",
+      "role": "regional",
+      "ciudad": "Sucre",
+      "departamento": "Chuquisaca",
+      "sucursal": "Sucre",
+      "email": "jmontecinos@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
+    },
+    {
+      "external_id": "59167408846",
+      "nombre": "Ma. René Aviles",
+      "role": "regional",
+      "ciudad": "Cochabamba",
+      "departamento": "Cochabamba",
+      "sucursal": "Blanco Galindo",
+      "email": "maviles@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
+    },
+    {
+      "external_id": "59168225572",
+      "nombre": "Jose Ramos",
+      "role": "regional",
+      "ciudad": "La Paz",
+      "departamento": "La Paz",
+      "sucursal": "Calacoto (Ballivián)",
+      "email": "jramos@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
+    },
+    {
+      "external_id": "59172303568",
+      "nombre": "Gustavo Villegas",
+      "role": "regional",
+      "ciudad": "Oruro",
+      "departamento": "Oruro",
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
+    },
+    {
+      "external_id": "59169612800",
+      "nombre": "Gabriel Flores",
+      "role": "regional",
+      "ciudad": "Potosí",
+      "departamento": "Potosí",
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
+    },
+    {
+      "external_id": "59167703821",
+      "nombre": "Thalia Vera",
+      "role": "regional",
+      "ciudad": "Santa Cruz",
+      "departamento": "Santa Cruz",
+      "sucursal": "Gladymar Plus",
+      "email": "tvera@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
+    },
+    {
+      "external_id": "59167895527",
+      "nombre": "Ivana Vargas",
+      "role": "regional",
+      "ciudad": "Santa Cruz",
+      "departamento": "Santa Cruz",
+      "sucursal": "Montero",
+      "email": "ivargas@grupoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
+    },
+    {
+      "external_id": "59171656258",
+      "nombre": "Icelia Perez",
+      "role": "regional",
+      "ciudad": "Santa Cruz",
+      "departamento": "Santa Cruz",
+      "sucursal": "Fábrica (Parque Industrial)",
+      "email": "iperez@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59171625209",
+      "nombre": "Luis Uriona",
+      "role": "regional",
+      "ciudad": "Santa Cruz",
+      "departamento": "Santa Cruz",
+      "sucursal": "Canal Cotoca",
+      "email": "luriona@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59172987241",
+      "nombre": "Rosana Patana",
+      "role": "regional",
+      "ciudad": "Tarija",
+      "departamento": "Tarija",
+      "sucursal": "Tarija",
+      "email": "rpatana@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": true
+    },
+    {
+      "external_id": "59167700221",
+      "nombre": "Cecilia Fiorilo",
+      "role": "asesor",
+      "ciudad": "Sucre",
+      "departamento": "Chuquisaca",
+      "sucursal": "Sucre",
+      "email": "sfiorilo@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59171344413",
+      "nombre": "Zelena Maldonado",
+      "role": "asesor",
+      "ciudad": "Cochabamba",
+      "departamento": "Cochabamba",
+      "sucursal": "Juan de la Rosa",
+      "email": "zmaldonado@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59168584245",
+      "nombre": "Nadia Taboada",
+      "role": "asesor",
+      "ciudad": "Cochabamba",
+      "departamento": "Cochabamba",
+      "sucursal": "Blanco Galindo",
+      "email": "ntaboada@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59172207640",
+      "nombre": "Grover Gomez",
+      "role": "asesor",
+      "ciudad": "Cochabamba",
+      "departamento": "Cochabamba",
+      "sucursal": "Blanco Galindo",
+      "email": "gagomez@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59171557028",
+      "nombre": "Horacio Fuentes",
+      "role": "asesor",
+      "ciudad": "La Paz",
+      "departamento": "La Paz",
+      "sucursal": "Calacoto (Ballivián)",
+      "email": "hfuentes@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59172023533",
+      "nombre": "Itizar Vera",
+      "role": "asesor",
+      "ciudad": "La Paz",
+      "departamento": "La Paz",
+      "sucursal": "Montes",
+      "email": "ivera@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59171550146",
+      "nombre": "Juan Bellido",
+      "role": "asesor",
+      "ciudad": "La Paz",
+      "departamento": "La Paz",
+      "sucursal": "Montes",
+      "email": "jbellido@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59167896857",
+      "nombre": "Claudia Quispe",
+      "role": "asesor",
+      "ciudad": "La Paz",
+      "departamento": "La Paz",
+      "sucursal": "Calacoto (Ballivián)",
+      "email": "cquispe@gruporoda.com",
+      "sucursal_confirmada": false,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59167895521",
+      "nombre": "Bricila Saucedo",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "departamento": "Santa Cruz",
+      "sucursal": "Gladymar Plus",
+      "email": "bsaucedo@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59172149883",
+      "nombre": "J. Carlos Gutierrez",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "departamento": "Santa Cruz",
+      "sucursal": "Gladymar Plus",
+      "email": "jcgutierrez@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59172152425",
+      "nombre": "Alcides Paniagua",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "departamento": "Santa Cruz",
+      "sucursal": "Gladymar Plus",
+      "email": "apaniagua@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59172168520",
+      "nombre": "Wilson Montalvan",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "departamento": "Santa Cruz",
+      "sucursal": "Fábrica (Parque Industrial)",
+      "email": "wmontalvan@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59172158212",
+      "nombre": "Felix Guayao",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "departamento": "Santa Cruz",
+      "sucursal": "Fábrica (Parque Industrial)",
+      "email": "fguayao@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59171654290",
+      "nombre": "Ema Lilian Bautista Calla",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "departamento": "Santa Cruz",
+      "sucursal": "Fábrica (Parque Industrial)",
+      "email": "ebautista@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59171622825",
+      "nombre": "Laura Campero",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "departamento": "Santa Cruz",
+      "sucursal": "Canal Cotoca",
+      "email": "lcampero@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59171325267",
+      "nombre": "Carla Ramirez",
+      "role": "asesor",
+      "ciudad": "Santa Cruz",
+      "departamento": "Santa Cruz",
+      "sucursal": "Canal Cotoca",
+      "email": "cramirez@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    },
+    {
+      "external_id": "59167371513",
+      "nombre": "Angela Amezaga",
+      "role": "asesor",
+      "ciudad": "Tarija",
+      "departamento": "Tarija",
+      "sucursal": "Tarija",
+      "email": "aamezaga@gruporoda.com",
+      "sucursal_confirmada": true,
+      "emite_el_bot": false
+    }
+  ]
+}

@@ -4,18 +4,36 @@
  * - Gerente General (UNO, nacional): todos los comandos, ámbito nacional.
  *   Su número se define con GERENTE_TELEFONO (Andres Tejada).
  * - Administradores regionales: uno por ciudad, ven SOLO su región y los
- *   comandos base. Sus números son los WhatsApp de las sucursales.
+ *   comandos base. Sus números son los WhatsApp de las sucursales, más los
+ *   supervisores de sucursal del padrón de asesores.
+ * - Asesores comerciales: los 17 restantes del padrón. Panel reducido (ven los
+ *   leads de su departamento y pueden dar de alta clientes), sin reclamos ni
+ *   reportes. Se los agrega acá y no en asesores.ts porque ese módulo decide a
+ *   quién se DERIVA un lead, que es otra cosa: un asesor puede recibir leads
+ *   sin tener panel, y el panel no lo convierte en el dueño de la sucursal.
  */
 import { config } from "../config.js";
 import { ciudadesConSucursal } from "../knowledge/sucursales.js";
-import { departamentoDeLugar, REGION_ASESOR } from "../knowledge/departamentos.js";
-import { asesorParaLugar } from "./asesores.js";
+import { departamentoDeLugar, REGION_ASESOR, mapaMunicipios } from "../knowledge/departamentos.js";
+import { asesorParaLugar, ASESORES } from "./asesores.js";
 
 export interface Admin {
   id: string;
   nombre: string;
-  role: "gerente" | "regional";
-  region?: string; // ciudad, solo para regionales
+  role: "gerente" | "regional" | "asesor";
+  region?: string; // clave interna de enrutamiento (ver REGION_ASESOR)
+  /**
+   * Departamento REAL de Bolivia (uno de los 9), que es lo que viaja al CRM.
+   *
+   * No es lo mismo que `region`: la clave de enrutamiento de Chuquisaca es
+   * "Sucre", que es una ciudad, no un departamento. Mezclarlos rompe el cruce
+   * con los leads, porque el bot le estampa "Chuquisaca" a un lead de Sucre.
+   */
+  departamento?: string;
+  /** Sucursal del padrón (solo asesores y supervisores). */
+  sucursal?: string;
+  /** Correo del padrón. Es como se entra a la plataforma del CRM. */
+  email?: string;
 }
 
 /** Número del Gerente General (formato internacional sin "+", como llega de WhatsApp). */
@@ -44,6 +62,24 @@ export const ADMIN_REGIONAL_TELEFONO: Record<string, string> = {
 };
 
 /**
+ * Clave de enrutamiento -> departamento real de Bolivia.
+ *
+ * Existe porque la clave de Chuquisaca es "Sucre", que es su capital y no el
+ * departamento. El bot le estampa "Chuquisaca" a un lead de Sucre, así que un
+ * padrón que dijera "Sucre" no cruzaría con sus propios clientes: la cartera
+ * del regional saldría vacía y no habría ningún error que mirar.
+ */
+const DEPARTAMENTO_DE_REGION: Record<string, string> = {
+  Sucre: "Chuquisaca",
+  "Santa Cruz": "Santa Cruz",
+  "La Paz": "La Paz",
+  Cochabamba: "Cochabamba",
+  Tarija: "Tarija",
+  Oruro: "Oruro",
+  "Potosí": "Potosí",
+};
+
+/**
  * Normaliza un número al formato internacional de Bolivia (591 + número), tal
  * como llega de WhatsApp. Los teléfonos de sucursal están cargados con 8 dígitos
  * locales; acá les anteponemos "591" para que coincidan con el remitente real.
@@ -55,16 +91,51 @@ export function toIntlBolivia(num: string): string {
 
 /** Mapa teléfono (internacional) -> Admin (para enrutar en WhatsApp real). */
 export const ADMIN_POR_TELEFONO: Record<string, Admin> = {};
-for (const [ciudad, num] of Object.entries(ADMIN_REGIONAL_TELEFONO)) {
-  const tel = toIntlBolivia(num);
+
+// 1) Padrón de asesores. Va PRIMERO a propósito: varios de estos números son
+//    también el WhatsApp de la sucursal (Thalía Vera, Ma. René Aviles), y en
+//    ese caso tiene que ganar la entrada regional que se carga después, que es
+//    la que trae el nombre con tildes y la región ya resuelta.
+for (const a of ASESORES) {
+  if (!a.telefono) continue;
+  const tel = toIntlBolivia(a.telefono);
   ADMIN_POR_TELEFONO[tel] = {
     id: tel,
-    nombre: ADMIN_REGIONAL_NOMBRE[ciudad] || `Administrador ${ciudad}`,
-    role: "regional",
-    region: ciudad,
+    nombre: a.nombre,
+    role: a.esSupervisor ? "regional" : "asesor",
+    region: REGION_ASESOR[a.departamento] ?? a.departamento,
+    departamento: a.departamento,
+    sucursal: a.sucursalCanonica || a.sucursal,
+    email: a.email,
   };
 }
-// El Gerente General tiene prioridad (acceso nacional).
+
+// 2) Líneas de WhatsApp de las sucursales (el padrón viejo de 7). Pisa lo del
+//    padrón para quedarse con el nombre con tildes y la región ya resuelta,
+//    pero conserva la sucursal si el padrón la traía: varios de estos números
+//    son a la vez la línea de la sucursal y el celular de su supervisor, y
+//    perder el dato dejaba a Thalía y a Ma. René sin showroom asignado.
+for (const [ciudad, num] of Object.entries(ADMIN_REGIONAL_TELEFONO)) {
+  const tel = toIntlBolivia(num);
+  const delPadron = ADMIN_POR_TELEFONO[tel];
+  ADMIN_POR_TELEFONO[tel] = {
+    id: tel,
+    // El NOMBRE DEL PADRÓN gana, aunque el de acá esté mejor escrito.
+    //
+    // No es una preferencia estética: ese mismo string viaja en `asesor` al
+    // CRM, y del otro lado la comparación es exacta. Este mapa dice
+    // "Thalía Vera" y el padrón dice "Thalia Vera"; con la versión linda, la
+    // regional abría su cartera y no veía ninguno de sus clientes, sin un solo
+    // error. Un nombre bonito que no cruza es peor que uno feo que sí.
+    nombre: delPadron?.nombre || ADMIN_REGIONAL_NOMBRE[ciudad] || `Administrador ${ciudad}`,
+    role: "regional",
+    region: ciudad,
+    departamento: DEPARTAMENTO_DE_REGION[ciudad] ?? ciudad,
+    sucursal: delPadron?.sucursal,
+    email: delPadron?.email,
+  };
+}
+// 3) El Gerente General tiene prioridad (acceso nacional).
 const gerenteTel = toIntlBolivia(ADMIN_TELEFONO);
 ADMIN_POR_TELEFONO[gerenteTel] = { id: gerenteTel, nombre: "Gerente General", role: "gerente" };
 
@@ -76,6 +147,15 @@ for (const a of ADMINS_EXTRA) {
   const t = toIntlBolivia(a.telefono);
   ADMIN_POR_TELEFONO[t] = { id: t, nombre: a.nombre, role: "gerente" };
 }
+
+/**
+ * Sucursales que NO están en el Excel de Gladymar y salieron de una deducción.
+ *
+ * Van marcadas para que del otro lado se distinga un dato cargado de uno
+ * inferido: un campo que dice "sin confirmar" es más útil que uno que parece
+ * cierto y no lo es.
+ */
+const SUCURSAL_SIN_CONFIRMAR = new Set<string>(["Claudia Quispe"]);
 
 function normCiudad(s: string): string {
   return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -162,13 +242,57 @@ export function esAdmin(telefono: string): boolean {
  * marque como "Administrador" en vez de tratarlos como un cliente más).
  * external_id va en formato internacional, igual que llega de WhatsApp.
  */
-export function adminRoster(): { external_id: string; nombre: string; role: string; ciudad?: string }[] {
+export function adminRoster(): {
+  external_id: string;
+  nombre: string;
+  role: string;
+  ciudad?: string;
+  departamento?: string;
+  sucursal?: string;
+  email?: string;
+  sucursal_confirmada: boolean;
+  /**
+   * Si el bot puede poner ESTE nombre en el campo `asesor` del ingest.
+   *
+   * Solo 8 de los 29 pueden. El bot deriva al SUPERVISOR de la sucursal, así
+   * que el nombre de un asesor comercial nunca viaja; y como todo lo urbano de
+   * Santa Cruz cae hoy en Plus, tampoco viajan los supervisores de Serrana y
+   * Canal Cotoca. Importa para el CRM: una cartera que se resuelve por nombre
+   * de responsable va a salir vacía para los que nunca aparecen, y eso no es un
+   * problema de escritura sino de que nadie les deriva nada.
+   */
+  emite_el_bot: boolean;
+}[] {
+  const emitibles = nombresQueEmiteElBot();
   return Object.values(ADMIN_POR_TELEFONO).map((a) => ({
     external_id: a.id,
     nombre: a.nombre,
     role: a.role,
     ciudad: a.region,
+    // El que cruza con los leads: el bot manda este mismo valor en el ingest.
+    departamento: a.departamento,
+    sucursal: a.sucursal,
+    email: a.email,
+    sucursal_confirmada: !a.sucursal || !SUCURSAL_SIN_CONFIRMAR.has(a.nombre),
+    emite_el_bot: emitibles.has(a.nombre),
   }));
+}
+
+/**
+ * Los nombres que el bot puede llegar a escribir en `asesor`.
+ *
+ * Se CALCULA recorriendo el mapa de municipios y preguntando a quién se deriva
+ * cada uno, que es exactamente lo que hace el bot en vivo. No se escribe a
+ * mano: una lista a mano se desactualiza el día que alguien cambia una regla de
+ * derivación, y el síntoma sería una cartera vacía sin ningún error.
+ */
+export function nombresQueEmiteElBot(): Set<string> {
+  const out = new Set<string>();
+  for (const lugar of Object.keys(mapaMunicipios())) {
+    const n = adminNombrePorCiudad(lugar);
+    if (n) out.add(n);
+  }
+  return out;
 }
 
 /** Construye un Admin para el demo: "gerente" = Gerente General; una ciudad = su administrador regional. */

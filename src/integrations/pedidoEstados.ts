@@ -38,6 +38,8 @@ import {
 } from "../db/index.js";
 import { sendText } from "../whatsapp/client.js";
 import { ADMIN_TELEFONO, esAdmin } from "../admin/roles.js";
+import { encolarAvisos, colaAvisosHabilitada, type AvisoParaEncolar } from "./colaAvisos.js";
+import { enviarFotoPedidos } from "./pedidosCrm.js";
 
 /**
  * Estados que disparan aviso -> plantilla de Meta a usar (nombre + idioma).
@@ -122,12 +124,28 @@ function esTelefonoInterno(telefono: string): boolean {
   return esAdmin(telefono) || config.despacho.telefonosPrueba.includes(telefono);
 }
 
-interface PedidoActual {
+export interface ItemPedido {
+  descripcion?: string;
+  cantidad?: string;
+  estado: string;
+}
+
+export interface PedidoActual {
   factura: string;
   nombre: string;
   estado: string;
-  /** Todos los números de contacto cargados para esa factura (sin repetir). */
+  /**
+   * Todos los números de contacto cargados para esa factura (sin repetir).
+   * Puede venir VACÍO: un pedido sin teléfono cargado no recibe aviso, pero
+   * existe igual y tiene que salir en la foto que ve logística.
+   */
   telefonos: string[];
+  /** Una por fila de la hoja: una factura trae una fila por producto. */
+  items: ItemPedido[];
+  /** Las columnas de la hoja que no usamos, tal cual vinieron. */
+  extra: Record<string, string>;
+  /** Las filas de esta factura NO coinciden en el ESTADO. */
+  estadosMixtos: boolean;
 }
 
 /**
@@ -171,6 +189,32 @@ export interface LecturaDespachos {
    */
   telefonosAmbiguos: Set<string>;
   /**
+   * El encabezado tal cual vino, con TODAS las columnas (leemos cuatro, la
+   * hoja tiene más). Sin esto, "qué columnas tiene la hoja de verdad" solo se
+   * contesta abriendo el Sheet, y la hoja no es nuestra.
+   */
+  encabezado: string[];
+  /**
+   * Cada valor distinto de ESTADO visto, con cuántas filas lo traen.
+   *
+   * Solo avisamos "preparado" y "despachado"; de los demás sabíamos el nombre
+   * de uno ("Entregado") y nada más. Un estado como Anulado que nadie
+   * contempla deja un pedido pendiente para siempre, así que conviene que la
+   * hoja los declare en vez de que alguien los recuerde.
+   */
+  estadosVistos: Record<string, number>;
+  /**
+   * Facturas cuyas filas NO coinciden en el ESTADO, con los estados que traen.
+   *
+   * Una factura tiene una fila por producto y hasta ahora se tomaba el estado
+   * de la PRIMERA, callado. Si logística despacha por partes, una factura con
+   * un ítem preparado y otro despachado se queda en "preparado" y el cliente
+   * nunca recibe el segundo aviso. No se cambia el criterio a ciegas —
+   * adelantar al estado más avanzado anunciaría "despachado" con media factura
+   * en el almacén, que es peor — pero deja de ser invisible.
+   */
+  facturasConEstadosMixtos: Record<string, string[]>;
+  /**
    * Por qué no se reconoció ningún pedido. Sin esto, "la hoja se leyó pero no
    * hay pedidos" tapa tres causas muy distintas (no está el encabezado, falta
    * una columna, o no hay filas) y no se puede arreglar sin abrir la hoja.
@@ -180,7 +224,13 @@ export interface LecturaDespachos {
 
 /** Arma un pedido por factura (una factura tiene varias filas, una por producto). */
 export function leerPedidos(filas: string[][]): LecturaDespachos {
-  const vacio: LecturaDespachos = { pedidos: [], telefonosAmbiguos: new Set() };
+  const vacio: LecturaDespachos = {
+    pedidos: [],
+    telefonosAmbiguos: new Set(),
+    encabezado: [],
+    estadosVistos: {},
+    facturasConEstadosMixtos: {},
+  };
   const encIdx = filas.findIndex((f) => f.some((c) => c.trim().toUpperCase() === "FACTURA"));
   if (encIdx === -1) {
     const primeras = filas.slice(0, 3).map((f) => f.join(" | ")).join("  //  ");
@@ -200,11 +250,29 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     ].filter(Boolean);
     return {
       ...vacio,
+      encabezado: enc,
       motivo: `falta(n) la(s) columna(s) ${faltan.join(", ")}. Encabezado encontrado: ${enc.join(" | ")}`,
     };
   }
 
-  interface Acum { nombre: string; estado: string; telefonos: Set<string> }
+  interface Acum {
+    nombre: string;
+    estado: string;
+    telefonos: Set<string>;
+    estadosEnFilas: Set<string>;
+    items: ItemPedido[];
+    extra: Record<string, string>;
+  }
+  // Columnas que ya viajan como campo propio: todo lo demás va en `extra` tal
+  // cual vino. Así una columna nueva en la hoja llega al CRM sin tocar código.
+  const iDescripcion = enc.findIndex((c) => /PRODUCTO|DESCRIPCI|DETALLE|ITEM|ARTICULO|ART[IÍ]CULO/.test(c));
+  const iCantidad = enc.findIndex((c) => /^CANT|CANTIDAD/.test(c));
+  // Descripción y cantidad salen por `items`, una por fila: repetirlas en
+  // `extra` mandaría el primer producto de la factura haciéndose pasar por un
+  // dato de la cabecera.
+  const columnasPropias = new Set(
+    [iFactura, iTelefono, iNombre, iEstado, iDescripcion, iCantidad].filter((i) => i >= 0),
+  );
   const porFactura = new Map<string, Acum>();
   const nombresPorTelefono = new Map<string, Set<string>>();
   // Para poder distinguir "la hoja está vacía porque no hay pedidos pendientes"
@@ -213,6 +281,7 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
   let sinFactura = 0;
   let sinTelefono = 0;
   let sinEstado = 0;
+  const estadosVistos: Record<string, number> = {};
 
   for (let r = encIdx + 1; r < filas.length; r++) {
     const f = filas[r];
@@ -224,21 +293,49 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     }
     const telefono = digitos(f[iTelefono] ?? "");
     const estado = (f[iEstado] ?? "").trim().toLowerCase();
-    if (!telefono || !estado) {
-      // Estas dos columnas las llena logística a mano y son la causa más
-      // frecuente de que un pedido no dispare su aviso.
-      if (!telefono) sinTelefono++;
-      if (!estado) sinEstado++;
-      continue;
+    if (estado) estadosVistos[estado] = (estadosVistos[estado] ?? 0) + 1;
+    // Estas dos columnas las llena logística a mano y son la causa más
+    // frecuente de que un pedido no dispare su aviso.
+    if (!telefono) sinTelefono++;
+    if (!estado) {
+      sinEstado++;
+      continue; // sin estado no hay nada que reportar de esta fila
     }
+    // Sin teléfono NO se descarta el pedido: no va a recibir aviso, pero existe
+    // y tiene que salir en la foto que ve logística. Antes desaparecía del
+    // listado entero por un dato que le falta a la hoja, no al pedido.
     const nombre = (iNombre >= 0 ? f[iNombre] ?? "" : "").trim();
 
-    const acum = porFactura.get(factura) ?? { nombre, estado, telefonos: new Set<string>() };
-    acum.telefonos.add(telefono);
+    const acum =
+      porFactura.get(factura) ??
+      {
+        nombre,
+        estado,
+        telefonos: new Set<string>(),
+        estadosEnFilas: new Set<string>(),
+        items: [] as ItemPedido[],
+        extra: {} as Record<string, string>,
+      };
+    if (telefono) acum.telefonos.add(telefono);
+    acum.estadosEnFilas.add(estado);
+    acum.items.push({
+      descripcion: iDescripcion >= 0 ? (f[iDescripcion] ?? "").trim() || undefined : undefined,
+      cantidad: iCantidad >= 0 ? (f[iCantidad] ?? "").trim() || undefined : undefined,
+      estado,
+    });
+    // Primer valor no vacío de cada columna suelta. Se queda con el primero y
+    // no con el último para que una fila de detalle vacía no borre el dato.
+    for (let c = 0; c < enc.length; c++) {
+      if (columnasPropias.has(c)) continue;
+      const valor = (f[c] ?? "").trim();
+      if (valor && !acum.extra[enc[c]]) acum.extra[enc[c]] = valor;
+    }
     porFactura.set(factura, acum);
 
-    if (!nombresPorTelefono.has(telefono)) nombresPorTelefono.set(telefono, new Set());
-    nombresPorTelefono.get(telefono)!.add(nombre.toUpperCase());
+    if (telefono) {
+      if (!nombresPorTelefono.has(telefono)) nombresPorTelefono.set(telefono, new Set());
+      nombresPorTelefono.get(telefono)!.add(nombre.toUpperCase());
+    }
   }
 
   // Los números internos se repiten a propósito entre facturas de prueba: no
@@ -248,12 +345,20 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
     if (nombres.size > 1 && !esTelefonoInterno(tel)) telefonosAmbiguos.add(tel);
   }
 
-  const pedidos = [...porFactura.entries()].map(([factura, a]) => ({
+  const pedidos: PedidoActual[] = [...porFactura.entries()].map(([factura, a]) => ({
     factura,
     nombre: a.nombre,
     estado: a.estado,
     telefonos: [...a.telefonos],
+    items: a.items,
+    extra: a.extra,
+    estadosMixtos: a.estadosEnFilas.size > 1,
   }));
+
+  const facturasConEstadosMixtos: Record<string, string[]> = {};
+  for (const [factura, a] of porFactura) {
+    if (a.estadosEnFilas.size > 1) facturasConEstadosMixtos[factura] = [...a.estadosEnFilas];
+  }
 
   const motivo = pedidos.length
     ? undefined
@@ -263,30 +368,99 @@ export function leerPedidos(filas: string[][]): LecturaDespachos {
         `${sinFactura} sin factura legible, ${sinTelefono} sin TELEFONO DEL CLIENTE, ${sinEstado} sin ESTADO. ` +
         "Las dos últimas columnas las llena logística a mano: si están vacías, el aviso no puede salir.";
 
-  return { pedidos, telefonosAmbiguos, motivo };
+  return { pedidos, telefonosAmbiguos, encabezado: enc, estadosVistos, facturasConEstadosMixtos, motivo };
 }
 
 /**
  * Revisa la hoja y manda las notificaciones de los pedidos que cambiaron de
  * estado desde el último chequeo. Nunca lanza.
  */
+/**
+ * Manda un aviso directo por Meta, con la guarda de idempotencia puesta.
+ *
+ * Es el camino de siempre y también el respaldo de la cola. La reserva se toma
+ * ANTES de llamar a Meta: si la clave ya estaba tomada, el aviso salió antes y
+ * no se repite. Eso también cubre el caso feo de encolar — si el POST llegó y
+ * solo se perdió la respuesta, el consumidor va a encontrar la clave tomada y
+ * no va a mandar de nuevo.
+ */
+async function mandarDirecto(a: AvisoParaEncolar): Promise<"enviado" | "fallido" | "sin_cambios"> {
+  const template = templateDeEstado(a.estado || "");
+  if (!template) return "sin_cambios";
+  if (!(await reservarAviso(a.claveIdem))) return "sin_cambios";
+  try {
+    const wamid = await sendTemplate(
+      telefonoInternacional(a.telefono),
+      template.nombre,
+      template.idioma,
+      a.parametros,
+    );
+    void confirmarAviso(a.claveIdem, wamid);
+    // El wamid es lo que después permite cruzar este envío con el acuse de
+    // entrega que manda Meta al webhook ("delivered" / "failed"): sin él,
+    // "enviado" solo quiere decir que Meta lo aceptó.
+    console.log(
+      `📦 Aviso "${a.estado}" aceptado por Meta (factura ${a.factura} -> ${a.telefono})${wamid ? ` id=${wamid}` : ""}`,
+    );
+    if (a.factura && a.estado) await guardarEstadoPedido(a.factura, a.telefono, a.estado);
+    return "enviado";
+  } catch (err) {
+    // Meta rechazó el envío: se libera la reserva para poder reintentar. Solo
+    // acá. Si Meta aceptó y después no entregó, la reserva se queda: el mensaje
+    // salió y reenviarlo se cobra igual.
+    await liberarAviso(a.claveIdem);
+    console.error(`📦 No se pudo enviar el aviso (factura ${a.factura} -> ${a.telefono}):`, err);
+    return "fallido";
+  }
+}
+
 export async function chequearNotificacionesPedidos(): Promise<void> {
-  if (!isWhatsAppConfigured()) {
-    console.warn("📦 Avisos de pedido en pausa: faltan credenciales de WhatsApp.");
-    return;
-  }
-
-  // Protección 1: sin persistencia no hay forma de saber qué ya se avisó.
-  if (!dbHabilitada()) {
-    console.warn("📦 Avisos de pedido en pausa: falta DATABASE_URL (sin ella se reenviarían en cada chequeo).");
-    return;
-  }
-
   try {
     console.log("📦 Chequeando cambios de estado de pedidos...");
     const filas = await descargarDespachos();
     if (!filas) return;
-    const { pedidos, telefonosAmbiguos: ambiguos, motivo } = leerPedidos(filas);
+    const {
+      pedidos,
+      telefonosAmbiguos: ambiguos,
+      encabezado,
+      estadosVistos,
+      facturasConEstadosMixtos,
+      motivo,
+    } = leerPedidos(filas);
+
+    // Se loguea una vez por ciclo porque son las dos preguntas que no se pueden
+    // contestar sin abrir el Sheet, y el Sheet no es nuestro: qué columnas trae
+    // de verdad, y qué estados existen además de los dos que avisamos.
+    if (encabezado.length) console.log(`📦 [hoja] columnas: ${encabezado.join(" | ")}`);
+    const estados = Object.entries(estadosVistos).sort((a, b) => b[1] - a[1]);
+    if (estados.length) {
+      console.log(`📦 [hoja] estados: ${estados.map(([e, n]) => `${e} (${n})`).join(", ")}`);
+    }
+    // La foto va ANTES de las guardas de los avisos y no depende de ellas: el
+    // panel de logística tiene que reflejar la hoja aunque hoy no haya ninguna
+    // transición, y aunque los avisos estén pausados. Leer la hoja no cuesta
+    // nada y no le manda nada a ningún cliente; quedarse sin panel porque
+    // Postgres no responde sería apagar dos cosas por el precio de una.
+    await enviarFotoPedidos(pedidos);
+
+    if (!isWhatsAppConfigured()) {
+      console.warn("📦 Avisos de pedido en pausa: faltan credenciales de WhatsApp.");
+      return;
+    }
+    // Protección 1: sin persistencia no hay forma de saber qué ya se avisó.
+    if (!dbHabilitada()) {
+      console.warn("📦 Avisos de pedido en pausa: falta DATABASE_URL (sin ella se reenviarían en cada chequeo).");
+      return;
+    }
+
+    const mixtas = Object.entries(facturasConEstadosMixtos);
+    if (mixtas.length) {
+      console.warn(
+        `📦 ${mixtas.length} factura(s) tienen filas con ESTADOS distintos y se avisa con el de la primera: ` +
+          `${mixtas.slice(0, 10).map(([f, e]) => `${f} [${e.join(" + ")}]`).join(", ")}. ` +
+          "Si logística despacha por partes, esos pedidos no reciben el segundo aviso.",
+      );
+    }
     if (!pedidos.length) {
       const detalle = motivo ?? "el encabezado está bien pero no hay filas de pedidos debajo.";
       console.warn(`📦 La hoja se leyó (${filas.length} filas) pero no se reconoció ningún pedido: ${detalle}`);
@@ -336,9 +510,15 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
     }
 
     let enviados = 0;
+    let encolados = 0;
     let sinCambios = 0;
     let omitidos = 0;
     let fallidos = 0;
+
+    // Si la cola está habilitada, los avisos se juntan acá y se encolan al
+    // final del ciclo. Si no, queda en null y cada uno se manda en el momento,
+    // que es como funcionaba antes de que existiera la cola.
+    const porEncolar: AvisoParaEncolar[] | null = colaAvisosHabilitada() ? [] : null;
 
     for (const pedido of pedidos) {
       const template = templateDeEstado(pedido.estado);
@@ -365,47 +545,72 @@ export async function chequearNotificacionesPedidos(): Promise<void> {
           continue;
         }
 
-        // Guarda de idempotencia: se reserva ANTES de llamar a Meta. Si la
-        // clave ya estaba tomada, el aviso salió antes y no se repite aunque
-        // este ciclo crea que hace falta.
         const claveIdem = `${pedido.factura}:${tel}:${pedido.estado}`;
-        if (!(await reservarAviso(claveIdem))) {
-          sinCambios++;
+        const parametros = [pedido.nombre || "Cliente", pedido.factura];
+
+        // La detección del cambio de estado vive acá, así que el PRODUCTOR de
+        // la cola del CRM somos nosotros: el aviso se encola y lo manda el
+        // consumidor. No es una vuelta al pescuezo por gusto — es lo que hace
+        // que cada envío quede en la ficha del cliente en la plataforma.
+        // Mandando directo, el mensaje sale y en el CRM no queda rastro.
+        //
+        // Se junta todo el ciclo y se encola de una: el endpoint admite 200 por
+        // llamada, así que una tanda de transiciones entra en un solo POST.
+        if (porEncolar) {
+          porEncolar.push({
+            claveIdem,
+            telefono: tel,
+            plantilla: template.nombre,
+            parametros,
+            factura: pedido.factura,
+            estado: pedido.estado,
+          });
           continue;
         }
 
-        try {
-          const wamid = await sendTemplate(telefonoInternacional(tel), template.nombre, template.idioma, [
-            pedido.nombre || "Cliente",
-            pedido.factura,
-          ]);
-          void confirmarAviso(claveIdem, wamid);
-          // El wamid es lo que después permite cruzar este envío con el acuse
-          // de entrega que manda Meta al webhook ("delivered" / "failed"): sin
-          // él, "enviado" solo quiere decir que Meta lo aceptó.
-          console.log(
-            `📦 Aviso "${pedido.estado}" aceptado por Meta (factura ${pedido.factura} -> ${tel})` +
-              `${wamid ? ` id=${wamid}` : ""}`,
-          );
-          enviados++;
-        } catch (err) {
-          // Meta rechazó el envío: se libera la reserva para poder reintentar.
-          // Solo acá. Si Meta aceptó y después no entregó, la reserva se queda:
-          // el mensaje salió y reenviarlo se cobra igual.
-          await liberarAviso(claveIdem);
-          console.error(`📦 No se pudo enviar el aviso (factura ${pedido.factura} -> ${tel}):`, err);
-          fallidos++;
+        const r = await mandarDirecto({
+          claveIdem,
+          telefono: tel,
+          plantilla: template.nombre,
+          parametros,
+          factura: pedido.factura,
+          estado: pedido.estado,
+        });
+        if (r === "enviado") enviados++;
+        else if (r === "fallido") fallidos++;
+        else sinCambios++;
+      }
+    }
+
+    // Se encola TODO el ciclo de una sola vez.
+    if (porEncolar?.length) {
+      const res = await encolarAvisos(porEncolar);
+      for (const a of porEncolar) {
+        if (res?.aceptados.has(a.claveIdem)) {
+          await guardarEstadoPedido(a.factura as string, a.telefono, a.estado as string);
+          encolados++;
           continue;
         }
-        await guardarEstadoPedido(pedido.factura, tel, pedido.estado);
+        // Dos motivos para caer acá, y los dos terminan igual: el CRM no
+        // recibió nada (res === null), o lo recibió y rechazó ESE aviso por un
+        // campo faltante — que contesta 200, así que sin mirar la lista de
+        // rechazados el aviso desaparecería sin un solo error en el log.
+        // Se manda directo: que el envío no quede en la ficha es un problema;
+        // que el cliente no se entere de que su pedido está listo es EL problema.
+        const motivo = res ? `el CRM lo rechazó (falta ${res.rechazados.get(a.claveIdem)})` : "el CRM no respondió";
+        console.warn(`📦 Aviso ${a.claveIdem}: ${motivo}. Lo mando directo.`);
+        const r = await mandarDirecto(a);
+        if (r === "enviado") enviados++;
+        else if (r === "fallido") fallidos++;
+        else sinCambios++;
       }
     }
 
     // Cierre SIEMPRE presente: sin esto, un chequeo correcto en el que no hubo
     // nada que avisar se ve igual que uno que se colgó a mitad de camino.
     console.log(
-      `📦 Chequeo terminado: ${enviados} aviso(s) enviado(s), ${sinCambios} sin cambios, ` +
-        `${omitidos} omitido(s), ${fallidos} con error.`,
+      `📦 Chequeo terminado: ${encolados} encolado(s) en el CRM, ${enviados} enviado(s) directo, ` +
+        `${sinCambios} sin cambios, ${omitidos} omitido(s), ${fallidos} con error.`,
     );
   } catch (err) {
     console.error("📦 No se pudo chequear las notificaciones de pedidos:", err);

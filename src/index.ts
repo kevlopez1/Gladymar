@@ -18,13 +18,13 @@ import { sendText, sendDocument, sendInteractiveList, sendTemplate, downloadMedi
 import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
-import { CrmIngest, stageDeTipo } from "./integrations/crm.js";
+import { CrmIngest, stageDeTipo, tipoSolicitudCrm } from "./integrations/crm.js";
 import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, adminNombrePorCiudad, puedeCotizarPDF, ADMIN_TELEFONO, adminRoster } from "./admin/roles.js";
 import { handleAdminCommand, reportes } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
 import { ciudadesConSucursal } from "./knowledge/sucursales.js";
 import { chequearNotificacionesPedidos } from "./integrations/pedidoEstados.js";
-import { procesarColaAvisos } from "./integrations/colaAvisos.js";
+import { procesarColaAvisos, anotarFalloTardio } from "./integrations/colaAvisos.js";
 import { parseCSV } from "./util/csv.js";
 import { insertarConversacion, obtenerConversaciones } from "./db/index.js";
 import { pideDimensionViva } from "./knowledge/dimensionViva.js";
@@ -341,6 +341,7 @@ async function ejecutarBackfill(): Promise<void> {
         message,
         response,
         stage: adminFila ? undefined : (iTipo >= 0 ? stageDeTipo((f[iTipo] || "").trim()) : undefined),
+        tipo_solicitud: adminFila ? undefined : (iTipo >= 0 ? tipoSolicitudCrm((f[iTipo] || "").trim()) : undefined),
         interest: adminFila ? undefined : detalle,
         is_admin: Boolean(adminFila),
         role: adminFila?.role,
@@ -487,6 +488,10 @@ app.post("/webhook", async (req, res) => {
           `📬 NO ENTREGADO a ${st.destinatario} (id=${st.messageId}): ${st.error ?? "sin detalle de Meta"}`,
         );
         void reintentarAvisoPorPlantilla(st.messageId, st.error);
+        // Si ese mensaje salió por la cola del CRM, su fila ya se cerró como
+        // entregada cuando Meta lo aceptó. Le mandamos el motivo para que en la
+        // plataforma no quede como un aviso que llegó bien.
+        void anotarFalloTardio(st.messageId, st.error);
       } else if (st.estado === "delivered" || st.estado === "read") {
         console.log(`📬 ${st.estado} -> ${st.destinatario} (id=${st.messageId})`);
       }
@@ -789,6 +794,7 @@ async function handleIncoming(msg: {
   messageId: string;
   name?: string;
   esAudio?: boolean;
+  imageId?: string;
 }): Promise<void> {
   console.log(`📩 ${msg.from}${msg.name ? ` (${msg.name})` : ""}: ${msg.esAudio ? "(nota de voz)" : msg.text}`);
 
@@ -858,7 +864,10 @@ async function handleIncoming(msg: {
     // Panel de administrador normal.
     void markAsRead(msg.messageId);
     try {
-      await enviarPanel(msg.from, await handleAdminCommand(`wa:${msg.from}`, admin, msg.text));
+      await enviarPanel(
+        msg.from,
+        await handleAdminCommand(`wa:${msg.from}`, admin, msg.text, { imageId: msg.imageId }),
+      );
     } catch (err) {
       console.error(`Error en panel admin para ${msg.from}:`, err);
     }
@@ -1101,6 +1110,7 @@ async function procesarTurnoCliente(
         city: adminRemitente?.region || ciudadLead,
         segment: adminRemitente ? "Administrador" : undefined,
         stage: adminRemitente ? undefined : stageDeTipo(reply.solicitud?.tipo),
+        tipo_solicitud: adminRemitente ? undefined : tipoSolicitudCrm(reply.solicitud?.tipo),
         interest: adminRemitente ? undefined : reply.solicitud?.detalle,
         asesor: adminRemitente ? undefined : adminNombrePorCiudad(ciudadLead),
         // El departamento viaja aunque NO haya asesor (Beni, Pando): así el CRM
