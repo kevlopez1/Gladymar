@@ -76,6 +76,33 @@ function nuevaCorrida(): string {
 }
 
 /**
+ * Mira si el barrido de ausentes tiene una proporción creíble.
+ *
+ * `ausentes` suelto no se puede leer. Contra `en_curso` sí: 12 ausentes y 340
+ * en curso es una foto sana; 260 ausentes y 80 en curso es una tanda que no
+ * llegó, porque logística no termina tres cuartos de la hoja en quince minutos.
+ *
+ * Marcar ausente es reversible, así que esto no frena nada: solo deja dicho que
+ * hay que mirar. Del otro lado tampoco frena, a propósito. Pero el que puede
+ * saber si faltó una tanda es este lado, que es el que sabe cuántas mandó.
+ */
+const PROPORCION_SOSPECHOSA = 0.3;
+
+function revisarBarrido(json: Record<string, unknown>, corrida: string): void {
+  const ausentes = Number(json.ausentes);
+  const enCurso = Number(json.en_curso);
+  if (!Number.isFinite(ausentes) || !Number.isFinite(enCurso)) return;
+  const total = ausentes + enCurso;
+  if (total === 0 || ausentes === 0) return;
+  if (ausentes / total < PROPORCION_SOSPECHOSA) return;
+  console.error(
+    `📦 El barrido de la foto ${corrida} marcó ${ausentes} ausentes contra ${enCurso} en curso ` +
+      `(${Math.round((ausentes / total) * 100)}%). Logística no termina esa proporción de la hoja en un ciclo: ` +
+      "lo más probable es que una tanda no haya llegado. Es reversible, vuelven solas en el próximo chequeo.",
+  );
+}
+
+/**
  * Manda la foto completa de la hoja al CRM. Nunca lanza.
  *
  * Un fallo acá NO puede frenar los avisos: que el panel de logística quede
@@ -130,8 +157,10 @@ export async function enviarFotoPedidos(pedidos: PedidoActual[]): Promise<void> 
       console.log(
         `📦 Foto de pedidos enviada al CRM: ${json.recibidos ?? tanda.length} recibidos, ` +
           `${json.nuevos ?? "?"} nuevos, ${json.sin_telefono ?? "?"} sin teléfono en la hoja, ` +
-          `${json.sin_ficha ?? "?"} sin ficha, ${json.ausentes ?? "?"} ausentes.`,
+          `${json.sin_ficha ?? "?"} sin ficha, ${json.ausentes ?? "?"} ausentes, ` +
+          `${json.en_curso ?? "?"} en curso.`,
       );
+      if (cerrarFoto) revisarBarrido(json, corrida);
       // Mismo criterio que con la cola: un lote puede volver 200 con rechazos
       // adentro. Sin mirarlos, esos pedidos no aparecen en el panel y no hay
       // ningún error que explique por qué.
