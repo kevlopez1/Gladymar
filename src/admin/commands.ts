@@ -23,7 +23,9 @@ import { obtenerStatsHoy } from "../integrations/sheetsStats.js";
 import {
   leerClientesDeTexto,
   leerClientesDeFoto,
+  leerClientesDePlanilla,
   resumenParaConfirmar,
+  resumenPlanilla,
   guardarClientes,
   type ClienteNuevo,
   type LecturaClientes,
@@ -43,6 +45,7 @@ const pendiente = new Map<string, { accion: string; clientes?: ClienteNuevo[] }>
 const AGREGAR = "➕ Agregar cliente";
 const ALTA_ESCRIBIR = "✍️ Escribiendo los datos";
 const ALTA_FOTO = "📷 Con una foto";
+const ALTA_EXCEL = "📄 Con un Excel";
 const GUARDAR = "✅ Guardar";
 const CANCELAR = "✖️ Cancelar";
 
@@ -89,7 +92,7 @@ function menu(admin: Admin): AdminReply {
 
 const MENU_ALTA: AdminReply = {
   text: "➕ *Agregar cliente*\n\nPodés cargar *uno o varios* de una vez.\n¿Cómo lo querés hacer?",
-  options: [ALTA_ESCRIBIR, ALTA_FOTO, "Volver al menú"],
+  options: [ALTA_ESCRIBIR, ALTA_FOTO, ALTA_EXCEL, "Volver al menú"],
   optionsButton: "Elegir",
   optionsTitle: "Agregar cliente",
 };
@@ -212,8 +215,17 @@ export async function reportes(): Promise<string> {
 }
 
 /** Arranca el paso de "esperando los datos" o "esperando la foto". */
-function pedirDatos(sessionId: string, modo: "texto" | "foto"): AdminReply {
-  pendiente.set(sessionId, { accion: modo === "texto" ? "alta_texto" : "alta_foto" });
+function pedirDatos(sessionId: string, modo: "texto" | "foto" | "excel"): AdminReply {
+  pendiente.set(sessionId, { accion: `alta_${modo}` });
+  if (modo === "excel") {
+    return {
+      text:
+        "📄 Mandame el archivo como *documento* (Excel .xlsx o CSV), no como foto.\n\n" +
+        "Necesito una columna de *NOMBRE* o *CLIENTE*. Si además tiene *TELÉFONO*, *CIUDAD* o *INTERÉS*, las uso.\n" +
+        "No importa el orden de las columnas ni que haya otras de más.\n\n" +
+        "Te muestro el resumen antes de guardar nada. Escribí *cancelar* para salir.",
+    };
+  }
   if (modo === "texto") {
     return {
       text:
@@ -242,7 +254,7 @@ export async function handleAdminCommand(
   sessionId: string,
   admin: Admin,
   raw: string,
-  extra?: { imageId?: string },
+  extra?: { imageId?: string; documentId?: string; documentName?: string },
 ): Promise<AdminReply> {
   const text = norm(raw);
   const region = admin.role === "gerente" ? undefined : admin.region;
@@ -254,6 +266,29 @@ export async function handleAdminCommand(
     if (cancelado) {
       pendiente.delete(sessionId);
       return { ...menu(admin), text: "Listo, no guardé nada.\n\n" + menu(admin).text };
+    }
+
+    if (pend.accion === "alta_excel") {
+      pendiente.delete(sessionId);
+      if (!extra?.documentId) {
+        pendiente.set(sessionId, { accion: "alta_excel" });
+        return {
+          text:
+            "Necesito el *archivo* para leerlo. Mandámelo como documento (Excel o CSV), o escribí *cancelar*.\n\n" +
+            "_Si lo mandás como foto no lo puedo leer celda por celda._",
+        };
+      }
+      const leido = await leerClientesDePlanilla(extra.documentId, extra.documentName);
+      if (leido.error) {
+        pendiente.set(sessionId, { accion: "alta_excel" });
+        return { text: `⚠️ ${leido.error}` };
+      }
+      if (!leido.clientes.length) {
+        pendiente.set(sessionId, { accion: "alta_excel" });
+        return { text: "No encontré ninguna fila con nombre en esa planilla. ¿Revisás que tenga datos debajo del encabezado?" };
+      }
+      pendiente.set(sessionId, { accion: "alta_confirmar", clientes: leido.clientes });
+      return { text: resumenPlanilla(leido), ...CONFIRMAR };
     }
 
     if (pend.accion === "alta_texto" || pend.accion === "alta_foto") {
@@ -314,6 +349,17 @@ export async function handleAdminCommand(
   // cargar. Es lo único que un admin manda por foto, y pedirle que primero
   // entre al menú sería hacerlo repetir el envío. Vale con o sin epígrafe: el
   // epígrafe de una foto de contacto es una nota, no un comando.
+  // Una planilla suelta: se asume que es una lista de clientes, igual que la foto.
+  if (extra?.documentId && /\.(xlsx|xls|csv)$/i.test(extra.documentName || "")) {
+    const leido = await leerClientesDePlanilla(extra.documentId, extra.documentName);
+    if (leido.error) return { text: `⚠️ ${leido.error}`, ...VOLVER };
+    if (leido.clientes.length) {
+      pendiente.set(sessionId, { accion: "alta_confirmar", clientes: leido.clientes });
+      return { text: resumenPlanilla(leido), ...CONFIRMAR };
+    }
+    return { text: "No encontré ninguna fila con nombre en esa planilla.", ...VOLVER };
+  }
+
   if (extra?.imageId) {
     const leido = await leerClientesDeFoto(extra.imageId);
     if (leido.error) return { text: `⚠️ ${leido.error}`, ...VOLVER };
@@ -336,6 +382,9 @@ export async function handleAdminCommand(
   }
   if (text === norm(ALTA_FOTO) || /^(con una foto|foto|imagen|captura)/.test(text)) {
     return pedirDatos(sessionId, "foto");
+  }
+  if (text === norm(ALTA_EXCEL) || /^(con un excel|excel|planilla|archivo|csv|hoja)/.test(text)) {
+    return pedirDatos(sessionId, "excel");
   }
   if (/(agregar|a[nñ]adir|cargar|nuevo|alta).*(cliente|contacto)|^agregar cliente/.test(text)) {
     return MENU_ALTA;
