@@ -53,7 +53,16 @@ export interface AdminReply {
 // cliente), por sesión. `clientes` solo lo usa la confirmación del alta.
 const pendiente = new Map<
   string,
-  { accion: string; clientes?: ClienteNuevo[]; transcripcion?: string; departamento?: string }
+  {
+    accion: string;
+    clientes?: ClienteNuevo[];
+    transcripcion?: string;
+    departamento?: string;
+    /** Reparto: cuántos de la lista ya tienen asesor asignado. */
+    indice?: number;
+    /** Reparto: a quién le toca la tanda que se está midiendo. */
+    asesorTanda?: string;
+  }
 >();
 
 // Prefijos de los ids de la lista. El título de la fila es el nombre a secas,
@@ -63,6 +72,8 @@ const P_SUCURSAL = "SUCURSAL::";
 const P_DEPTO = "DEPTO::";
 const AUTO = `${P_ASESOR}__sugerido__`;
 const OTRO_DEPTO = `${P_DEPTO}__elegir__`;
+const REPARTIR = `${P_ASESOR}__repartir__`;
+const P_CUANTOS = "CUANTOS::";
 
 const AGREGAR = "➕ Agregar cliente";
 const LEADS = "🧾 Leads del día";
@@ -322,8 +333,15 @@ function pasarAElegirAsesor(
  * tiene doce asesores y la lista admite diez filas, así que es el caso que hay
  * que probar y el que nunca se ve hasta que Meta rechaza el mensaje.
  */
-export function listaDeAsesores(admin: Admin, depto: string | undefined, cuerpo: string, cuantos: number): AdminReply {
+export function listaDeAsesores(
+  admin: Admin,
+  depto: string | undefined,
+  cuerpo: string,
+  cuantos: number,
+  opciones: { repartir?: boolean } = { repartir: true },
+): AdminReply {
   const secciones: SeccionLista[] = [];
+  const ofreceRepartir = Boolean(opciones.repartir) && cuantos > 1;
   const sugerido = adminNombrePorCiudad(cuerpoCiudad(depto));
 
   if (sugerido) {
@@ -339,6 +357,19 @@ export function listaDeAsesores(admin: Admin, depto: string | undefined, cuerpo:
     secciones.push({
       titulo: "Yo",
       filas: [{ id: `${P_ASESOR}${yo}`, titulo: `👤 ${yo}`, descripcion: admin.sucursal ?? "Me lo asigno a mí" }],
+    });
+  }
+
+  if (ofreceRepartir) {
+    secciones.push({
+      titulo: "Varios asesores",
+      filas: [
+        {
+          id: REPARTIR,
+          titulo: "✂️ Repartir entre varios",
+          descripcion: `Dividir los ${cuantos} entre distintos asesores`,
+        },
+      ],
     });
   }
 
@@ -383,6 +414,70 @@ export function listaDeAsesores(admin: Admin, depto: string | undefined, cuerpo:
     secciones,
     optionsButton: "Asignar a",
     optionsTitle: "¿A quién se lo asigno?",
+  };
+}
+
+/**
+ * Cómo quedó repartida la lista, por asesor y en el orden en que se asignó.
+ *
+ * Treinta filas no se revisan en un teléfono; los totales por asesor sí, y son
+ * lo que de verdad hay que mirar antes de guardar: si alguien se llevó
+ * veinticinco y otro cinco, eso se ve acá y no contando renglones.
+ */
+function resumenReparto(clientes: ClienteNuevo[]): string {
+  const porAsesor = new Map<string, number>();
+  for (const c of clientes) {
+    const quien = c.asesor || adminNombrePorCiudad(c.ciudad) || "Sin asesor";
+    porAsesor.set(quien, (porAsesor.get(quien) ?? 0) + 1);
+  }
+  return [...porAsesor].map(([quien, n]) => `   • *${quien}*: ${n} cliente${n === 1 ? "" : "s"}`).join("\n");
+}
+
+/**
+ * Le pone `asesor` a una tanda de la lista, empezando en `desde`.
+ *
+ * Nunca asigna más de los que quedan: pedir 10 cuando quedan 3 asigna 3 y
+ * termina. Exportada porque es la aritmética del reparto, que es justo lo que
+ * no se puede verificar mirando la pantalla — un índice corrido deja clientes
+ * con el asesor equivocado sin que nada falle.
+ */
+export function repartirTanda(
+  clientes: ClienteNuevo[],
+  desde: number,
+  cuantos: number,
+  asesor: string,
+): { clientes: ClienteNuevo[]; hasta: number } {
+  const n = Math.max(0, Math.min(cuantos, clientes.length - desde));
+  const hasta = desde + n;
+  return {
+    clientes: clientes.map((c, i) => (i >= desde && i < hasta ? { ...c, asesor } : c)),
+    hasta,
+  };
+}
+
+/** Pregunta cuántos de los que quedan van para el asesor ya elegido. */
+function preguntarCuantos(sessionId: string, pend: NonNullable<ReturnType<typeof pendiente.get>>): AdminReply {
+  const total = pend.clientes?.length ?? 0;
+  const hechos = pend.indice ?? 0;
+  const quedan = total - hechos;
+  // Tandas redondas, más "todos los que quedan". Nunca se ofrece un número
+  // mayor al que queda: elegir 10 cuando quedan 3 es una trampa, no una opción.
+  const tandas = [5, 10, 15, 20, 25].filter((n) => n < quedan);
+  const filas = [
+    ...tandas.map((n) => ({ id: `${P_CUANTOS}${n}`, titulo: `${n} clientes` })),
+    {
+      id: `${P_CUANTOS}${quedan}`,
+      titulo: quedan === 1 ? "El que queda" : `Todos los que quedan (${quedan})`,
+    },
+  ];
+  return {
+    text:
+      `✂️ *Reparto*\n\nQuedan *${quedan}* sin asignar de ${total}.\n\n` +
+      `¿Cuántos le doy a *${pend.asesorTanda}*?\n_También podés escribir el número._`,
+    options: filas.map((f) => f.id),
+    secciones: [{ titulo: "Cuántos", filas }],
+    optionsButton: "Elegir",
+    optionsTitle: "Cuántos clientes",
   };
 }
 
@@ -563,6 +658,18 @@ export async function handleAdminCommand(
         };
       }
 
+      // Repartir la lista entre varios: arranca el ciclo por tandas.
+      if (crudo === REPARTIR) {
+        pendiente.set(sessionId, { ...pend, accion: "alta_reparto_quien", indice: 0 });
+        return listaDeAsesores(
+          admin,
+          pend.departamento,
+          `✂️ *Reparto*\n\nQuedan *${clientes.length}* sin asignar.\n\n¿A quién le doy los primeros?`,
+          clientes.length,
+          { repartir: false },
+        );
+      }
+
       // Elección hecha (o "dejar el sugerido").
       if (crudo === AUTO || crudo.startsWith(P_ASESOR)) {
         const elegido = crudo === AUTO ? undefined : crudo.slice(P_ASESOR.length);
@@ -588,6 +695,121 @@ export async function handleAdminCommand(
       const depto = crudo.slice(P_DEPTO.length);
       pendiente.set(sessionId, { ...pend, accion: "alta_asesor", departamento: depto });
       return listaDeAsesores(admin, depto, `*${depto}*\n\n¿A quién se lo asigno?`, pend.clientes?.length ?? 1);
+    }
+
+    // ── Reparto por tandas ────────────────────────────────────────────────
+    // Se asignan en ORDEN: los primeros N al primero elegido, los siguientes al
+    // que sigue. Repartir por orden es lo que hace alguien con una lista en la
+    // mano, y además deja ver de una cuántos le tocaron a cada uno.
+    if (pend.accion === "alta_reparto_quien") {
+      const clientes = pend.clientes ?? [];
+      const crudo = raw.trim();
+      if (crudo === OTRO_DEPTO) {
+        pendiente.set(sessionId, { ...pend, accion: "alta_reparto_depto" });
+        return {
+          text: "¿De qué departamento es el asesor?",
+          options: departamentosConAsesores().map((d) => `${P_DEPTO}${d}`),
+          secciones: [
+            { titulo: "Departamentos", filas: departamentosConAsesores().map((d) => ({ id: `${P_DEPTO}${d}`, titulo: d })) },
+          ],
+          optionsButton: "Elegir",
+          optionsTitle: "Departamento",
+        };
+      }
+      if (crudo.startsWith(P_SUCURSAL)) {
+        const suc = crudo.slice(P_SUCURSAL.length);
+        const deLaSucursal = asesoresDeDepartamento(pend.departamento).filter(
+          (a) => (a.sucursalCanonica || a.sucursal) === suc,
+        );
+        pendiente.set(sessionId, pend);
+        return {
+          text: `*${suc}*\n\n¿A quién le doy la próxima tanda?`,
+          options: deLaSucursal.map((a) => `${P_ASESOR}${a.nombre}`),
+          secciones: [
+            {
+              titulo: suc,
+              filas: deLaSucursal.map((a) => ({
+                id: `${P_ASESOR}${a.nombre}`,
+                titulo: a.nombre,
+                descripcion: a.esSupervisor ? "Supervisor" : undefined,
+              })),
+            },
+          ],
+          optionsButton: "Asignar a",
+          optionsTitle: suc,
+        };
+      }
+      if (crudo === AUTO || crudo.startsWith(P_ASESOR)) {
+        const quien =
+          crudo === AUTO ? adminNombrePorCiudad(pend.departamento) : crudo.slice(P_ASESOR.length);
+        if (!quien) {
+          pendiente.set(sessionId, pend);
+          return { text: "Esa zona no tiene asesor asignado. Elegí uno de la lista." };
+        }
+        const conQuien = { ...pend, accion: "alta_reparto_cuantos", asesorTanda: quien };
+        pendiente.set(sessionId, conQuien);
+        return preguntarCuantos(sessionId, conQuien);
+      }
+      pendiente.set(sessionId, pend);
+      return listaDeAsesores(admin, pend.departamento, "Elegí un asesor de la lista.", clientes.length, {
+        repartir: false,
+      });
+    }
+
+    if (pend.accion === "alta_reparto_depto") {
+      const clientes = pend.clientes ?? [];
+      const crudo = raw.trim();
+      if (!crudo.startsWith(P_DEPTO)) {
+        pendiente.set(sessionId, pend);
+        return { text: "Elegí un departamento de la lista, o escribí *cancelar*." };
+      }
+      const depto = crudo.slice(P_DEPTO.length);
+      pendiente.set(sessionId, { ...pend, accion: "alta_reparto_quien", departamento: depto });
+      return listaDeAsesores(admin, depto, `*${depto}*\n\n¿A quién le doy la próxima tanda?`, clientes.length, {
+        repartir: false,
+      });
+    }
+
+    if (pend.accion === "alta_reparto_cuantos") {
+      const clientes = pend.clientes ?? [];
+      const crudo = raw.trim();
+      const total = clientes.length;
+      const hechos = pend.indice ?? 0;
+      const quedan = total - hechos;
+      const pedido = crudo.startsWith(P_CUANTOS)
+        ? Number(crudo.slice(P_CUANTOS.length))
+        : /^\d+$/.test(crudo)
+          ? Number(crudo)
+          : NaN;
+      if (!Number.isFinite(pedido) || pedido < 1) {
+        pendiente.set(sessionId, pend);
+        return preguntarCuantos(sessionId, pend);
+      }
+      const { clientes: asignados, hasta: nuevoIndice } = repartirTanda(
+        clientes,
+        hechos,
+        pedido,
+        pend.asesorTanda ?? "",
+      );
+
+      if (nuevoIndice >= total) {
+        pendiente.set(sessionId, { accion: "alta_confirmar", clientes: asignados });
+        return {
+          text:
+            `✂️ *Reparto terminado* — ${total} cliente(s)\n\n${resumenReparto(asignados)}\n\n¿Los guardo?`,
+          ...CONFIRMAR,
+        };
+      }
+      const sigue = { ...pend, accion: "alta_reparto_quien", clientes: asignados, indice: nuevoIndice };
+      pendiente.set(sessionId, sigue);
+      return listaDeAsesores(
+        admin,
+        pend.departamento,
+        `✂️ *Reparto*\n\n${resumenReparto(asignados.slice(0, nuevoIndice))}\n\n` +
+          `Quedan *${total - nuevoIndice}* sin asignar.\n¿A quién le doy los siguientes?`,
+        total,
+        { repartir: false },
+      );
     }
 
     if (pend.accion === "alta_confirmar") {
