@@ -23,6 +23,13 @@
  *    blanca porque con `STATUS = PORTAFOLIO` el bot podría cotizar solo 445
  *    productos de 4.655, y quedarían afuera los 68 NUEVO, que son justamente
  *    los recién lanzados.
+ *
+ * 3. El formato 41X41 NO se carga (128 filas). Gladymar lo descontinuó
+ *    (Gerencia General, 17/09/2026) y el bot lo seguía ofreciendo porque el
+ *    STATUS de esas filas no dice nada: son SEGUNDA, GRANEL y hasta una
+ *    PORTAFOLIO. Se excluye por FORMATO, que es el dato que sí lo identifica.
+ *    Sacarlo acá y no en el buscador es a propósito: mientras siga en el JSON
+ *    hay alguna ruta (cotización, sugerencia, búsqueda) que lo va a mostrar.
  */
 import ExcelJS from "exceljs";
 import fs from "node:fs";
@@ -36,6 +43,34 @@ type RegionPrecio = (typeof REGIONES)[number];
 const HOJAS_EXCLUIDAS: Record<string, string> = {
   PINT: "612 pinturas CORAL, todas DESCONTINUADO: rezagados sin validez comercial.",
 };
+
+/**
+ * Formatos descontinuados. No se cotizan ni se sugieren.
+ *
+ * Se compara normalizado (sin espacios, mayúsculas, la "x" unificada) porque en
+ * el Excel el mismo formato aparece escrito de varias maneras.
+ */
+const FORMATOS_DESCONTINUADOS = new Set(["41X41"]);
+
+function formatoNormalizado(v: string): string {
+  return (v || "").toUpperCase().replace(/\s+/g, "").replace(/×/g, "X");
+}
+
+/**
+ * ¿Esta fila es de un formato descontinuado?
+ *
+ * Mira la columna FORMATO y TAMBIÉN la descripción: hay tres graneles
+ * ("PISO 41X41 GRANEL VALUE", "GRANEL CERAMICA 41X41 Y 31X41") cuya columna
+ * FORMATO dice "S/F". Filtrando solo por la columna esos tres sobreviven, que
+ * es exactamente el caso que se quiere evitar.
+ */
+function esFormatoDescontinuado(formato: string, descripcion: string): string | null {
+  const f = formatoNormalizado(formato);
+  if (FORMATOS_DESCONTINUADOS.has(f)) return f;
+  const d = formatoNormalizado(descripcion);
+  for (const desc of FORMATOS_DESCONTINUADOS) if (d.includes(desc)) return desc;
+  return null;
+}
 
 /**
  * Estados que NO se cotizan. Cotizar cualquiera de estos es prometer algo que
@@ -135,6 +170,16 @@ async function main(): Promise<void> {
         continue;
       }
 
+      const formato = col.FORMATO ? texto(fila.getCell(col.FORMATO).value) : "";
+      const descCol = col["DESCRIPCIÓN"] ?? col.DESCRIPCION;
+      const descripcion = texto(fila.getCell(descCol).value).replace(/\s+/g, " ").trim();
+      const descontinuado = esFormatoDescontinuado(formato, descripcion);
+      if (descontinuado) {
+        const clave = `FORMATO ${descontinuado}`;
+        descartes[clave] = (descartes[clave] ?? 0) + 1;
+        continue;
+      }
+
       const precios = {} as Record<RegionPrecio, number>;
       let completo = true;
       for (const reg of REGIONES) {
@@ -147,13 +192,12 @@ async function main(): Promise<void> {
         continue;
       }
 
-      const descCol = col["DESCRIPCIÓN"] ?? col.DESCRIPCION;
       productos.push({
         familia,
         cod: texto(fila.getCell(col.COD).value),
         marca,
-        descripcion: texto(fila.getCell(descCol).value).replace(/\s+/g, " ").trim(),
-        formato: col.FORMATO ? texto(fila.getCell(col.FORMATO).value) || undefined : undefined,
+        descripcion,
+        formato: formato || undefined,
         acabado: col.ACABADO ? texto(fila.getCell(col.ACABADO).value) || undefined : undefined,
         status,
         precios,

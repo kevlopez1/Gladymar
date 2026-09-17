@@ -600,7 +600,11 @@ async function avisarCotizacionAlAsesor(
     `👤 ${cot.cliente || nombreCliente || "Cliente"}`,
     `📱 ${from}  (wa.me/${from})`,
     "",
-    ...cot.items.map((i) => `• ${i.descripcion}: ${i.cantidad} ${i.unidad} × ${bs(i.precioUnit)} = ${bs(i.subtotal)}`),
+    ...cot.items.map(
+      (i) =>
+        `• ${i.descripcion}${i.origen ? " (" + i.origen + ")" : ""}: ` +
+        `${i.cantidad} ${i.unidad} × ${bs(i.precioUnit)} = ${bs(i.subtotal)}`,
+    ),
     `*TOTAL: ${bs(cot.total)}*`,
     "",
     cot.departamento ? `Precios de ${cot.departamento}.` : "Precios de lista nacional (no se pudo determinar la región).",

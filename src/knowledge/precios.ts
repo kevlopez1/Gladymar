@@ -35,7 +35,8 @@ function categoriaDe(texto: string, hint?: string): string {
 }
 
 const BASE_M2: Record<string, Record<string, number>> = {
-  GLADYMAR: { "41X41": 62, "60X60": 89, "80X80": 118, "90X90": 139, DEF: 95 },
+  // Sin 41X41: descontinuado (Gerencia, 17/09/2026). Cae al DEF si alguien lo pide.
+  GLADYMAR: { "60X60": 89, "80X80": 118, "90X90": 139, DEF: 95 },
   "PISOS IMPORTADOS": { "10X10": 245, "45X15": 210, "20X120": 179, "60X120": 199, "90X90": 189, "100X100": 229, "120X120": 259, DEF: 199 },
 };
 

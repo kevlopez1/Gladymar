@@ -3,6 +3,9 @@
  * Categorías: GLADYMAR (porcelanato/pisos nacionales), PISOS IMPORTADOS,
  * GRIFERIA, SANITARIOS, PERFILES, CEMENTO (adhesivos).
  */
+import { origenDeMarca } from "./listaPrecios.js";
+import { esFormatoDescontinuado } from "./descontinuados.js";
+
 export interface ProductoCatalogo {
   categoria: string;
   marca: string;
@@ -17,6 +20,15 @@ function norm(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
+/**
+ * Este archivo es un Excel viejo convertido a TypeScript: no se regenera con
+ * `npm run precios` y tiene 89 filas de 41X41 adentro. Filtrarlas en la
+ * búsqueda es la única forma de que no salgan sin reescribirlo entero a mano.
+ */
+function descontinuado(p: ProductoCatalogo): boolean {
+  return esFormatoDescontinuado(p.formato) || esFormatoDescontinuado(p.descripcion);
+}
+
 /** Busca productos del catálogo por palabras (categoría, marca, descripción, formato, acabado). */
 export function buscarCatalogo(query: string, max = 8): ProductoCatalogo[] {
   const tokens = norm(query).split(/\s+/).filter(Boolean);
@@ -24,6 +36,7 @@ export function buscarCatalogo(query: string, max = 8): ProductoCatalogo[] {
   const scored: { p: ProductoCatalogo; score: number }[] = [];
   const vistos = new Set<string>();
   for (const p of CATALOGO) {
+    if (descontinuado(p)) continue;
     const clave = p.descripcion + "|" + p.marca;
     if (vistos.has(clave)) continue;
     const hay = norm(`${p.categoria} ${p.marca} ${p.descripcion} ${p.formato} ${p.acabado}`);
@@ -35,8 +48,25 @@ export function buscarCatalogo(query: string, max = 8): ProductoCatalogo[] {
   return scored.slice(0, max).map((s) => s.p);
 }
 
+/**
+ * Nacional o importado de un producto del catálogo.
+ *
+ * Manda la lista de precios oficial, no la `categoria` de este archivo: la
+ * lista trae marcas importadas que acá no están (APARICI, DECORE) y es la que
+ * mantiene la empresa. La categoría queda como respaldo para lo que la lista no
+ * conozca. Si ninguna de las dos lo dice, se devuelve undefined y el producto
+ * se muestra SIN origen: el modelo no tiene que deducirlo.
+ */
+export function origenDeProductoCat(p: ProductoCatalogo): string | undefined {
+  const porMarca = origenDeMarca(p.marca);
+  if (porMarca) return porMarca;
+  if (p.categoria === "PISOS IMPORTADOS") return "Importado";
+  if (p.categoria === "GLADYMAR") return "Nacional";
+  return undefined;
+}
+
 /** Formatea un producto del catálogo para mostrarlo al cliente. */
 export function formatearProductoCat(p: ProductoCatalogo): string {
-  const meta = [p.marca, p.formato, p.acabado].filter(Boolean).join(" · ");
+  const meta = [p.marca, p.formato, p.acabado, origenDeProductoCat(p)].filter(Boolean).join(" · ");
   return meta ? `• *${p.descripcion}*\n   _${meta}_` : `• *${p.descripcion}*`;
 }

@@ -49,6 +49,24 @@ const COLUMNA_POR_DEPARTAMENTO: Record<string, string> = {
   "La Paz": "LPZ",
 };
 
+/**
+ * Origen según la familia (hoja) de la que salió el producto.
+ *
+ * Es el ÚNICO dato de la empresa que dice si algo es nacional o importado: el
+ * Excel separa las cerámicas en dos hojas, NAC e IMP. Antes esto no salía de
+ * acá para ningún lado, así que cuando el cliente preguntaba "¿es nacional?"
+ * el modelo lo deducía del nombre — y se equivocaba (reportado por Gerencia
+ * General el 17/09/2026: cotizó un importado como nacional).
+ *
+ * Las hojas que no son cerámica (sanitarios, grifería, cemento, perfiles) no
+ * traen la distinción: ahí se devuelve undefined y no se afirma nada, que es
+ * distinto de afirmar "nacional".
+ */
+const ORIGEN_POR_FAMILIA: Record<string, string> = {
+  NAC: "Nacional",
+  IMP: "Importado",
+};
+
 /** Unidad de medida según la familia (hoja) de la que salió el producto. */
 const UNIDAD_POR_FAMILIA: Record<string, string> = {
   NAC: "m²",
@@ -162,7 +180,65 @@ export function unidadDe(p: ProductoPrecio): string {
   return UNIDAD_POR_FAMILIA[p.familia] ?? "unidad";
 }
 
+/**
+ * "Nacional" | "Importado", o undefined si la lista no lo dice.
+ *
+ * undefined NO es "nacional". Quien lo muestre tiene que callarse el dato, no
+ * rellenarlo con el valor más probable.
+ */
+export function origenDe(p: ProductoPrecio): string | undefined {
+  return ORIGEN_POR_FAMILIA[p.familia];
+}
+
+/**
+ * Origen por MARCA, para los catálogos que no salen de la lista de precios.
+ *
+ * Se arma recorriendo la lista oficial: es la empresa la que decide qué marca
+ * es importada, no una lista escrita a mano acá. Una marca que apareciera en
+ * las dos hojas queda sin origen a propósito: ante la duda no se afirma.
+ */
+const ORIGEN_POR_MARCA: Map<string, string | undefined> = (() => {
+  const vistos = new Map<string, string | undefined>();
+  for (const p of DATOS.productos) {
+    const origen = ORIGEN_POR_FAMILIA[p.familia];
+    if (!origen) continue;
+    const marca = normalizar(p.marca);
+    if (!marca) continue;
+    if (vistos.has(marca) && vistos.get(marca) !== origen) vistos.set(marca, undefined);
+    else if (!vistos.has(marca)) vistos.set(marca, origen);
+  }
+  return vistos;
+})();
+
+export function origenDeMarca(marca: string): string | undefined {
+  return ORIGEN_POR_MARCA.get(normalizar(marca));
+}
+
 /** Departamento canónico a partir de la ciudad que dijo el cliente. */
 export function departamentoDeCiudad(ciudad?: string): string | undefined {
   return departamentoDeLugar(ciudad);
+}
+
+/**
+ * Marcadores de "acá no hay dato" que trae el Excel. Se muestran como lo que
+ * son —nada—, en vez de mandarle al cliente "APARICI · 0 · MATE".
+ */
+const SIN_DATO = new Set(["0", "-", "S/F", "S/A", "N/A", "SIN FORMATO"]);
+
+function util(v?: string): string | undefined {
+  const t = (v || "").trim();
+  return t && !SIN_DATO.has(t.toUpperCase()) ? t : undefined;
+}
+
+/**
+ * Formatea un producto de la lista para mostrárselo al cliente.
+ *
+ * Mismo formato que formatearProductoCat, para que las dos fuentes se puedan
+ * mezclar en una sola respuesta sin que se note la costura.
+ */
+export function formatearProductoLista(p: ProductoPrecio): string {
+  const meta = [util(p.marca), util(p.formato), util(p.acabado), origenDe(p)]
+    .filter(Boolean)
+    .join(" \u00b7 ");
+  return meta ? `\u2022 *${p.descripcion}*\n   _${meta}_` : `\u2022 *${p.descripcion}*`;
 }

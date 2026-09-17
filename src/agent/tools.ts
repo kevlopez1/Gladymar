@@ -8,6 +8,8 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { buscarCategorias, formatearCategoria } from "../knowledge/productos.js";
 import { buscarCatalogo, formatearProductoCat } from "../knowledge/catalogo.js";
+import { esFormatoDescontinuado } from "../knowledge/descontinuados.js";
+import { buscarVarios, formatearProductoLista } from "../knowledge/listaPrecios.js";
 import { buscarColecciones, formatearColeccion } from "../knowledge/dimensionViva.js";
 import {
   sucursalesPorCiudad,
@@ -246,13 +248,36 @@ export async function executeTool(
       // Con una consulta concreta, sugiere productos REALES del catálogo.
       if (consulta) {
         const productos = buscarCatalogo(consulta, 6);
+        // La lista de precios tiene 1.351 productos contra los 541 de
+        // catalogo.ts, que es un Excel viejo: trae marcas importadas enteras
+        // (APARICI, DECORE) que el catálogo no conoce. Se consulta como
+        // complemento para que preguntar por una de esas marcas no termine en
+        // "no lo encuentro" y el modelo improvisando.
+        const deLista = buscarVarios(consulta, 4).filter(
+          (p) => !productos.some((c) => c.descripcion.trim().toUpperCase() === p.descripcion.trim().toUpperCase()),
+        );
         // Colecciones 2026: aportan el concepto (para recomendar por estilo) y
         // los datos que el catálogo suelto no trae (tipo de uso, m² por caja).
         const colecciones = buscarColecciones(consulta, 2);
         const bloques: string[] = [];
+        // El cliente preguntó por un formato que ya no se fabrica. Decirlo acá
+        // y no dejar que el modelo lo deduzca: la lista y el catálogo ya no lo
+        // traen, así que sin este aviso la respuesta sería "no lo encuentro".
+        if (esFormatoDescontinuado(consulta)) {
+          bloques.push(
+            "AVISO PARA VOS (no lo copies literal): el formato 41x41 fue *descontinuado* por Gladymar. " +
+              "Decíselo al cliente con naturalidad y ofrecele los formatos vigentes que van abajo. " +
+              "Nunca lo sugieras vos.",
+          );
+        }
         if (productos.length) {
           bloques.push(
             "Algunas opciones de nuestro catálogo:\n\n" + productos.map(formatearProductoCat).join("\n"),
+          );
+        }
+        if (deLista.length) {
+          bloques.push(
+            "De la lista oficial vigente:\n\n" + deLista.map(formatearProductoLista).join("\n"),
           );
         }
         if (colecciones.length) {
@@ -353,8 +378,15 @@ export async function executeTool(
         return { content: "No hay ítems para cotizar. Pídele al cliente qué productos y cantidades desea." };
       }
       const cot = construirCotizacion(nombre, ciudad, items);
+      // El origen (Nacional / Importado) va en el resumen que ve el modelo para
+      // que no tenga que deducirlo del nombre del producto: deducirlo es lo que
+      // lo hizo cotizar un importado como nacional (Gerencia, 17/09/2026).
       const resumen = cot.items
-        .map((i) => `• ${i.descripcion}: ${i.cantidad} ${i.unidad} × ${bs(i.precioUnit)} = ${bs(i.subtotal)}`)
+        .map(
+          (i) =>
+            `• ${i.descripcion}${i.origen ? ` [${i.origen}]` : ""}: ` +
+            `${i.cantidad} ${i.unidad} × ${bs(i.precioUnit)} = ${bs(i.subtotal)}`,
+        )
         .join("\n");
 
       // Las cajas se calculan ACÁ y se le entregan ya escritas al modelo. Antes
@@ -372,6 +404,9 @@ export async function executeTool(
         ["SEGUNDA", "GRANEL", "LIQUIDACIÓN", "LIQUIDACION"].includes((i.status || "").toUpperCase()),
       );
 
+      // Pidió un formato que ya no se fabrica: lo que se cotizó es OTRA cosa.
+      const sustituidos = cot.items.filter((i) => i.reemplaza);
+
       console.log(`🧾 Cotización ${cot.numero} para ${nombre} — Total ${bs(cot.total)}`);
       return {
         content:
@@ -380,6 +415,13 @@ export async function executeTool(
           (segundas.length
             ? `⚠️ AVISO OBLIGATORIO: ${segundas.map((i) => i.descripcion).join(", ")} es material de SEGUNDA SELECCIÓN (comercial), no de primera. ` +
               "Decíselo al cliente con naturalidad, sin que suene a letra chica, y ofrecele el equivalente de primera por si lo prefiere.\n\n"
+            : "") +
+          (sustituidos.length
+            ? "⚠️ AVISO OBLIGATORIO: el cliente pidió " +
+              sustituidos.map((i) => `"${i.reemplaza}"`).join(", ") +
+              ", que es un formato DESCONTINUADO. Lo que se cotizó es una alternativa vigente" +
+              ` (${sustituidos.map((i) => i.descripcion).join(", ")}), NO lo que pidió. ` +
+              "Decíselo claramente antes de darle el total: que ese formato ya no se fabrica y que esto es el reemplazo.\n\n"
             : "") +
           "Al responder, confirmá que le enviaste la cotización y aclarale que son los *precios de lista vigentes hoy* para su región, " +
           "y que el asesor confirma la disponibilidad. NO digas que los precios son 'referenciales' o 'estimados': salen de la lista oficial de Gladymar.",

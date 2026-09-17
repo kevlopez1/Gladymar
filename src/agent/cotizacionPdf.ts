@@ -89,7 +89,11 @@ export function generarCotizacionPDF(cot: Cotizacion): Promise<string> {
       // (*) marca el ítem que no salió de la lista oficial (precio estimado).
       // (2ª) segunda selección · (*) precio estimado, fuera de la lista oficial.
       const marcas = [esSegunda(it.status) ? "(2ª)" : "", it.oficial === false ? "(*)" : ""].filter(Boolean).join(" ");
-      const desc = marcas ? `${it.descripcion} ${marcas}` : it.descripcion;
+      // El origen se imprime SOLO cuando la lista lo dice (hojas NAC / IMP).
+      // Si no lo dice, no va nada: el cliente prefiere no ver el dato antes que
+      // verlo mal, y "nacional por descarte" es lo que reportó Gerencia.
+      const base = it.origen ? `${it.descripcion} · ${it.origen}` : it.descripcion;
+      const desc = marcas ? `${base} ${marcas}` : base;
       const alto = Math.max(22, doc.heightOfString(desc, { width: wDesc }) + 10);
       if (i % 2 === 1) doc.rect(M, y, R - M, alto).fill(CREMA);
       const ty = y + 6;
