@@ -35,6 +35,51 @@ export const ASESORES: Asesor[] = DATOS.asesores;
  * hay tres showrooms (Plus, Serrana, CCO) y repartir por barrio requiere que
  * Gladymar defina las zonas; hasta entonces todo lo urbano va al principal.
  */
+/**
+ * Zonas de la ciudad de Santa Cruz -> showroom que las atiende.
+ *
+ * PROPUESTA POR CERCANÍA, pendiente de que Gladymar la confirme. Sale de dónde
+ * está cada showroom, no de cómo Gladymar reparte su cobertura, que es una
+ * decisión comercial (dónde está el stock, quién tiene capacidad) y no
+ * geográfica:
+ *
+ *   · Gladymar Plus          Av. Banzer, 3er anillo    -> NORTE
+ *   · Canal Cotoca           Av. Santa Cruz y Guapay   -> ESTE, entre 2º y 3º
+ *   · Fábrica (P. Industrial) Av. Paraguá y Canal Cotoca -> NORESTE, fuera del 4º
+ *
+ * Lo que esto deja a la vista: los tres están en la mitad norte/este. El SUR
+ * (Plan 3000, Santos Dumont, Doble Vía La Guardia) no tiene showroom cerca, y
+ * por eso no figura acá: cae en el principal hasta que Gladymar decida. No es
+ * un olvido, es la pregunta.
+ *
+ * OJO con el orden: se prueba de la clave más larga a la más corta, porque
+ * "canal cotoca" tiene que ganarle a "cotoca", que es otro municipio.
+ */
+const SUCURSAL_POR_ZONA: Record<string, string> = {
+  // Noreste, fuera del 4º anillo.
+  "parque industrial": "Serrana",
+  paragua: "Serrana",
+  // Este, entre el 2º y el 3er anillo.
+  "canal cotoca": "CCO",
+  guapay: "CCO",
+  "pampa de la isla": "CCO",
+  "villa primero de mayo": "CCO",
+  "villa 1ro de mayo": "CCO",
+  "los lotes": "CCO",
+  "radial 26": "CCO",
+  "radial 27": "CCO",
+  // Norte y oeste, incluido el Urubó (se cruza por el norte).
+  equipetrol: "Plus",
+  banzer: "Plus",
+  "cristo redentor": "Plus",
+  "san martin": "Plus",
+  "las palmas": "Plus",
+  sirari: "Plus",
+  polanco: "Plus",
+  urubo: "Plus",
+  porongo: "Plus",
+};
+
 const SUCURSAL_POR_MUNICIPIO: Record<string, string> = {
   montero: "Montero",
   warnes: "Montero",
@@ -70,6 +115,12 @@ function normalizar(s: string): string {
 export function sucursalParaLugar(ciudad?: string): string | undefined {
   const t = normalizar(ciudad || "");
   if (t) {
+    // Las zonas de la ciudad PRIMERO, de la clave más larga a la más corta:
+    // "canal cotoca" tiene que ganarle a "cotoca", que es otro municipio y otro
+    // showroom. Con el orden al revés, todo el este de la ciudad se iría a Plus.
+    for (const zona of Object.keys(SUCURSAL_POR_ZONA).sort((a, b) => b.length - a.length)) {
+      if (t === zona || new RegExp(`(^|\\s)${zona}($|\\s)`).test(t)) return SUCURSAL_POR_ZONA[zona];
+    }
     for (const [municipio, sucursal] of Object.entries(SUCURSAL_POR_MUNICIPIO)) {
       if (t === municipio || new RegExp(`(^|\\s)${municipio}($|\\s)`).test(t)) return sucursal;
     }
