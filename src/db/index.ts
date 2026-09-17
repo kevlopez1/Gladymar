@@ -108,6 +108,21 @@ async function crearTabla(): Promise<void> {
   // decirle al CRM en qué aviso anotar el motivo. Se agrega aparte porque la
   // tabla ya existe en producción.
   await p.query(`ALTER TABLE avisos_enviados ADD COLUMN IF NOT EXISTS cola_id TEXT;`);
+
+  // Las fechas de uso_tokens se guardaban como "d/m/aaaa" y la columna es TEXT,
+  // así que ordenaban alfabéticamente: "9/9/2026" antes que "17/9/2026". Se
+  // pasan a ISO una sola vez. No puede haber choque de claves porque un día
+  // existe en un formato o en el otro, nunca en los dos.
+  try {
+    await p.query(
+      `UPDATE uso_tokens
+          SET fecha = to_char(to_date(fecha, 'FMDD/FMMM/YYYY'), 'YYYY-MM-DD')
+        WHERE fecha LIKE '%/%'`,
+    );
+  } catch (err) {
+    // Una fila con una fecha ilegible no puede impedir que arranque el bot.
+    console.error("No se pudieron migrar las fechas de uso_tokens a ISO:", err);
+  }
   await p.query(`CREATE INDEX IF NOT EXISTS avisos_enviados_wamid ON avisos_enviados (wamid);`);
 
   // Consumo de tokens por día (zona Bolivia). Hasta ahora el gasto solo se
@@ -373,6 +388,11 @@ export async function obtenerUso(dias = 60): Promise<UsoDia[] | null> {
       salida: string;
       cache_escrito: string;
       cache_leido: string;
+      // ORDER BY sobre la fecha ISO: alfabético y cronológico coinciden. Con el
+      // formato viejo (d/m/aaaa) no coincidían, así que el LIMIT se quedaba con
+      // los días alfabéticamente más altos y no con los más recientes: pasados
+      // los 60 días, los totales habrían dejado de contar lo último sin que
+      // nada fallara.
     }>(`SELECT * FROM uso_tokens ORDER BY fecha DESC LIMIT $1`, [dias]);
     return res.rows.map((r) => ({
       fecha: r.fecha,
