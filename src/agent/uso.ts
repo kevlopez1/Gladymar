@@ -26,8 +26,22 @@ export const PRECIOS_USD_POR_MILLON = {
   cacheLeido: 0.1,
 };
 
-function fechaBolivia(): string {
-  return new Date().toLocaleString("es-BO", { timeZone: "America/La_Paz", hour12: false }).split(",")[0].trim();
+/**
+ * Clave del día, en zona Bolivia, como AAAA-MM-DD.
+ *
+ * ISO y no "d/m/aaaa" por una razón que ya nos mordió: la columna es TEXT y se
+ * ordena como texto. Con d/m/aaaa, "9/9/2026" le gana a "17/9/2026" porque "9"
+ * es mayor que "1" alfabéticamente. En ISO el orden alfabético y el
+ * cronológico son el mismo, que es justamente para lo que sirve ese formato.
+ */
+export function fechaBolivia(): string {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/La_Paz",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  return partes; // en-CA ya devuelve AAAA-MM-DD
 }
 
 /**

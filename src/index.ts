@@ -12,7 +12,7 @@ import { config, isWhatsAppConfigured } from "./config.js";
 import { GladymarAgent, type AgentReply } from "./agent/brain.js";
 import { generarCotizacionPDF } from "./agent/cotizacionPdf.js";
 import { bs, type Cotizacion } from "./agent/cotizacion.js";
-import { resumenUso, PRECIOS_USD_POR_MILLON } from "./agent/uso.js";
+import { resumenUso, fechaBolivia, PRECIOS_USD_POR_MILLON } from "./agent/uso.js";
 import { InMemorySessionStore } from "./session/store.js";
 import { sendText, sendDocument, sendInteractiveList, sendInteractiveSections, sendTemplate, downloadMedia, downloadDocumento, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./whatsapp/webhook.js";
@@ -1199,7 +1199,10 @@ async function loguearUso(): Promise<void> {
   const r = await resumenUso(60);
   if (!r) return;
   const t = r.totales;
-  const hoy = r.dias[0];
+  // El día de HOY se busca por su clave, no se toma el primero de la lista: si
+  // alguna vez el orden vuelve a fallar, esto muestra "sin datos" en vez de
+  // etiquetar como "hoy" el consumo de otro día.
+  const hoy = r.dias.find((d) => d.fecha === fechaBolivia());
   console.log(
     `🧮 Tokens acumulados (${r.dias.length} día/s): ${t.llamadas} llamada(s), ` +
       `entrada ${t.entrada}, salida ${t.salida}, caché escrito ${t.cacheEscrito}, caché leído ${t.cacheLeido} ` +
