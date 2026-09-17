@@ -68,6 +68,31 @@ const MUNICIPIOS_POR_DEPARTAMENTO: Record<string, string[]> = {
     "gutierrez",
     "san carlos",
     "santa rosa del sara",
+    // Porongo es el municipio del Urubó, que es de las zonas donde más se
+    // construye. No estaba: un lead que decía "Urubó" no resolvía departamento,
+    // así que no le tocaba asesor y en el CRM quedaba sin región. No caía en un
+    // asesor equivocado — caía en ninguno.
+    "porongo",
+    "urubo",
+    // ZONAS DE LA CIUDAD, no municipios. Van acá porque el cliente dice dónde
+    // vive con el nombre de su zona, no con el del municipio: "estoy en el Plan
+    // 3000" tiene que resolver a Santa Cruz igual que "Santa Cruz".
+    "plan 3000",
+    "plan tres mil",
+    "equipetrol",
+    "pampa de la isla",
+    "villa primero de mayo",
+    "villa 1ro de mayo",
+    "parque industrial",
+    "canal cotoca",
+    "los lotes",
+    "el bajio",
+    "doble via la guardia",
+    "santos dumont",
+    "cristo redentor",
+    "banzer",
+    "radial 26",
+    "radial 27",
   ],
   "La Paz": [
     "la paz",
