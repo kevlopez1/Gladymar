@@ -17,42 +17,57 @@ export interface SeccionMenu {
   opciones: OpcionMenu[];
 }
 
+/**
+ * Estructura pedida por Gerencia el 17/09/2026.
+ *
+ * Reemplaza al árbol anterior ("Diseñar mi espacio / Cotizar productos /
+ * Seguimiento / Soporte"), que nombraba las cosas como las piensa Gladymar y no
+ * como las pide un cliente. Nadie escribe "quiero diseñar mi espacio"; escribe
+ * "cuánto cuesta" o "dónde quedan". Las cinco de abajo son las cinco cosas que
+ * la gente viene a hacer, con sus palabras.
+ */
 export const MENU: SeccionMenu[] = [
   {
     id: "1",
-    titulo: "Diseñar mi espacio",
+    titulo: "Ver productos",
     opciones: [
-      { id: "1.1", titulo: "Orientación por chat" },
-      { id: "1.2", titulo: "Contactar un asesor de diseño" },
+      { id: "1.1", titulo: "Catálogo" },
+      { id: "1.2", titulo: "Diferencias entre cerámica y porcelanato" },
+      { id: "1.3", titulo: "Tipo de pegamento recomendado" },
     ],
   },
   {
     id: "2",
-    titulo: "Cotizar productos",
-    opciones: [
-      { id: "2.1", titulo: "Catálogo" },
-      { id: "2.2", titulo: "Asesoramiento" },
-      { id: "2.3", titulo: "Diferencias entre cerámica y porcelanato" },
-      { id: "2.4", titulo: "Tipo de pegamento recomendado" },
-      { id: "2.5", titulo: "Contactar asesor" },
-    ],
+    titulo: "Consultar precios",
+    opciones: [{ id: "2.1", titulo: "Precio por producto y ciudad" }],
   },
   {
     id: "3",
-    titulo: "Seguimiento de pedido",
-    opciones: [{ id: "3.1", titulo: "Contactar asesor (por el momento)" }],
+    titulo: "Buscar una tienda",
+    opciones: [
+      { id: "3.1", titulo: "Ubicaciones" },
+      { id: "3.2", titulo: "Teléfonos" },
+      { id: "3.3", titulo: "Horarios" },
+    ],
   },
   {
     id: "4",
-    titulo: "Soporte y reclamos",
+    titulo: "Cotizar un proyecto",
     opciones: [
-      { id: "4.1", titulo: "Ubicaciones" },
-      { id: "4.2", titulo: "Teléfonos" },
-      { id: "4.3", titulo: "Horarios" },
-      { id: "4.4", titulo: "Manual de asentamiento" },
-      { id: "4.5", titulo: "Registro de reclamos" },
-      { id: "4.6", titulo: "Soluciones a problemas frecuentes" },
-      { id: "4.7", titulo: "Agendar visita técnica" },
+      { id: "4.1", titulo: "Cotización con precios del día" },
+      { id: "4.2", titulo: "Cuánto material necesito" },
+      { id: "4.3", titulo: "Seguimiento de un pedido" },
+    ],
+  },
+  {
+    id: "5",
+    titulo: "Hablar con un asesor",
+    opciones: [
+      { id: "5.1", titulo: "Asesor de mi ciudad" },
+      { id: "5.2", titulo: "Registrar un reclamo" },
+      { id: "5.3", titulo: "Agendar visita técnica" },
+      { id: "5.4", titulo: "Manual de asentamiento" },
+      { id: "5.5", titulo: "Soluciones a problemas frecuentes" },
     ],
   },
 ];
