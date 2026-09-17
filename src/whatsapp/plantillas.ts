@@ -16,6 +16,11 @@
  */
 import { config } from "../config.js";
 
+/** Lee el JSON de una respuesta sin reventar si no vino JSON. */
+async function listJson2(res: Response): Promise<unknown> {
+  return res.json().catch(() => ({}));
+}
+
 /** Largo máximo de un parámetro de cuerpo que aceptamos mandar. */
 const MAX_PARAM = 200;
 
@@ -42,11 +47,14 @@ async function asegurarPlantilla(
 
   try {
     const base = `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`;
+    // Se piden los components a propósito: sin ellos no se puede comparar el
+    // texto que está vivo en Meta contra el que dice este código.
     const listRes = await fetch(
-      `${base}?name=${encodeURIComponent(nombre)}&limit=50&access_token=${encodeURIComponent(accessToken)}`,
+      `${base}?name=${encodeURIComponent(nombre)}&fields=name,status,category,components&limit=50` +
+        `&access_token=${encodeURIComponent(accessToken)}`,
     );
-    const listJson = (await listRes.json().catch(() => ({}))) as {
-      data?: { name: string; status?: string; category?: string }[];
+    const listJson = (await listJson2(listRes)) as {
+      data?: { name: string; status?: string; category?: string; components?: unknown[] }[];
     };
     if (listRes.ok && Array.isArray(listJson.data)) {
       const ya = listJson.data.find((t) => t.name === nombre);
@@ -54,6 +62,7 @@ async function asegurarPlantilla(
         console.log(
           `📄 Plantilla "${nombre}" (${para}): ya existe, estado ${ya.status ?? "?"}, categoría ${ya.category ?? "?"}.`,
         );
+        avisarSiCambioElTexto(nombre, para, ya.components, components);
         avisarSiEsMarketing(nombre, ya.category);
         return;
       }
@@ -91,17 +100,63 @@ async function asegurarPlantilla(
  * Avisa si Meta clasificó la plantilla como MARKETING en vez de UTILITY.
  *
  * PEDIR category: "UTILITY" NO ES OBTENER UTILITY: Meta reclasifica por su
- * cuenta leyendo el texto. El envío funciona igual, así que el problema no se
- * nota en ningún lado — aparece en la factura un mes después, porque a Bolivia
- * el marketing cuesta USD 0,0777 por mensaje contra USD 0,0119 el utility.
- * Seis veces y media más caro, en silencio.
+ * cuenta leyendo el texto. Medido por Prime en otro cliente: dos plantillas con
+ * el cuerpo IDÉNTICO quedaron una MARKETING y la otra UTILITY.
+ *
+ * El envío funciona igual, así que el problema no se nota en ningún lado —
+ * aparece en la factura un mes después. Una MARKETING cuesta bastante más que
+ * una UTILITY; la cifra exacta para Bolivia no la pongo acá porque no la pude
+ * verificar contra la tarifa de Meta, y un número inventado en un comentario se
+ * termina citando como si fuera medido.
  */
 function avisarSiEsMarketing(nombre: string, categoria?: string): void {
   if ((categoria || "").toUpperCase() !== "MARKETING") return;
   console.error(
     `📄 ⚠️ Meta clasificó la plantilla "${nombre}" como MARKETING, no UTILITY. ` +
-      "Cada envío pasa a costar ~6,5x (USD 0,0777 contra 0,0119 en Bolivia). " +
-      "Revisá el texto (nada que suene promocional) o recreala a mano en Meta pidiendo la recategorización.",
+      "Una MARKETING cuesta bastante más por envío que una UTILITY. " +
+      "OJO: una plantilla YA APROBADA no se puede recategorizar — Meta responde " +
+      '"No puedes actualizar una categoría de plantilla aprobada". La única salida es crear una ' +
+      "plantilla NUEVA, con OTRO NOMBRE y sin nada que suene promocional, y dejar de usar esta.",
+  );
+}
+
+/** El texto del cuerpo de una plantilla, para poder compararlo. */
+function cuerpoDe(components: unknown): string {
+  if (!Array.isArray(components)) return "";
+  for (const c of components) {
+    const comp = c as { type?: string; text?: string };
+    if ((comp?.type || "").toUpperCase() === "BODY") return (comp.text || "").trim();
+  }
+  return "";
+}
+
+/**
+ * Avisa si el texto que está vivo en Meta ya no es el que dice este código.
+ *
+ * Existe porque la API NO deja editar el cuerpo de una plantilla que ya existe:
+ * se queda con el texto viejo y esta función antes decía "ya existe" tan
+ * tranquila. O sea que alguien podía cambiar el texto acá, desplegar, ver un log
+ * en verde, y el cliente seguía recibiendo el mensaje anterior para siempre.
+ *
+ * No se intenta actualizar porque no se puede. Lo único que se puede hacer es
+ * decirlo fuerte y nombrar la única salida: otro nombre.
+ */
+function avisarSiCambioElTexto(
+  nombre: string,
+  para: string,
+  enMeta: unknown,
+  enElCodigo: unknown[],
+): void {
+  const vivo = cuerpoDe(enMeta);
+  const nuestro = cuerpoDe(enElCodigo);
+  if (!vivo || !nuestro || vivo === nuestro) return;
+  console.error(
+    `📄 ⚠️ La plantilla "${nombre}" (${para}) tiene en Meta un texto DISTINTO al de este código. ` +
+      "Meta no deja editar el cuerpo de una plantilla que ya existe, así que el cliente sigue " +
+      "recibiendo el texto viejo y el despliegue no cambió nada. " +
+      "Para cambiarlo hay que crear una plantilla con OTRO NOMBRE y apuntar la variable de entorno ahí.\n" +
+      `   En Meta:   "${vivo.slice(0, 160)}"\n` +
+      `   En el código: "${nuestro.slice(0, 160)}"`,
   );
 }
 
