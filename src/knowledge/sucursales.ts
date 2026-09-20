@@ -138,6 +138,22 @@ export function ciudadesConSucursal(): string[] {
   return [...new Set(SUCURSALES.map((s) => s.ciudad))];
 }
 
+/**
+ * La pregunta "¿en qué ciudad estás?" como LISTA, no como texto.
+ *
+ * Preguntarla en texto suelto obliga al cliente a tipear la ciudad y a que
+ * después el bot la interprete; con la lista toca un botón y llega escrita
+ * igual que acá. Además le muestra de una qué ciudades existen, que es lo que
+ * de verdad quiere saber quien busca una tienda.
+ *
+ * Son 7 ciudades: entran holgadas en el tope de 10 filas de WhatsApp. Si algún
+ * día Gladymar abre en más, hay que agrupar o esta lista deja de mandarse (el
+ * envío falla sin decir nada).
+ */
+export function opcionesDeCiudad(boton = "Elegir ciudad", titulo = "¿En qué ciudad estás?"): string {
+  return `[[OPCIONES boton="${boton}" titulo="${titulo}": ${ciudadesConSucursal().join(" | ")}]]`;
+}
+
 /** Filtra sucursales por ciudad o nombre de sucursal (flexible, sin tildes/mayúsculas). */
 export function sucursalesPorCiudad(ciudad?: string): Sucursal[] {
   if (!ciudad) return SUCURSALES;

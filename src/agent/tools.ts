@@ -15,6 +15,7 @@ import {
   sucursalesPorCiudad,
   formatearSucursal,
   ciudadesConSucursal,
+  opcionesDeCiudad,
 } from "../knowledge/sucursales.js";
 import { menuPrincipal, submenu } from "../knowledge/menu.js";
 import { infoTema, temasDisponibles } from "../knowledge/temas.js";
@@ -297,6 +298,20 @@ export async function executeTool(
 
     case "buscar_sucursales": {
       const ciudad = typeof input.ciudad === "string" ? input.ciudad : undefined;
+      // Sin ciudad NO se vuelcan las 13 sucursales: se pregunta cuál, y se
+      // pregunta con la LISTA de ciudades. Volcarlas todas obliga al cliente a
+      // leer doce que no le sirven para encontrar la suya, y preguntarlo en
+      // texto suelto lo obliga a tipearla. Con la lista toca un botón.
+      if (!ciudad) {
+        return {
+          content:
+            "El cliente todavía no dijo su ciudad. Preguntásela en UNA frase corta y cálida, sin enumerar " +
+            "las ciudades en el texto, y terminá el mensaje con esta línea EXACTA (no la cambies ni la " +
+            "traduzcas):\n" +
+            opcionesDeCiudad() +
+            "\nNO des ninguna dirección, teléfono ni horario todavía: primero la ciudad.",
+        };
+      }
       const lista = sucursalesPorCiudad(ciudad).map(formatearSucursal).join("\n\n");
       const bloque = `${lista}\n\n_Los enlaces de ubicación (GPS) están disponibles en gladymar.com.bo_`;
       // El bloque `sucursales` se envía VERBATIM al cliente desde la capa de WhatsApp.
