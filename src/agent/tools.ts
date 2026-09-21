@@ -393,6 +393,45 @@ export async function executeTool(
         return { content: "No hay ítems para cotizar. Pídele al cliente qué productos y cantidades desea." };
       }
       const cot = construirCotizacion(nombre, ciudad, items);
+
+      // Lo de SEGUNDA no se cotiza: se deriva (Gerencia, 20/09/2026). Si TODO
+      // lo que pidió es de segunda no hay cotización que mandar, así que se
+      // registra el lead y se corta acá, sin PDF.
+      const derivados = cot.derivar
+        // Sin el paréntesis cuando el cliente nombró el producto tal cual: ahí
+        // "X (X)" no aclara nada, solo hace ruido en el aviso al asesor.
+        .map((d) => (d.pedido === d.producto ? `"${d.pedido}"` : `"${d.pedido}" (${d.producto})`))
+        .join(", ");
+      if (!cot.items.length) {
+        // Se reusa registrarSolicitud para que el lead siga el MISMO camino que
+        // cualquier otro: panel, CRM y aviso al asesor de la zona. Su `solicitud`
+        // se propaga tal cual — sin ese campo el lead se registra pero el asesor
+        // nunca se entera, y "derivar al asesor" quedaría en nada.
+        const lead = registrarSolicitud(
+          {
+            tipo: "cotizacion",
+            prioridad: "normal",
+            ciudad,
+            nombre: nombre !== "Cliente" ? nombre : undefined,
+            detalle: `Pide material de SEGUNDA SELECCIÓN: ${derivados}. El bot no cotiza segunda.`,
+          },
+          telefonoCliente,
+          prueba,
+        );
+        console.log(`🧾 Cotización derivada (segunda selección) para ${nombre}: ${derivados}`);
+        return {
+          escalated: true,
+          solicitud: lead.solicitud,
+          content:
+            `Lo que pidió el cliente (${derivados}) es material de SEGUNDA SELECCIÓN, y eso el bot NO lo cotiza. ` +
+            "El lead ya quedó registrado para el asesor de su zona. " +
+            "Decíselo con naturalidad y sin tecnicismos: que ese material lo maneja directamente un asesor, " +
+            "que ya lo pusiste en contacto y lo van a llamar por este mismo WhatsApp. " +
+            "NO le des ningún precio de ese producto y NO le ofrezcas un reemplazo de primera por tu cuenta: " +
+            "si él quiere ver alternativas de primera, preguntáselo y recién ahí buscá.",
+        };
+      }
+
       // El origen (Nacional / Importado) va en el resumen que ve el modelo para
       // que no tenga que deducirlo del nombre del producto: deducirlo es lo que
       // lo hizo cotizar un importado como nacional (Gerencia, 17/09/2026).
@@ -414,9 +453,10 @@ export async function executeTool(
         .join("\n\n");
 
       // Un material que no es de primera tiene que decirse: el cliente cree que
-      // compra el modelo de catálogo y la segunda cuesta (y es) distinta.
+      // compra el modelo de catálogo y el granel cuesta (y es) distinto.
+      // SEGUNDA ya no llega hasta acá: se derivó antes.
       const segundas = cot.items.filter((i) =>
-        ["SEGUNDA", "GRANEL", "LIQUIDACIÓN", "LIQUIDACION"].includes((i.status || "").toUpperCase()),
+        ["GRANEL", "LIQUIDACIÓN", "LIQUIDACION"].includes((i.status || "").toUpperCase()),
       );
 
       // Pidió un formato que ya no se fabrica: lo que se cotizó es OTRA cosa.
@@ -430,6 +470,11 @@ export async function executeTool(
           (segundas.length
             ? `⚠️ AVISO OBLIGATORIO: ${segundas.map((i) => i.descripcion).join(", ")} es material de SEGUNDA SELECCIÓN (comercial), no de primera. ` +
               "Decíselo al cliente con naturalidad, sin que suene a letra chica, y ofrecele el equivalente de primera por si lo prefiere.\n\n"
+            : "") +
+          (cot.derivar.length
+            ? `⚠️ AVISO OBLIGATORIO: ${derivados} es material de SEGUNDA SELECCIÓN y NO se cotiza. ` +
+              "Quedó FUERA de la cotización y del total. Decile al cliente que ese material en particular " +
+              "lo ve directamente un asesor, que ya lo derivaste, y seguí con el resto de su cotización.\n\n"
             : "") +
           (sustituidos.length
             ? "⚠️ AVISO OBLIGATORIO: el cliente pidió " +

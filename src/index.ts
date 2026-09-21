@@ -607,6 +607,15 @@ async function avisarCotizacionAlAsesor(
     ),
     `*TOTAL: ${bs(cot.total)}*`,
     "",
+    // Lo de segunda no se cotizó (Gerencia, 20/09/2026), pero el asesor tiene
+    // que saber que el cliente lo pidió: es lo que tiene que ir a resolver él.
+    ...(cot.derivar.length
+      ? [
+          `⚠️ *Pidió además material de SEGUNDA* (no se cotiza, lo ves vos): ` +
+            cot.derivar.map((d) => (d.pedido === d.producto ? `"${d.pedido}"` : `"${d.pedido}" → ${d.producto}`)).join("; "),
+          "",
+        ]
+      : []),
     cot.departamento ? `Precios de ${cot.departamento}.` : "Precios de lista nacional (no se pudo determinar la región).",
     `Vence: ${cot.vence}`,
     urlPdf,

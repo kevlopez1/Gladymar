@@ -102,7 +102,13 @@ function texto(v: ExcelJS.CellValue): string {
   if (typeof v === "object" && "richText" in v) {
     return (v.richText as { text: string }[]).map((t) => t.text).join("");
   }
+  // Celda con error de fórmula. Va ANTES de `result` porque una fórmula rota
+  // trae las dos claves. Sin esto, `{error:"#N/A"}` se volvía la cadena
+  // "[object Object]", no coincidía con el "#N/A" de ESTADOS_EXCLUIDOS y tres
+  // accesorios de baño entraban a la lista con un STATUS inventado.
+  if (typeof v === "object" && "error" in v) return String((v as { error: unknown }).error ?? "");
   if (typeof v === "object" && "result" in v) return String(v.result ?? "");
+  if (typeof v === "object" && "text" in v) return String((v as { text: unknown }).text ?? "");
   return String(v).trim();
 }
 

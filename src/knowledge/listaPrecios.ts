@@ -67,6 +67,28 @@ const ORIGEN_POR_FAMILIA: Record<string, string> = {
   IMP: "Importado",
 };
 
+/**
+ * Estados que el bot NO cotiza.
+ *
+ * Gerencia General, 20/09/2026: "productos de segunda no se cotizan; si el
+ * cliente pide cotización de un producto de segunda, que se derive al asesor".
+ *
+ * Son 766 de 1.348: más de la mitad de la lista. Por eso NO se borran del JSON
+ * como se hizo con el 41x41. Si desaparecieran, pedir uno haría que el buscador
+ * devolviera el producto más parecido y lo cotizara como si fuera ese —
+ * exactamente lo contrario de derivar. Quedan cargados para poder reconocerlos
+ * y decir "esto lo ve un asesor".
+ *
+ * GRANEL y LIQUIDACIÓN (70 productos) siguen cotizándose con su aviso: Gerencia
+ * habló de segunda, y no me toca a mí estirar la instrucción.
+ */
+const ESTADOS_NO_COTIZABLES = new Set(["SEGUNDA"]);
+
+/** ¿El bot puede ponerle precio a esto, o lo tiene que derivar? */
+export function esCotizable(p: ProductoPrecio): boolean {
+  return !ESTADOS_NO_COTIZABLES.has((p.status || "").toUpperCase());
+}
+
 /** Unidad de medida según la familia (hoja) de la que salió el producto. */
 const UNIDAD_POR_FAMILIA: Record<string, string> = {
   NAC: "m²",
@@ -94,13 +116,23 @@ interface Indexado extends ProductoPrecio {
   plano: string;
 }
 
-const INDICE: Indexado[] = DATOS.productos.map((p) => {
+function indexar(p: ProductoPrecio): Indexado {
   const plano = normalizar(`${p.marca} ${p.descripcion} ${p.formato ?? ""} ${p.acabado ?? ""}`);
   return { ...p, plano, tokens: new Set(plano.split(" ").filter((t) => t && !VACIAS.has(t))) };
-});
+}
+
+/** Lo que se puede cotizar y sugerir. Es el índice por defecto de todo. */
+const INDICE: Indexado[] = DATOS.productos.filter(esCotizable).map(indexar);
+
+/** Lo que existe pero no se cotiza. Solo sirve para reconocerlo y derivarlo. */
+const INDICE_NO_COTIZABLE: Indexado[] = DATOS.productos.filter((p) => !esCotizable(p)).map(indexar);
 
 export function totalProductos(): number {
   return INDICE.length;
+}
+
+export function totalNoCotizables(): number {
+  return INDICE_NO_COTIZABLE.length;
 }
 
 export function fechaLista(): string {
@@ -129,7 +161,7 @@ export function precioEnRegion(p: ProductoPrecio, departamento?: string): { prec
  * aclaración a cotizar un producto que no es. Antes esto no podía pasar porque
  * el estimador le inventaba un precio a cualquier texto.
  */
-export function buscarProductoPrecio(consulta: string): ProductoPrecio | null {
+function mejorDe(consulta: string, donde: Indexado[]): { producto: ProductoPrecio; puntos: number } | null {
   const q = normalizar(consulta);
   if (!q) return null;
   const tokens = q.split(" ").filter((t) => t && !VACIAS.has(t));
@@ -138,7 +170,7 @@ export function buscarProductoPrecio(consulta: string): ProductoPrecio | null {
   let mejor: Indexado | null = null;
   let mejorPuntos = 0;
   let mejorExactos = 0;
-  for (const p of INDICE) {
+  for (const p of donde) {
     const { puntos, exactos } = puntuar(p, tokens, q);
     if (puntos > mejorPuntos) { mejorPuntos = puntos; mejorExactos = exactos; mejor = p; }
   }
@@ -148,7 +180,45 @@ export function buscarProductoPrecio(consulta: string): ProductoPrecio | null {
   // un mínimo de 6 no encontraba nada. La exigencia de al menos UN token exacto
   // es la que evita el falso positivo: "asdfgh" sigue sin devolver nada.
   const minimo = Math.max(3, Math.ceil(tokens.length / 2) * 3);
-  return mejor && mejorExactos >= 1 && mejorPuntos >= minimo ? mejor : null;
+  return mejor && mejorExactos >= 1 && mejorPuntos >= minimo ? { producto: mejor, puntos: mejorPuntos } : null;
+}
+
+export function buscarProductoPrecio(consulta: string): ProductoPrecio | null {
+  return mejorDe(consulta, INDICE)?.producto ?? null;
+}
+
+/**
+ * El cliente está pidiendo SEGUNDA, y hay que derivarlo en vez de cotizar.
+ *
+ * Se dispara en dos casos, y los dos hacen falta:
+ *
+ * 1. Lo dijo con todas las letras ("de segunda", "2da selección"). Ojo con
+ *    "comercial": es como se llaman estos productos en la lista, pero también
+ *    es "mi local comercial". Por eso NO se usa esa palabra como disparador —
+ *    derivar a medio Santa Cruz por pedir piso para su local sería peor que el
+ *    problema que esto resuelve.
+ * 2. Nombró el producto de segunda mejor de lo que nombró cualquier producto
+ *    cotizable. Es el caso de quien copia el nombre entero de la lista: "PISO
+ *    60X60 ECO CARRARA REAL SEMIBRILLO **COMERCIAL**" gana por esa palabra
+ *    contra la primera calidad que se llama igual sin ella. Sin esta segunda
+ *    condición el bot le cotizaba la primera calidad, más cara, sin decir que
+ *    le estaba dando otra cosa.
+ */
+const DICE_SEGUNDA = /\b(segunda|segundas|2da|2a)\b/i;
+
+/**
+ * Devuelve QUÉ derivar (la descripción a mostrar), o null si se puede cotizar.
+ *
+ * Cuando el cliente dice "de segunda" pero no nombra un producto reconocible,
+ * igual se deriva, con sus propias palabras: la alternativa sería cotizarle la
+ * primera calidad que más se le parezca, que es justo lo que no hay que hacer.
+ */
+export function pideSegunda(consulta: string): string | null {
+  const segunda = mejorDe(consulta, INDICE_NO_COTIZABLE);
+  if (DICE_SEGUNDA.test(consulta)) return segunda?.producto.descripcion ?? consulta.trim();
+  if (!segunda) return null;
+  const cotizable = mejorDe(consulta, INDICE);
+  return !cotizable || segunda.puntos > cotizable.puntos ? segunda.producto.descripcion : null;
 }
 
 /** Puntaje de un producto contra los términos de búsqueda. */
