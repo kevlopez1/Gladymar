@@ -856,15 +856,33 @@ async function handleIncoming(msg: {
       return;
     }
 
+    const pidioProbar = /probar/.test(t) && /(cliente|crm|agente|sistema|demo)/.test(t);
+
+    // "Quiero una cotización" escrito EN EL PANEL.
+    //
+    // El panel matchea `cotiz` y devuelve los leads de cotización, así que el
+    // admin pedía una cotización y recibía una lista. Le pasó a un supervisor
+    // el 28/09/2026 y desde afuera parecía que no tenía permiso.
+    //
+    // Cotizar solo se puede en modo prueba, y entrar ahí no rompe nada (no
+    // registra lead ni avisa a nadie), así que en vez de explicarle el camino
+    // se lo hace: pidió cotizar, queda cotizando.
+    const quiereCotizar =
+      !/\blead/.test(t) &&
+      (/^cotizar\b/.test(t) ||
+        /\b(quiero|necesito|hacer|generar|armar|crear|simular)\b[^.]{0,24}cotiza/.test(t));
+
     // Entrar al modo "probar como cliente" (demo).
-    if (!testCliente.has(msg.from) && /probar/.test(t) && /(cliente|crm|agente|sistema|demo)/.test(t)) {
+    if (!testCliente.has(msg.from) && (pidioProbar || quiereCotizar)) {
       testCliente.add(msg.from);
       agent.reset(`test:${msg.from}`);
       void markAsRead(msg.messageId);
       try {
         await sendText(
           msg.from,
-          "🧪 *Modo prueba activado.*\n\nAhora te atiendo como si fueras un *cliente*. Escribí como uno más: por ejemplo *\"Hola\"*, pedí el catálogo, pedí una cotización, consultá sucursales...\n\nEsto es solo una demostración: *no* cuenta como lead ni avisa a ningún asesor.\n\nCuando quieras volver al panel, escribí *salir*.",
+          quiereCotizar
+            ? "🧪 *Modo prueba activado* para que puedas cotizar.\n\nLas cotizaciones se arman conversando como lo haría un *cliente*: contame qué producto y cuántos m², y te mando el PDF con los precios de lista.\n\nEsto no cuenta como lead ni avisa a ningún asesor.\n\nPara volver al panel, escribí *salir*."
+            : "🧪 *Modo prueba activado.*\n\nAhora te atiendo como si fueras un *cliente*. Escribí como uno más: por ejemplo *\"Hola\"*, pedí el catálogo, pedí una cotización, consultá sucursales...\n\nEsto es solo una demostración: *no* cuenta como lead ni avisa a ningún asesor.\n\nCuando quieras volver al panel, escribí *salir*.",
         );
       } catch (err) {
         console.error(`Error activando modo prueba para ${msg.from}:`, err);
