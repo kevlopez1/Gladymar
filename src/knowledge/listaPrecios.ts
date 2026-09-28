@@ -9,6 +9,7 @@
  */
 import { createRequire } from "node:module";
 import { departamentoDeLugar } from "./departamentos.js";
+import { claveDeProducto, formatoParaMostrar, mejorVariante } from "./formato.js";
 
 const require = createRequire(import.meta.url);
 const DATOS = require("./listaPrecios.json") as {
@@ -243,7 +244,20 @@ export function buscarVarios(consulta: string, limite = 3): ProductoPrecio[] {
   const puntuados = INDICE.map((p) => ({ p, ...puntuar(p, tokens, q) }))
     .filter((x) => x.exactos >= 1 && x.puntos >= 3)
     .sort((a, b) => b.puntos - a.puntos);
-  return puntuados.slice(0, limite).map((x) => x.p);
+
+  // Una sola variante por producto (ver formato.ts): la lista trae la misma
+  // pieza con su medida comercial y con la real, dos códigos y el mismo precio.
+  const elegidos = new Map<string, ProductoPrecio>();
+  for (const { p } of puntuados) {
+    const clave = claveDeProducto(p.marca, p.descripcion, p.formato);
+    const actual = elegidos.get(clave);
+    if (!actual) elegidos.set(clave, p);
+    else if (!mejorVariante(actual.descripcion, actual.formato) && mejorVariante(p.descripcion, p.formato)) {
+      elegidos.set(clave, p);
+    }
+    if (elegidos.size >= limite && !actual) break;
+  }
+  return [...elegidos.values()].slice(0, limite);
 }
 
 export function unidadDe(p: ProductoPrecio): string {
@@ -307,7 +321,7 @@ function util(v?: string): string | undefined {
  * mezclar en una sola respuesta sin que se note la costura.
  */
 export function formatearProductoLista(p: ProductoPrecio): string {
-  const meta = [util(p.marca), util(p.formato), util(p.acabado), origenDe(p)]
+  const meta = [util(p.marca), util(formatoParaMostrar(p.descripcion, p.formato)), util(p.acabado), origenDe(p)]
     .filter(Boolean)
     .join(" \u00b7 ");
   return meta ? `\u2022 *${p.descripcion}*\n   _${meta}_` : `\u2022 *${p.descripcion}*`;
