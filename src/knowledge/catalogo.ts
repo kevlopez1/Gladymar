@@ -3,6 +3,10 @@
  * Categorías: GLADYMAR (porcelanato/pisos nacionales), PISOS IMPORTADOS,
  * GRIFERIA, SANITARIOS, PERFILES, CEMENTO (adhesivos).
  */
+import { origenDeMarca } from "./listaPrecios.js";
+import { esFormatoDescontinuado } from "./descontinuados.js";
+import { claveDeProducto, formatoParaMostrar, mejorVariante } from "./formato.js";
+
 export interface ProductoCatalogo {
   categoria: string;
   marca: string;
@@ -17,26 +21,67 @@ function norm(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
+/**
+ * Este archivo es un Excel viejo convertido a TypeScript: no se regenera con
+ * `npm run precios` y tiene 89 filas de 41X41 adentro. Filtrarlas en la
+ * búsqueda es la única forma de que no salgan sin reescribirlo entero a mano.
+ */
+function descontinuado(p: ProductoCatalogo): boolean {
+  return esFormatoDescontinuado(p.formato) || esFormatoDescontinuado(p.descripcion);
+}
+
 /** Busca productos del catálogo por palabras (categoría, marca, descripción, formato, acabado). */
 export function buscarCatalogo(query: string, max = 8): ProductoCatalogo[] {
   const tokens = norm(query).split(/\s+/).filter(Boolean);
   if (!tokens.length) return [];
   const scored: { p: ProductoCatalogo; score: number }[] = [];
-  const vistos = new Set<string>();
   for (const p of CATALOGO) {
-    const clave = p.descripcion + "|" + p.marca;
-    if (vistos.has(clave)) continue;
+    if (descontinuado(p)) continue;
     const hay = norm(`${p.categoria} ${p.marca} ${p.descripcion} ${p.formato} ${p.acabado}`);
     let score = 0;
     for (const t of tokens) if (hay.includes(t)) score++;
-    if (score > 0) { scored.push({ p, score }); vistos.add(clave); }
+    if (score > 0) scored.push({ p, score });
   }
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, max).map((s) => s.p);
+
+  // Una sola variante por producto. El catálogo trae la misma pieza dos veces,
+  // una con su medida comercial y otra con la real (60X60 y 61X61 Madera
+  // Marfil), y ofrecérselas juntas es hacerle elegir entre lo mismo. Se
+  // deduplica DESPUÉS de ordenar para no perder el mejor puntaje.
+  const elegidos = new Map<string, ProductoCatalogo>();
+  for (const { p } of scored) {
+    const clave = claveDeProducto(p.marca, p.descripcion, p.formato);
+    const actual = elegidos.get(clave);
+    if (!actual) elegidos.set(clave, p);
+    else if (!mejorVariante(actual.descripcion, actual.formato) && mejorVariante(p.descripcion, p.formato)) {
+      elegidos.set(clave, p);
+    }
+    if (elegidos.size >= max && !actual) break;
+  }
+  return [...elegidos.values()].slice(0, max);
+}
+
+/**
+ * Nacional o importado de un producto del catálogo.
+ *
+ * Manda la lista de precios oficial, no la `categoria` de este archivo: la
+ * lista trae marcas importadas que acá no están (APARICI, DECORE) y es la que
+ * mantiene la empresa. La categoría queda como respaldo para lo que la lista no
+ * conozca. Si ninguna de las dos lo dice, se devuelve undefined y el producto
+ * se muestra SIN origen: el modelo no tiene que deducirlo.
+ */
+export function origenDeProductoCat(p: ProductoCatalogo): string | undefined {
+  const porMarca = origenDeMarca(p.marca);
+  if (porMarca) return porMarca;
+  if (p.categoria === "PISOS IMPORTADOS") return "Importado";
+  if (p.categoria === "GLADYMAR") return "Nacional";
+  return undefined;
 }
 
 /** Formatea un producto del catálogo para mostrarlo al cliente. */
 export function formatearProductoCat(p: ProductoCatalogo): string {
-  const meta = [p.marca, p.formato, p.acabado].filter(Boolean).join(" · ");
+  const meta = [p.marca, formatoParaMostrar(p.descripcion, p.formato), p.acabado, origenDeProductoCat(p)]
+    .filter(Boolean)
+    .join(" · ");
   return meta ? `• *${p.descripcion}*\n   _${meta}_` : `• *${p.descripcion}*`;
 }

@@ -21,7 +21,8 @@ export const CATEGORIAS: CategoriaProducto[] = [
     nombre: "Porcelanato y pisos Gladymar",
     descripcion:
       "Porcelanato y cerámica de fabricación nacional Gladymar para pisos y revestimientos.",
-    formatos: ["41x41", "60x60", "80x80", "90x90"],
+    // 41x41 salió de la lista: Gladymar lo descontinuó (Gerencia, 17/09/2026).
+    formatos: ["60x60", "80x80", "90x90"],
     marcas: ["Porcelanato by Gladymar", "Eleganza", "Capri", "Terraforte", "Platinum"],
     palabrasClave: ["porcelanato", "piso", "pisos", "ceramica", "cerámica", "revestimiento", "nacional", "gladymar"],
   },

@@ -139,13 +139,29 @@ for (const [ciudad, num] of Object.entries(ADMIN_REGIONAL_TELEFONO)) {
 const gerenteTel = toIntlBolivia(ADMIN_TELEFONO);
 ADMIN_POR_TELEFONO[gerenteTel] = { id: gerenteTel, nombre: "Gerente General", role: "gerente" };
 
-// Administradores adicionales con acceso nacional (desarrollo / soporte Prime).
-const ADMINS_EXTRA: { telefono: string; nombre: string }[] = [
-  { telefono: "74234380", nombre: "Soporte Prime" },
+/**
+ * Altas que no salen del padrón de Gladymar.
+ *
+ * Entran SOLO acá, en el mapa de teléfonos: el enrutamiento de leads se
+ * resuelve con el padrón (ver asesorParaLugar), así que sumar a alguien acá le
+ * da panel sin cambiarle la cartera a nadie. Es lo que se quiere para un
+ * número de pruebas.
+ */
+const ADMINS_EXTRA: { telefono: string; nombre: string; role?: Admin["role"]; sucursal?: string }[] = [
+  { telefono: "74234380", nombre: "Soporte Prime", role: "gerente" },
+  // Asesor de ventas que no figura en el padrón de Gladymar (pedido del
+  // 28/09/2026). Sin sucursal todavía: cuando Gladymar diga cuál es, se
+  // completa acá.
+  { telefono: "70392698", nombre: "Josue Carvanho", role: "asesor" },
 ];
 for (const a of ADMINS_EXTRA) {
   const t = toIntlBolivia(a.telefono);
-  ADMIN_POR_TELEFONO[t] = { id: t, nombre: a.nombre, role: "gerente" };
+  ADMIN_POR_TELEFONO[t] = {
+    id: t,
+    nombre: a.nombre,
+    role: a.role ?? "gerente",
+    sucursal: a.sucursal,
+  };
 }
 
 /**
@@ -219,12 +235,17 @@ export function esGerente(telefono: string): boolean {
 /**
  * Quién puede emitir la cotización en PDF.
  *
- * Gladymar la restringió el 15/09/2026: no la genera el cliente final ni los
- * admins regionales. Queda el Gerente General, más los números que se carguen
- * en COTIZACION_PDF_TELEFONOS (por defecto, Soporte Prime para poder probarla).
+ * Gladymar la restringió el 15/09/2026 (ni el cliente final ni los regionales)
+ * y la volvió a abrir a todo el equipo comercial el 28/09/2026 para que
+ * prueben. Queda afuera el cliente final, que es lo que nunca cambió.
  *
- * Se lee de configuración y no del código para que sumar o sacar a alguien no
- * requiera un despliegue.
+ * Quién entra se lee de COTIZACION_PDF_TELEFONOS y no del código, para que
+ * sumar o sacar a alguien no requiera un despliegue. El Gerente General entra
+ * siempre.
+ *
+ * OJO: esto es solo la mitad del permiso. El PDF únicamente se emite en modo
+ * prueba, así que quien no tenga "Probar como cliente" en su panel no puede
+ * emitir ninguno por más que esté en la lista.
  */
 export function puedeCotizarPDF(telefono: string): boolean {
   if (esGerente(telefono)) return true;

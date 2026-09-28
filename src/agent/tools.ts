@@ -8,11 +8,14 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { buscarCategorias, formatearCategoria } from "../knowledge/productos.js";
 import { buscarCatalogo, formatearProductoCat } from "../knowledge/catalogo.js";
+import { esFormatoDescontinuado } from "../knowledge/descontinuados.js";
+import { buscarVarios, formatearProductoLista } from "../knowledge/listaPrecios.js";
 import { buscarColecciones, formatearColeccion } from "../knowledge/dimensionViva.js";
 import {
   sucursalesPorCiudad,
   formatearSucursal,
   ciudadesConSucursal,
+  opcionesDeCiudad,
 } from "../knowledge/sucursales.js";
 import { menuPrincipal, submenu } from "../knowledge/menu.js";
 import { infoTema, temasDisponibles } from "../knowledge/temas.js";
@@ -246,13 +249,36 @@ export async function executeTool(
       // Con una consulta concreta, sugiere productos REALES del catálogo.
       if (consulta) {
         const productos = buscarCatalogo(consulta, 6);
+        // La lista de precios tiene 1.351 productos contra los 541 de
+        // catalogo.ts, que es un Excel viejo: trae marcas importadas enteras
+        // (APARICI, DECORE) que el catálogo no conoce. Se consulta como
+        // complemento para que preguntar por una de esas marcas no termine en
+        // "no lo encuentro" y el modelo improvisando.
+        const deLista = buscarVarios(consulta, 4).filter(
+          (p) => !productos.some((c) => c.descripcion.trim().toUpperCase() === p.descripcion.trim().toUpperCase()),
+        );
         // Colecciones 2026: aportan el concepto (para recomendar por estilo) y
         // los datos que el catálogo suelto no trae (tipo de uso, m² por caja).
         const colecciones = buscarColecciones(consulta, 2);
         const bloques: string[] = [];
+        // El cliente preguntó por un formato que ya no se fabrica. Decirlo acá
+        // y no dejar que el modelo lo deduzca: la lista y el catálogo ya no lo
+        // traen, así que sin este aviso la respuesta sería "no lo encuentro".
+        if (esFormatoDescontinuado(consulta)) {
+          bloques.push(
+            "AVISO PARA VOS (no lo copies literal): el formato 41x41 fue *descontinuado* por Gladymar. " +
+              "Decíselo al cliente con naturalidad y ofrecele los formatos vigentes que van abajo. " +
+              "Nunca lo sugieras vos.",
+          );
+        }
         if (productos.length) {
           bloques.push(
             "Algunas opciones de nuestro catálogo:\n\n" + productos.map(formatearProductoCat).join("\n"),
+          );
+        }
+        if (deLista.length) {
+          bloques.push(
+            "De la lista oficial vigente:\n\n" + deLista.map(formatearProductoLista).join("\n"),
           );
         }
         if (colecciones.length) {
@@ -272,6 +298,20 @@ export async function executeTool(
 
     case "buscar_sucursales": {
       const ciudad = typeof input.ciudad === "string" ? input.ciudad : undefined;
+      // Sin ciudad NO se vuelcan las 13 sucursales: se pregunta cuál, y se
+      // pregunta con la LISTA de ciudades. Volcarlas todas obliga al cliente a
+      // leer doce que no le sirven para encontrar la suya, y preguntarlo en
+      // texto suelto lo obliga a tipearla. Con la lista toca un botón.
+      if (!ciudad) {
+        return {
+          content:
+            "El cliente todavía no dijo su ciudad. Preguntásela en UNA frase corta y cálida, sin enumerar " +
+            "las ciudades en el texto, y terminá el mensaje con esta línea EXACTA (no la cambies ni la " +
+            "traduzcas):\n" +
+            opcionesDeCiudad() +
+            "\nNO des ninguna dirección, teléfono ni horario todavía: primero la ciudad.",
+        };
+      }
       const lista = sucursalesPorCiudad(ciudad).map(formatearSucursal).join("\n\n");
       const bloque = `${lista}\n\n_Los enlaces de ubicación (GPS) están disponibles en gladymar.com.bo_`;
       // El bloque `sucursales` se envía VERBATIM al cliente desde la capa de WhatsApp.
@@ -353,8 +393,54 @@ export async function executeTool(
         return { content: "No hay ítems para cotizar. Pídele al cliente qué productos y cantidades desea." };
       }
       const cot = construirCotizacion(nombre, ciudad, items);
+
+      // Lo de SEGUNDA no se cotiza: se deriva (Gerencia, 20/09/2026). Si TODO
+      // lo que pidió es de segunda no hay cotización que mandar, así que se
+      // registra el lead y se corta acá, sin PDF.
+      const derivados = cot.derivar
+        // Sin el paréntesis cuando el cliente nombró el producto tal cual: ahí
+        // "X (X)" no aclara nada, solo hace ruido en el aviso al asesor.
+        .map((d) => (d.pedido === d.producto ? `"${d.pedido}"` : `"${d.pedido}" (${d.producto})`))
+        .join(", ");
+      if (!cot.items.length) {
+        // Se reusa registrarSolicitud para que el lead siga el MISMO camino que
+        // cualquier otro: panel, CRM y aviso al asesor de la zona. Su `solicitud`
+        // se propaga tal cual — sin ese campo el lead se registra pero el asesor
+        // nunca se entera, y "derivar al asesor" quedaría en nada.
+        const lead = registrarSolicitud(
+          {
+            tipo: "cotizacion",
+            prioridad: "normal",
+            ciudad,
+            nombre: nombre !== "Cliente" ? nombre : undefined,
+            detalle: `Pide material de SEGUNDA SELECCIÓN: ${derivados}. El bot no cotiza segunda.`,
+          },
+          telefonoCliente,
+          prueba,
+        );
+        console.log(`🧾 Cotización derivada (segunda selección) para ${nombre}: ${derivados}`);
+        return {
+          escalated: true,
+          solicitud: lead.solicitud,
+          content:
+            `Lo que pidió el cliente (${derivados}) es material de SEGUNDA SELECCIÓN, y eso el bot NO lo cotiza. ` +
+            "El lead ya quedó registrado para el asesor de su zona. " +
+            "Decíselo con naturalidad y sin tecnicismos: que ese material lo maneja directamente un asesor, " +
+            "que ya lo pusiste en contacto y lo van a llamar por este mismo WhatsApp. " +
+            "NO le des ningún precio de ese producto y NO le ofrezcas un reemplazo de primera por tu cuenta: " +
+            "si él quiere ver alternativas de primera, preguntáselo y recién ahí buscá.",
+        };
+      }
+
+      // El origen (Nacional / Importado) va en el resumen que ve el modelo para
+      // que no tenga que deducirlo del nombre del producto: deducirlo es lo que
+      // lo hizo cotizar un importado como nacional (Gerencia, 17/09/2026).
       const resumen = cot.items
-        .map((i) => `• ${i.descripcion}: ${i.cantidad} ${i.unidad} × ${bs(i.precioUnit)} = ${bs(i.subtotal)}`)
+        .map(
+          (i) =>
+            `• ${i.descripcion}${i.origen ? ` [${i.origen}]` : ""}: ` +
+            `${i.cantidad} ${i.unidad} × ${bs(i.precioUnit)} = ${bs(i.subtotal)}`,
+        )
         .join("\n");
 
       // Las cajas se calculan ACÁ y se le entregan ya escritas al modelo. Antes
@@ -367,10 +453,14 @@ export async function executeTool(
         .join("\n\n");
 
       // Un material que no es de primera tiene que decirse: el cliente cree que
-      // compra el modelo de catálogo y la segunda cuesta (y es) distinta.
+      // compra el modelo de catálogo y el granel cuesta (y es) distinto.
+      // SEGUNDA ya no llega hasta acá: se derivó antes.
       const segundas = cot.items.filter((i) =>
-        ["SEGUNDA", "GRANEL", "LIQUIDACIÓN", "LIQUIDACION"].includes((i.status || "").toUpperCase()),
+        ["GRANEL", "LIQUIDACIÓN", "LIQUIDACION"].includes((i.status || "").toUpperCase()),
       );
+
+      // Pidió un formato que ya no se fabrica: lo que se cotizó es OTRA cosa.
+      const sustituidos = cot.items.filter((i) => i.reemplaza);
 
       console.log(`🧾 Cotización ${cot.numero} para ${nombre} — Total ${bs(cot.total)}`);
       return {
@@ -380,6 +470,18 @@ export async function executeTool(
           (segundas.length
             ? `⚠️ AVISO OBLIGATORIO: ${segundas.map((i) => i.descripcion).join(", ")} es material de SEGUNDA SELECCIÓN (comercial), no de primera. ` +
               "Decíselo al cliente con naturalidad, sin que suene a letra chica, y ofrecele el equivalente de primera por si lo prefiere.\n\n"
+            : "") +
+          (cot.derivar.length
+            ? `⚠️ AVISO OBLIGATORIO: ${derivados} es material de SEGUNDA SELECCIÓN y NO se cotiza. ` +
+              "Quedó FUERA de la cotización y del total. Decile al cliente que ese material en particular " +
+              "lo ve directamente un asesor, que ya lo derivaste, y seguí con el resto de su cotización.\n\n"
+            : "") +
+          (sustituidos.length
+            ? "⚠️ AVISO OBLIGATORIO: el cliente pidió " +
+              sustituidos.map((i) => `"${i.reemplaza}"`).join(", ") +
+              ", que es un formato DESCONTINUADO. Lo que se cotizó es una alternativa vigente" +
+              ` (${sustituidos.map((i) => i.descripcion).join(", ")}), NO lo que pidió. ` +
+              "Decíselo claramente antes de darle el total: que ese formato ya no se fabrica y que esto es el reemplazo.\n\n"
             : "") +
           "Al responder, confirmá que le enviaste la cotización y aclarale que son los *precios de lista vigentes hoy* para su región, " +
           "y que el asesor confirma la disponibilidad. NO digas que los precios son 'referenciales' o 'estimados': salen de la lista oficial de Gladymar.",
