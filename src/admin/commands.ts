@@ -142,9 +142,13 @@ function menu(admin: Admin): AdminReply {
     });
   }
 
-  // El modo prueba es de supervisión, salvo el asesor habilitado a propósito
-  // para probar cotizaciones: el PDF solo se emite en modo prueba.
-  if (admin.role !== "asesor" || admin.pruebas) {
+  // El modo prueba lo tiene TODO el equipo, no solo la supervisión.
+  //
+  // Era de supervisión hasta que Gladymar pidió (28/09/2026) que los asesores
+  // comerciales también probaran la cotización. Y la cotización en PDF SOLO se
+  // emite en modo prueba, así que darles el permiso sin darles el modo los
+  // dejaba "habilitados" sin poder emitir una sola. Ver puedeCotizarPDF.
+  {
     secciones.push({
       titulo: "Pruebas",
       filas: [{ id: PRUEBA, titulo: PRUEBA, descripcion: "Ver el bot como lo ve un cliente" }],
