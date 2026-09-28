@@ -133,10 +133,28 @@ export function generarCotizacionPDF(cot: Cotizacion): Promise<string> {
       (cot.items.some((i) => i.oficial === false)
         ? "• Los ítems marcados con (*) no figuran en la lista oficial: su precio es estimado y lo confirma el asesor.\n"
         : "") +
+      // La cerámica se despacha por CAJA CERRADA: nadie vende media caja. Así
+      // que los m² que se entregan casi nunca son los m² cotizados, y el
+      // cliente que no lo sabe siente que le cambiaron el pedido. Pedido por
+      // Gerencia el 28/09/2026.
+      "• Las cantidades pueden variar: el material se entrega por CAJA CERRADA, así que los m² finales se " +
+      "ajustan a cajas completas.\n" +
       "• Precios sujetos a confirmación de disponibilidad por el asesor de Gladymar.\n" +
       "• Este documento no constituye factura ni documento fiscal.\n" +
       "• Disponibilidad, tiempos de entrega y condiciones finales a confirmar por un asesor.",
       M, y + 14, { width: R - M, lineGap: 2 },
+    );
+
+    // Cierre. Va aparte de las condiciones, en negrita y sobre su propia franja,
+    // porque es la aclaración que Gerencia quiere que quede leída: entre las
+    // viñetas grises sería una más.
+    const yCierre = doc.y + 10;
+    doc.roundedRect(M, yCierre, R - M, 26, 6).fill(CREMA);
+    doc.fillColor(TINTA).font("Helvetica-Bold").fontSize(9).text(
+      "Es cotización referencial válida; cantidades reales con el asesor correspondiente.",
+      M + 10,
+      yCierre + 9,
+      { width: R - M - 20, align: "center" },
     );
 
     // ── Pie ──
