@@ -152,7 +152,12 @@ const ADMINS_EXTRA: { telefono: string; nombre: string; role?: Admin["role"]; su
   // Asesor de ventas que no figura en el padrón de Gladymar (pedido del
   // 28/09/2026). Sin sucursal todavía: cuando Gladymar diga cuál es, se
   // completa acá.
-  { telefono: "70392698", nombre: "Josue Carvanho", role: "asesor" },
+  //
+  // El número que se cargó primero (70392698) era otro: nunca le escribió al
+  // bot ni una vez, y Josue venía entrando desde este. Se reemplaza en vez de
+  // dejar los dos — un número sin dueño confirmado con panel de administrador
+  // es alguien desconocido mirando los leads de Gladymar.
+  { telefono: "78458005", nombre: "Josue Carvanho", role: "asesor" },
 ];
 for (const a of ADMINS_EXTRA) {
   const t = toIntlBolivia(a.telefono);
