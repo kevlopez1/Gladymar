@@ -15,7 +15,15 @@ import type { Cotizacion } from "./cotizacion.js";
 import type { SessionStore, ChatMessage } from "../session/store.js";
 
 const MAX_TOKENS = 1024; // respuestas de chat: cortas
-const MAX_TOOL_ROUNDS = 5; // tope de seguridad para el loop de herramientas
+/**
+ * Tope de rondas de herramientas por turno.
+ *
+ * Una cotización real usa cinco (buscar el producto, calcular el material,
+ * mirar promociones, generar el PDF y registrar el lead), así que con 5 el
+ * flujo más importante quedaba justo en el borde. Sigue siendo un tope: es
+ * contra un loop infinito, no contra una conversación normal.
+ */
+const MAX_TOOL_ROUNDS = 8;
 
 export interface AgentReply {
   text: string;
@@ -257,7 +265,15 @@ export class GladymarAgent {
 
     let response = await this.create(messages, permitirPDF);
 
-    while (response.stop_reason === "tool_use" && rounds < MAX_TOOL_ROUNDS) {
+    while (response.stop_reason === "tool_use") {
+      // Última ronda permitida: se ejecuta igual, pero el cierre se pide SIN
+      // herramientas para obligar al modelo a escribir.
+      //
+      // Antes el loop cortaba acá y el turno quedaba con solo bloques tool_use
+      // y ningún texto, así que el cliente recibía "no pude generar una
+      // respuesta" DESPUÉS de que el trabajo se había hecho: el 28/09/2026 se
+      // emitió la COT-2026-1002 por Bs 26.617 y el cliente leyó una disculpa.
+      const ultimaRonda = rounds >= MAX_TOOL_ROUNDS;
       rounds++;
       // El turno del asistente (incluye los bloques tool_use) debe conservarse.
       messages.push({ role: "assistant", content: response.content });
@@ -281,7 +297,8 @@ export class GladymarAgent {
       }
 
       messages.push({ role: "user", content: toolResults });
-      response = await this.create(messages, permitirPDF);
+      response = await this.create(messages, permitirPDF, ultimaRonda);
+      if (ultimaRonda) break;
     }
 
     // Texto final: concatenamos los bloques de texto de la respuesta.
@@ -336,7 +353,11 @@ export class GladymarAgent {
     this.store.reset(userId);
   }
 
-  private async create(messages: ChatMessage[], permitirPDF = false): Promise<Anthropic.Message> {
+  private async create(
+    messages: ChatMessage[],
+    permitirPDF = false,
+    sinHerramientas = false,
+  ): Promise<Anthropic.Message> {
     // Cliente real: quitamos la herramienta de cotización en PDF y usamos el
     // system con override. Admin en modo prueba: herramientas completas.
     const tools = permitirPDF ? TOOLS : TOOLS.filter((t) => t.name !== "generar_cotizacion");
@@ -344,7 +365,9 @@ export class GladymarAgent {
       model: this.model,
       max_tokens: MAX_TOKENS,
       system: permitirPDF ? this.system : this.systemSinPDF,
-      tools,
+      // Sin herramientas el modelo no tiene más opción que contestar con texto.
+      // Es lo que se pide en la última ronda para cerrar el turno.
+      ...(sinHerramientas ? {} : { tools }),
       messages,
     });
     registrarUso(msg.usage);
