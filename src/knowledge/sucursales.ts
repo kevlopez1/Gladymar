@@ -95,7 +95,9 @@ export const SUCURSALES: Sucursal[] = [
     direccion: "Av. Juan de la Rosa 311 y Av. América",
     telefono: "4361466",
     whatsapp: "67408846",
-    horario: "Lun-Vie 08:30-18:30, Sáb 09:00-13:00",
+    // Cierra al mediodía, a diferencia de Blanco Galindo. Lo corrigió Gladymar
+    // el 28/09/2026: el bot venía dando corrido y mandaba gente a las 13:00.
+    horario: "Lun-Vie 08:30-12:30 y 14:30-18:30, Sáb 09:00-13:00",
   },
   // ── Sucre ──
   {
