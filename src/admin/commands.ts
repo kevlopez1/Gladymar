@@ -142,7 +142,9 @@ function menu(admin: Admin): AdminReply {
     });
   }
 
-  if (admin.role !== "asesor") {
+  // El modo prueba es de supervisión, salvo el asesor habilitado a propósito
+  // para probar cotizaciones: el PDF solo se emite en modo prueba.
+  if (admin.role !== "asesor" || admin.pruebas) {
     secciones.push({
       titulo: "Pruebas",
       filas: [{ id: PRUEBA, titulo: PRUEBA, descripcion: "Ver el bot como lo ve un cliente" }],
@@ -152,9 +154,11 @@ function menu(admin: Admin): AdminReply {
   const ambito =
     admin.role === "gerente"
       ? "Nacional 🇧🇴"
-      : admin.sucursal && admin.role === "asesor"
+      : admin.sucursal && admin.region && admin.role === "asesor"
         ? `${admin.sucursal} · ${admin.region}`
-        : admin.region;
+        : // Sin región ni sucursal (un alta de pruebas) el encabezado decía
+          // "undefined". Mejor nombrar el rol que mostrar un hueco.
+          admin.sucursal || admin.region || (admin.role === "asesor" ? "Asesor comercial" : "Regional");
 
   return {
     text: `*Panel Gladymar*\n${admin.nombre} · ${ambito}\n\n¿Qué necesitás?`,

@@ -34,6 +34,16 @@ export interface Admin {
   sucursal?: string;
   /** Correo del padrón. Es como se entra a la plataforma del CRM. */
   email?: string;
+  /**
+   * Habilita "Probar como cliente" a un asesor comercial.
+   *
+   * El modo prueba no está en el panel de asesor a propósito: es para
+   * supervisión. Pero la cotización en PDF SOLO se emite en modo prueba, así
+   * que sin esta excepción un asesor no puede probar cotizaciones ni aunque
+   * esté en COTIZACION_PDF_TELEFONOS. Se activa por persona y no por rol para
+   * no abrirle el modo prueba a los 17 asesores de golpe.
+   */
+  pruebas?: boolean;
 }
 
 /** Número del Gerente General (formato internacional sin "+", como llega de WhatsApp). */
@@ -139,13 +149,32 @@ for (const [ciudad, num] of Object.entries(ADMIN_REGIONAL_TELEFONO)) {
 const gerenteTel = toIntlBolivia(ADMIN_TELEFONO);
 ADMIN_POR_TELEFONO[gerenteTel] = { id: gerenteTel, nombre: "Gerente General", role: "gerente" };
 
-// Administradores adicionales con acceso nacional (desarrollo / soporte Prime).
-const ADMINS_EXTRA: { telefono: string; nombre: string }[] = [
-  { telefono: "74234380", nombre: "Soporte Prime" },
+/**
+ * Altas que no salen del padrón de Gladymar.
+ *
+ * Entran SOLO acá, en el mapa de teléfonos: el enrutamiento de leads se
+ * resuelve con el padrón (ver asesorParaLugar), así que sumar a alguien acá le
+ * da panel sin cambiarle la cartera a nadie. Es lo que se quiere para un
+ * número de pruebas.
+ */
+const ADMINS_EXTRA: { telefono: string; nombre: string; role?: Admin["role"]; sucursal?: string; pruebas?: boolean }[] = [
+  { telefono: "74234380", nombre: "Soporte Prime", role: "gerente" },
+  // Asesor de ventas habilitado para probar cotizaciones (pedido de Gladymar,
+  // 28/09/2026). Va como `asesor` para que vea el panel que va a usar de
+  // verdad, con el modo prueba prendido aparte, que es lo único que le falta
+  // para poder emitir el PDF. Sin sucursal todavía: cuando Gladymar diga cuál
+  // es, se completa acá.
+  { telefono: "70392698", nombre: "Josue Carvanho", role: "asesor", pruebas: true },
 ];
 for (const a of ADMINS_EXTRA) {
   const t = toIntlBolivia(a.telefono);
-  ADMIN_POR_TELEFONO[t] = { id: t, nombre: a.nombre, role: "gerente" };
+  ADMIN_POR_TELEFONO[t] = {
+    id: t,
+    nombre: a.nombre,
+    role: a.role ?? "gerente",
+    sucursal: a.sucursal,
+    pruebas: a.pruebas,
+  };
 }
 
 /**
