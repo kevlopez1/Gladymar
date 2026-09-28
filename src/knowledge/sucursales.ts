@@ -70,7 +70,11 @@ export const SUCURSALES: Sucursal[] = [
     nombre: "Montes",
     direccion: "Av. Montes No. 560",
     telefono: "2111519",
-    whatsapp: "67896857",
+    // Era 67896857, el celular de Claudia Quispe. Ella se movió a Calacoto, así
+    // que ese número mandaba a los clientes de Montes a otra agencia. Lo
+    // corrigió Gladymar el 28/09/2026: ahora atiende Juan Bellido (la otra
+    // opción que dieron es Itziar Vera, 72023533).
+    whatsapp: "71550146",
     horario: "Lun-Vie 08:30-18:30, Sáb 08:30-12:30",
   },
   // La agencia de El Alto (Av. Juan Pablo II) se cerró: la quitó Gerencia el
