@@ -176,7 +176,9 @@ for (const a of ADMINS_EXTRA) {
  * inferido: un campo que dice "sin confirmar" es más útil que uno que parece
  * cierto y no lo es.
  */
-const SUCURSAL_SIN_CONFIRMAR = new Set<string>(["Claudia Quispe"]);
+// Vacío: Gladymar confirmó el 28/09/2026 que Claudia Quispe está en Calacoto,
+// que era la única deducción pendiente. Se deja el mecanismo para la próxima.
+const SUCURSAL_SIN_CONFIRMAR = new Set<string>();
 
 function normCiudad(s: string): string {
   return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -299,7 +301,10 @@ export function adminRoster(): {
     departamento: a.departamento,
     sucursal: a.sucursal,
     email: a.email,
-    sucursal_confirmada: !a.sucursal || !SUCURSAL_SIN_CONFIRMAR.has(a.nombre),
+    // Sin sucursal NO es "confirmada": es que no la sabemos. Decía true para el
+    // alta de pruebas, que no tiene sucursal asignada, y del otro lado eso se
+    // lee como un dato verificado en vez de un hueco.
+    sucursal_confirmada: Boolean(a.sucursal) && !SUCURSAL_SIN_CONFIRMAR.has(a.nombre),
     emite_el_bot: emitibles.has(a.nombre),
   }));
 }
