@@ -179,7 +179,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "generar_cotizacion",
     description:
-      "Genera una COTIZACIÓN en documento PDF (con el logo de Gladymar) y se la envía al cliente. Úsala SOLO cuando el cliente ya definió qué productos quiere y las cantidades (m² o unidades). Los precios son REFERENCIALES/estimados: aclaráselo al cliente y que un asesor confirma el precio final. Pasá el nombre del cliente y la lista de ítems.",
+      "Genera una COTIZACIÓN en documento PDF (con el logo de Gladymar) y se la envía al cliente. Úsala SOLO cuando el cliente ya definió qué productos quiere y las cantidades. Los pisos y revestimientos se cotizan SIEMPRE en m², nunca en cajas: si el cliente habló en cajas, pasá la cantidad de cajas con cantidad_en_cajas=true y la herramienta la convierte. Los precios son REFERENCIALES/estimados: aclaráselo al cliente y que un asesor confirma el precio final. Pasá el nombre del cliente y la lista de ítems.",
     input_schema: {
       type: "object",
       properties: {
@@ -192,8 +192,16 @@ export const TOOLS: Anthropic.Tool[] = [
             type: "object",
             properties: {
               producto: { type: "string", description: "Descripción del producto (ej. 'Porcelanato Algarrobo 20x120')." },
-              cantidad: { type: "number", description: "Cantidad (m² o unidades)." },
-              unidad: { type: "string", description: "Unidad: 'm²' o 'unidad'. Opcional." },
+              cantidad: {
+                type: "number",
+                description:
+                  "Cuánto quiere. Pisos y revestimientos SIEMPRE en m²; sanitarios, grifería y perfiles en unidades; cemento en bolsas. NUNCA en cajas.",
+              },
+              cantidad_en_cajas: {
+                type: "boolean",
+                description:
+                  "Poné true SOLO si el cliente dio la cantidad en CAJAS. La herramienta convierte a m² con el rendimiento real de la caja. No conviertas vos.",
+              },
             },
             required: ["producto", "cantidad"],
           },
@@ -385,7 +393,11 @@ export async function executeTool(
           return {
             producto: String(o.producto ?? "").trim(),
             cantidad: Number(o.cantidad) || 1,
-            unidad: typeof o.unidad === "string" ? o.unidad : undefined,
+            // La UNIDAD ya no la elige el modelo: la decide el producto. Antes
+            // venía en el input y le ganaba a la del producto, así que un
+            // `unidad: "cajas"` multiplicaba cajas por el precio del m². La
+            // COT-2026-1005 salió Bs 11.153,80 cuando eran Bs 18.069.
+            enCajas: o.cantidad_en_cajas === true,
           };
         })
         .filter((i) => i.producto);
@@ -439,7 +451,8 @@ export async function executeTool(
         .map(
           (i) =>
             `• ${i.descripcion}${i.origen ? ` [${i.origen}]` : ""}: ` +
-            `${i.cantidad} ${i.unidad} × ${bs(i.precioUnit)} = ${bs(i.subtotal)}`,
+            `${i.cantidad} ${i.unidad}${i.cajasPedidas ? ` (${i.cajasPedidas} cajas)` : ""} ` +
+            `× ${bs(i.precioUnit)} = ${bs(i.subtotal)}`,
         )
         .join("\n");
 
