@@ -5,6 +5,7 @@
  */
 import { precioReferencial } from "../knowledge/precios.js";
 import { esFormatoDescontinuado } from "../knowledge/descontinuados.js";
+import { m2PorCajaDe } from "../knowledge/material.js";
 import {
   buscarProductoPrecio,
   pideSegunda,
@@ -17,7 +18,8 @@ import {
 export interface ItemInput {
   producto: string;
   cantidad: number;
-  unidad?: string;
+  /** El cliente dio la cantidad en CAJAS. Acá se convierte a m². */
+  enCajas?: boolean;
 }
 export interface CotItem {
   descripcion: string;
@@ -31,6 +33,8 @@ export interface CotItem {
   region?: string;
   /** false cuando el precio salió del estimador por no estar en la lista. */
   oficial?: boolean;
+  /** Cajas que pidió el cliente, cuando la cantidad se convirtió desde cajas. */
+  cajasPedidas?: number;
   /** STATUS de la lista: PORTAFOLIO, NUEVO, SEGUNDA, GRANEL, LIQUIDACIÓN... */
   status?: string;
   /**
@@ -113,13 +117,41 @@ export function construirCotizacion(cliente: string, ciudad: string | undefined,
 
     if (oficial) {
       const { precio, region } = precioEnRegion(oficial, departamento);
-      const unidad = it.unidad || unidadDe(oficial);
+      // La unidad la decide el PRODUCTO, nunca quien pide la cotización. El
+      // precio de la lista es por m² para cerámicas, por unidad para sanitarios
+      // y grifería, por bolsa para cemento: multiplicar por otra cosa devuelve
+      // un total que no corresponde a nada.
+      const unidad = unidadDe(oficial);
+
+      // Pidió en cajas y esto se vende por m²: se convierte con el rendimiento
+      // real de la caja. Sin convertir, 62 cajas x el precio del m² cotizó
+      // Bs 11.153,80 donde eran Bs 18.069 (COT-2026-1005, 28/09/2026).
+      let cantidadFinal = cantidad;
+      let cajasPedidas: number | undefined;
+      if (it.enCajas && unidad === "m²") {
+        const caja = m2PorCajaDe(oficial.descripcion) ?? m2PorCajaDe(it.producto);
+        if (caja) {
+          cajasPedidas = cantidad;
+          cantidadFinal = Math.round(cantidad * caja.m2 * 100) / 100;
+        } else {
+          // No se sabe cuánto rinde la caja de este producto. Cotizar igual
+          // sería inventar el total, así que se deriva como cualquier otra
+          // cosa que el bot no puede resolver solo.
+          derivar.push({
+            pedido: `${cantidad} caja(s) de ${it.producto}`,
+            producto: oficial.descripcion,
+          });
+          return [];
+        }
+      }
+
       return [{
         descripcion: oficial.descripcion,
-        cantidad,
+        cantidad: cantidadFinal,
         unidad,
+        ...(cajasPedidas != null ? { cajasPedidas } : {}),
         precioUnit: precio,
-        subtotal: Math.round(precio * cantidad * 100) / 100,
+        subtotal: Math.round(precio * cantidadFinal * 100) / 100,
         cod: oficial.cod,
         region,
         oficial: true,
@@ -136,7 +168,7 @@ export function construirCotizacion(cliente: string, ciudad: string | undefined,
     return [{
       descripcion: it.producto,
       cantidad,
-      unidad: it.unidad || ref.unidad,
+      unidad: ref.unidad,
       precioUnit: ref.precio,
       subtotal: Math.round(ref.precio * cantidad * 100) / 100,
       oficial: false,

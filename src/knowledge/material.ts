@@ -68,6 +68,23 @@ function m2PorCajaDeFormato(formato: string): number | undefined {
 }
 
 /**
+ * m² que cubre una caja de ese producto, si se puede saber.
+ *
+ * Es la vuelta inversa de lo que hace el resto del archivo: sirve para cuando
+ * el cliente pide en CAJAS y hay que cotizar en m², que es la unidad en la que
+ * está la lista de precios. Prefiere el dato exacto de Dimensión Viva y cae a
+ * la estimación por formato.
+ */
+export function m2PorCajaDe(producto: string): { m2: number; exacto: boolean } | undefined {
+  const texto = (producto || "").toUpperCase();
+  const coleccion = DIMENSION_VIVA.find((c) => texto.includes(c.nombre.toUpperCase()));
+  if (coleccion?.m2PorCaja) return { m2: coleccion.m2PorCaja, exacto: true };
+  const formato = formatoNormalizado(producto);
+  const m2 = formato ? m2PorCajaDeFormato(formato) : undefined;
+  return m2 ? { m2, exacto: false } : undefined;
+}
+
+/**
  * Calcula el material para una superficie.
  *
  * `producto` se usa para encontrar el formato y, si es una colección de
