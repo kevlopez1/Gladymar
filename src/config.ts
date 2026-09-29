@@ -210,6 +210,22 @@ export const config = {
     // reiniciar el proceso).
     url: optional("DATABASE_URL", ""),
   },
+
+  /**
+   * Seguimiento al ASESOR: el bot le pregunta cómo le fue con el lead.
+   *
+   * Los valores por defecto son un equilibrio, no una ley: preguntar antes de
+   * 24 h es apurar a alguien que todavía no llamó, y repreguntar más de dos
+   * veces es la forma más rápida de que silencien al bot. Se cambian por
+   * variable de entorno sin tocar el código.
+   */
+  seguimientoAsesor: {
+    activo: optional("SEGUIMIENTO_ASESOR", "si").toLowerCase() !== "no",
+    /** Horas desde la derivación (o desde la última pregunta) antes de preguntar. */
+    horas: Number(optional("SEGUIMIENTO_ASESOR_HORAS", "24")) || 24,
+    /** Cuántas veces se pregunta por el mismo lead antes de dejarlo. */
+    maxPreguntas: Number(optional("SEGUIMIENTO_ASESOR_INTENTOS", "2")) || 2,
+  },
 };
 
 /**
