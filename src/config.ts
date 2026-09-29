@@ -60,6 +60,9 @@ export const config = {
     // parámetro: el resumen). Ver whatsapp/plantillas.ts.
     templateAvisos: optional("WHATSAPP_TEMPLATE_AVISOS", "avisos"),
     templateAvisosIdioma: optional("WHATSAPP_TEMPLATE_AVISOS_IDIOMA", "es"),
+    // Plantilla del seguimiento al asesor: la que sale cuando su ventana de
+    // 24 h ya se cerró y el texto libre rebota.
+    templateSeguimiento: optional("WHATSAPP_TEMPLATE_SEGUIMIENTO", "seguimiento_asesor"),
   },
 
   session: {
@@ -221,8 +224,15 @@ export const config = {
    */
   seguimientoAsesor: {
     activo: optional("SEGUIMIENTO_ASESOR", "si").toLowerCase() !== "no",
-    /** Horas desde la derivación (o desde la última pregunta) antes de preguntar. */
-    horas: Number(optional("SEGUIMIENTO_ASESOR_HORAS", "24")) || 24,
+    /**
+     * Horas desde la derivación (o desde la última pregunta) antes de preguntar.
+     *
+     * 23 y no 24 a propósito: si el asesor contestó el aviso del lead, su
+     * ventana de 24 h se cierra justo a las 24. Preguntando a las 23 se cae
+     * todavía dentro y el mensaje va como texto libre, con los botones. Pasada
+     * la ventana hay que ir por plantilla, que es más pobre y se cobra.
+     */
+    horas: Number(optional("SEGUIMIENTO_ASESOR_HORAS", "23")) || 23,
     /** Cuántas veces se pregunta por el mismo lead antes de dejarlo. */
     maxPreguntas: Number(optional("SEGUIMIENTO_ASESOR_INTENTOS", "2")) || 2,
   },

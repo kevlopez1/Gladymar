@@ -233,13 +233,17 @@ export async function sendDocument(
  * @param sectionTitle Título de la lista (máx. 24).
  * @param options Opciones (máx. 10). El `id` que vuelve es el texto de la opción.
  */
+/**
+ * @returns El wamid del mensaje, para poder reintentarlo por plantilla si Meta
+ *   avisa después que rebotó (la ventana de 24 h cerrada se entera tarde).
+ */
 export async function sendInteractiveList(
   to: string,
   body: string,
   buttonLabel: string,
   sectionTitle: string,
   options: string[],
-): Promise<void> {
+): Promise<string | null> {
   const rows = options.slice(0, 10).map((o) => {
     const row: { id: string; title: string; description?: string } = {
       id: o.slice(0, 200),
@@ -276,6 +280,8 @@ export async function sendInteractiveList(
     const detail = await res.text();
     throw new Error(`Error enviando lista interactiva (${res.status}): ${detail}`);
   }
+  const json = (await res.json().catch(() => ({}))) as { messages?: { id?: string }[] };
+  return json.messages?.[0]?.id ?? null;
 }
 
 export interface FilaLista {

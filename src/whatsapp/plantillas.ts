@@ -176,6 +176,33 @@ export async function asegurarPlantillaAvisos(): Promise<void> {
   ]);
 }
 
+/**
+ * Plantilla del seguimiento al asesor. UN parámetro: a quién se le derivó.
+ *
+ * Operativa y sin nada comercial, igual que la de avisos: cualquier gancho de
+ * venta hace que Meta la reclasifique a MARKETING, que cuesta más.
+ *
+ * No lleva el detalle del lead ni el teléfono: mandar la plantilla NO abre la
+ * ventana, solo la respuesta del asesor. Así que esto es una llamada a
+ * contestar, y los botones salen cuando conteste.
+ */
+export async function asegurarPlantillaSeguimiento(): Promise<void> {
+  await asegurarPlantilla(
+    config.whatsapp.templateSeguimiento,
+    config.whatsapp.templateAvisosIdioma,
+    "seguimiento de leads",
+    [
+      {
+        type: "BODY",
+        text:
+          "\u{1F504} Seguimiento de cartera: nos falta saber como termino tu gestion con {{1}}. " +
+          "Responde a este chat y te paso las opciones para registrarlo.",
+        example: { body_text: [["Rosa Delgado (Sucre)"]] },
+      },
+    ],
+  );
+}
+
 /** Deja el texto como lo acepta Meta: sin saltos, sin markdown, sin espacios repetidos. */
 function aplanar(texto: string): string {
   return (texto ?? "")

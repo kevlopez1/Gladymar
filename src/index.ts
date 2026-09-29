@@ -38,7 +38,7 @@ import {
 } from "./admin/seguimientoAsesor.js";
 import { pideDimensionViva } from "./knowledge/dimensionViva.js";
 import { departamentoDeLugar, mapaMunicipios, municipiosReconocidos } from "./knowledge/departamentos.js";
-import { asegurarPlantillaAvisos, resumenLead, esFalloDeVentana } from "./whatsapp/plantillas.js";
+import { asegurarPlantillaAvisos, asegurarPlantillaSeguimiento, resumenLead, esFalloDeVentana } from "./whatsapp/plantillas.js";
 
 const sheets = new SheetsLogger(config.sheets.webhookUrl);
 const crm = new CrmIngest(config.crm.ingestUrl, config.crm.ingestToken);
@@ -620,13 +620,20 @@ async function preguntarSeguimientos(): Promise<void> {
 
   for (const s of pendientes) {
     try {
-      await sendInteractiveList(
+      const wamid = await sendInteractiveList(
         s.asesorTelefono,
         textoPregunta(s),
         "Responder",
         "¿Cómo te fue?",
         RESPUESTAS.map((r) => r.titulo),
       );
+      // Meta responde 200 aunque la ventana esté cerrada: el rebote llega
+      // después por el webhook. Se deja anotado con qué reintentar, igual que
+      // el aviso de lead, pero con la plantilla del seguimiento.
+      if (wamid) {
+        const quien = `${s.clienteNombre || "tu cliente"}${s.ciudad ? ` (${s.ciudad})` : ""}`;
+        recordarAviso(wamid, s.asesorTelefono, quien, config.whatsapp.templateSeguimiento);
+      }
       await marcarPreguntado(s.id);
       console.log(
         `🔁 Seguimiento preguntado al asesor ${s.asesorTelefono} por el cliente ${s.clienteTelefono} ` +
@@ -704,16 +711,20 @@ async function avisarCotizacionAlAsesor(
  * hace falta persistirlo, y si el proceso se reinicia justo en el medio se
  * pierde un reintento, no un lead (el lead ya está en Postgres y en el CRM).
  */
-const avisosPendientes = new Map<string, { destino: string; resumen: string }>();
+const avisosPendientes = new Map<string, { destino: string; resumen: string; plantilla?: string }>();
 const MAX_AVISOS_PENDIENTES = 500;
 
-function recordarAviso(wamid: string, destino: string, resumen: string): void {
+/**
+ * @param plantilla Con cuál reintentar si rebota. Por defecto la de avisos de
+ *   lead; el seguimiento usa la suya, que dice otra cosa.
+ */
+function recordarAviso(wamid: string, destino: string, resumen: string, plantilla?: string): void {
   // Tope duro: si algo dejara de limpiar, esto no puede crecer sin freno.
   if (avisosPendientes.size >= MAX_AVISOS_PENDIENTES) {
     const primero = avisosPendientes.keys().next().value;
     if (primero) avisosPendientes.delete(primero);
   }
-  avisosPendientes.set(wamid, { destino, resumen });
+  avisosPendientes.set(wamid, { destino, resumen, plantilla });
   // Si a los 10 minutos no rebotó, llegó bien: se suelta la memoria.
   setTimeout(() => avisosPendientes.delete(wamid), 10 * 60 * 1000).unref?.();
 }
@@ -732,13 +743,16 @@ async function reintentarAvisoPorPlantilla(wamid: string, error?: string): Promi
   if (!esFalloDeVentana(error)) return; // número inexistente o bloqueo: la plantilla también fallaría
 
   try {
+    const plantilla = pendiente.plantilla || config.whatsapp.templateAvisos;
     await sendTemplate(
       pendiente.destino,
-      config.whatsapp.templateAvisos,
+      plantilla,
       config.whatsapp.templateAvisosIdioma,
       [pendiente.resumen],
     );
-    console.log(`📤 Aviso reenviado por plantilla a ${pendiente.destino} (la ventana de 24 h estaba cerrada).`);
+    console.log(
+      `📤 Reenviado por plantilla "${plantilla}" a ${pendiente.destino} (la ventana de 24 h estaba cerrada).`,
+    );
   } catch (err) {
     console.error(`No se pudo reenviar el aviso por plantilla a ${pendiente.destino}:`, err);
   }
@@ -1347,6 +1361,7 @@ void loguearUso();
 // Meta falla, el bot arranca igual y los avisos siguen saliendo como texto
 // libre (que es lo que ya hacía).
 void asegurarPlantillaAvisos();
+void asegurarPlantillaSeguimiento();
 
 // ── Cola de avisos del CRM de Prime ─────────────────────────────────────────
 // El CRM encola los avisos de estado de pedido; acá se reclaman y se mandan.
