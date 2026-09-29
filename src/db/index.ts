@@ -138,6 +138,42 @@ async function crearTabla(): Promise<void> {
       cache_leido BIGINT NOT NULL DEFAULT 0
     );
   `);
+
+  // Qué pasó con cada lead DESPUÉS de derivarlo.
+  //
+  // Hasta acá el bot entregaba el lead y se olvidaba: la tabla `solicitudes`
+  // ni siquiera guarda a qué asesor fue. Así nadie puede contestar "de los 40
+  // leads de la semana, ¿cuántos se cerraron?", que es la pregunta que hace
+  // Gerencia. Acá se guarda la derivación y se le pregunta al asesor cómo le
+  // fue, y su respuesta mueve la etapa en el CRM.
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS seguimiento_asesor (
+      id SERIAL PRIMARY KEY,
+      cliente_telefono TEXT NOT NULL,
+      cliente_nombre TEXT,
+      asesor_telefono TEXT NOT NULL,
+      asesor_nombre TEXT,
+      ciudad TEXT,
+      tipo TEXT,
+      detalle TEXT,
+      derivado_en BIGINT NOT NULL,
+      preguntas INT NOT NULL DEFAULT 0,
+      preguntado_en BIGINT,
+      resultado TEXT,
+      respondido_en BIGINT
+    );
+  `);
+  // Un mismo cliente puede volver y generar otro lead; lo que no se repite es
+  // el par cliente+asesor mientras el anterior siga sin respuesta.
+  await p.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS seguimiento_abierto_idx
+       ON seguimiento_asesor (cliente_telefono, asesor_telefono)
+     WHERE resultado IS NULL;`,
+  );
+  await p.query(
+    `CREATE INDEX IF NOT EXISTS seguimiento_pendiente_idx
+       ON seguimiento_asesor (derivado_en) WHERE resultado IS NULL;`,
+  );
 }
 
 /** Asegura que la tabla exista antes de la primera consulta (idempotente, con reintento si falló). */
@@ -520,5 +556,190 @@ export async function liberarAviso(claveIdem: string): Promise<void> {
     await p.query(`DELETE FROM avisos_enviados WHERE clave_idem = $1`, [claveIdem]);
   } catch (err) {
     console.error("No se pudo liberar la reserva del aviso:", err);
+  }
+}
+
+// ── Seguimiento de lo que pasó con cada lead derivado ───────────────────────
+
+export interface SeguimientoRow {
+  id: number;
+  clienteTelefono: string;
+  clienteNombre?: string;
+  asesorTelefono: string;
+  asesorNombre?: string;
+  ciudad?: string;
+  tipo?: string;
+  detalle?: string;
+  derivadoEn: number;
+  preguntas: number;
+}
+
+/**
+ * Anota que un lead se derivó. No pisa una derivación abierta del mismo par
+ * cliente+asesor: si el cliente vuelve a escribir antes de que el asesor
+ * conteste, sigue siendo el mismo seguimiento y repreguntar sería ruido.
+ */
+export async function registrarDerivacion(r: {
+  clienteTelefono: string;
+  clienteNombre?: string;
+  asesorTelefono: string;
+  asesorNombre?: string;
+  ciudad?: string;
+  tipo?: string;
+  detalle?: string;
+}): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await tablaLista();
+    await p.query(
+      `INSERT INTO seguimiento_asesor
+         (cliente_telefono, cliente_nombre, asesor_telefono, asesor_nombre, ciudad, tipo, detalle, derivado_en)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT DO NOTHING`,
+      [
+        r.clienteTelefono,
+        r.clienteNombre ?? null,
+        r.asesorTelefono,
+        r.asesorNombre ?? null,
+        r.ciudad ?? null,
+        r.tipo ?? null,
+        r.detalle ?? null,
+        Date.now(),
+      ],
+    );
+  } catch (err) {
+    console.error("No se pudo registrar la derivación para seguimiento:", err);
+  }
+}
+
+/**
+ * Derivaciones sin resultado a las que ya les toca una pregunta.
+ *
+ * `horasMinimas` es cuánto se espera desde la derivación (o desde la última
+ * pregunta) antes de volver a molestar al asesor.
+ */
+export async function seguimientosPendientes(
+  horasMinimas: number,
+  maxPreguntas: number,
+  limite = 20,
+): Promise<SeguimientoRow[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    await tablaLista();
+    const corte = Date.now() - horasMinimas * 3600_000;
+    const { rows } = await p.query(
+      `SELECT id, cliente_telefono, cliente_nombre, asesor_telefono, asesor_nombre,
+              ciudad, tipo, detalle, derivado_en, preguntas
+         FROM seguimiento_asesor
+        WHERE resultado IS NULL
+          AND preguntas < $2
+          AND COALESCE(preguntado_en, derivado_en) <= $1
+        ORDER BY derivado_en ASC
+        LIMIT $3`,
+      [corte, maxPreguntas, limite],
+    );
+    return rows.map((r: Record<string, unknown>) => ({
+      id: Number(r.id),
+      clienteTelefono: String(r.cliente_telefono),
+      clienteNombre: (r.cliente_nombre as string) ?? undefined,
+      asesorTelefono: String(r.asesor_telefono),
+      asesorNombre: (r.asesor_nombre as string) ?? undefined,
+      ciudad: (r.ciudad as string) ?? undefined,
+      tipo: (r.tipo as string) ?? undefined,
+      detalle: (r.detalle as string) ?? undefined,
+      derivadoEn: Number(r.derivado_en),
+      preguntas: Number(r.preguntas),
+    }));
+  } catch (err) {
+    console.error("No se pudieron leer los seguimientos pendientes:", err);
+    return [];
+  }
+}
+
+/** Marca que ya se le preguntó (suma un intento). */
+export async function marcarPreguntado(id: number): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await p.query(
+      `UPDATE seguimiento_asesor SET preguntas = preguntas + 1, preguntado_en = $2 WHERE id = $1`,
+      [id, Date.now()],
+    );
+  } catch (err) {
+    console.error("No se pudo marcar el seguimiento como preguntado:", err);
+  }
+}
+
+/** El seguimiento abierto más reciente de un asesor, para saber a qué contesta. */
+export async function seguimientoAbiertoDe(asesorTelefono: string): Promise<SeguimientoRow | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await tablaLista();
+    const { rows } = await p.query(
+      `SELECT id, cliente_telefono, cliente_nombre, asesor_telefono, asesor_nombre,
+              ciudad, tipo, detalle, derivado_en, preguntas
+         FROM seguimiento_asesor
+        WHERE asesor_telefono = $1 AND resultado IS NULL AND preguntado_en IS NOT NULL
+        ORDER BY preguntado_en DESC
+        LIMIT 1`,
+      [asesorTelefono],
+    );
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      id: Number(r.id),
+      clienteTelefono: String(r.cliente_telefono),
+      clienteNombre: (r.cliente_nombre as string) ?? undefined,
+      asesorTelefono: String(r.asesor_telefono),
+      asesorNombre: (r.asesor_nombre as string) ?? undefined,
+      ciudad: (r.ciudad as string) ?? undefined,
+      tipo: (r.tipo as string) ?? undefined,
+      detalle: (r.detalle as string) ?? undefined,
+      derivadoEn: Number(r.derivado_en),
+      preguntas: Number(r.preguntas),
+    };
+  } catch (err) {
+    console.error("No se pudo leer el seguimiento abierto del asesor:", err);
+    return null;
+  }
+}
+
+/** Guarda lo que contestó el asesor. */
+export async function registrarResultado(id: number, resultado: string): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await p.query(`UPDATE seguimiento_asesor SET resultado = $2, respondido_en = $3 WHERE id = $1`, [
+      id,
+      resultado,
+      Date.now(),
+    ]);
+  } catch (err) {
+    console.error("No se pudo registrar el resultado del seguimiento:", err);
+  }
+}
+
+/** Resumen de resultados para el reporte de Gerencia. */
+export async function resumenSeguimientos(dias = 30): Promise<Record<string, number> | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await tablaLista();
+    const { rows } = await p.query(
+      `SELECT COALESCE(resultado, 'sin respuesta') AS r, COUNT(*)::int AS n
+         FROM seguimiento_asesor
+        WHERE derivado_en >= $1
+        GROUP BY 1`,
+      [Date.now() - dias * 86_400_000],
+    );
+    const out: Record<string, number> = {};
+    for (const row of rows) out[String(row.r)] = Number(row.n);
+    return out;
+  } catch (err) {
+    console.error("No se pudo resumir los seguimientos:", err);
+    return null;
   }
 }

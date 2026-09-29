@@ -26,10 +26,19 @@ import { ciudadesConSucursal } from "./knowledge/sucursales.js";
 import { chequearNotificacionesPedidos } from "./integrations/pedidoEstados.js";
 import { procesarColaAvisos, anotarFalloTardio } from "./integrations/colaAvisos.js";
 import { parseCSV } from "./util/csv.js";
-import { insertarConversacion, obtenerConversaciones } from "./db/index.js";
+import { insertarConversacion, obtenerConversaciones, registrarDerivacion } from "./db/index.js";
+import {
+  seguimientoAsesorHabilitado,
+  pendientes as seguimientosPorPreguntar,
+  marcarPreguntado,
+  textoPregunta,
+  RESPUESTAS,
+  registrarRespuesta,
+  acuse,
+} from "./admin/seguimientoAsesor.js";
 import { pideDimensionViva } from "./knowledge/dimensionViva.js";
 import { departamentoDeLugar, mapaMunicipios, municipiosReconocidos } from "./knowledge/departamentos.js";
-import { asegurarPlantillaAvisos, resumenLead, esFalloDeVentana } from "./whatsapp/plantillas.js";
+import { asegurarPlantillaAvisos, asegurarPlantillaSeguimiento, resumenLead, esFalloDeVentana } from "./whatsapp/plantillas.js";
 
 const sheets = new SheetsLogger(config.sheets.webhookUrl);
 const crm = new CrmIngest(config.crm.ingestUrl, config.crm.ingestToken);
@@ -576,8 +585,66 @@ async function notificarAsesor(
     if (wamid) {
       recordarAviso(wamid, destino, resumenLead({ nombre, telefono: from, tipo: sol.tipo, detalle: sol.detalle }));
     }
+    // Queda anotado para preguntarle después cómo le fue. Va DESPUÉS del envío
+    // y no antes: si el aviso no salió, no hay nada sobre lo que preguntar.
+    void registrarDerivacion({
+      clienteTelefono: from,
+      clienteNombre: nombre,
+      asesorTelefono: destino,
+      asesorNombre: adminNombrePorCiudad(ciudad),
+      ciudad,
+      tipo: sol.tipo,
+      detalle: sol.detalle,
+    });
   } catch (err) {
     console.error(`No se pudo avisar al asesor ${destino}:`, err);
+  }
+}
+
+/**
+ * Le pregunta a los asesores cómo les fue con los leads que se les derivó.
+ *
+ * Nunca lanza: esto corre en un timer y un fallo acá no puede tumbar el
+ * proceso. Un asesor al que no se le pudo preguntar vuelve en el próximo ciclo.
+ */
+async function preguntarSeguimientos(): Promise<void> {
+  if (!seguimientoAsesorHabilitado() || !isWhatsAppConfigured()) return;
+  let pendientes: Awaited<ReturnType<typeof seguimientosPorPreguntar>>;
+  try {
+    pendientes = await seguimientosPorPreguntar();
+  } catch (err) {
+    console.error("No se pudieron leer los seguimientos pendientes:", err);
+    return;
+  }
+  if (!pendientes.length) return;
+
+  for (const s of pendientes) {
+    try {
+      const wamid = await sendInteractiveList(
+        s.asesorTelefono,
+        textoPregunta(s),
+        "Responder",
+        "¿Cómo te fue?",
+        RESPUESTAS.map((r) => r.titulo),
+      );
+      // Meta responde 200 aunque la ventana esté cerrada: el rebote llega
+      // después por el webhook. Se deja anotado con qué reintentar, igual que
+      // el aviso de lead, pero con la plantilla del seguimiento.
+      if (wamid) {
+        const quien = `${s.clienteNombre || "tu cliente"}${s.ciudad ? ` (${s.ciudad})` : ""}`;
+        recordarAviso(wamid, s.asesorTelefono, quien, config.whatsapp.templateSeguimiento);
+      }
+      await marcarPreguntado(s.id);
+      console.log(
+        `🔁 Seguimiento preguntado al asesor ${s.asesorTelefono} por el cliente ${s.clienteTelefono} ` +
+          `(intento ${s.preguntas + 1}).`,
+      );
+    } catch (err) {
+      // No se marca el intento: casi siempre es la ventana de 24 h cerrada, y
+      // quemar el intento por algo que no fue culpa del asesor lo dejaría sin
+      // preguntar nunca.
+      console.error(`No se pudo preguntarle el seguimiento a ${s.asesorTelefono}:`, err);
+    }
   }
 }
 
@@ -644,16 +711,20 @@ async function avisarCotizacionAlAsesor(
  * hace falta persistirlo, y si el proceso se reinicia justo en el medio se
  * pierde un reintento, no un lead (el lead ya está en Postgres y en el CRM).
  */
-const avisosPendientes = new Map<string, { destino: string; resumen: string }>();
+const avisosPendientes = new Map<string, { destino: string; resumen: string; plantilla?: string }>();
 const MAX_AVISOS_PENDIENTES = 500;
 
-function recordarAviso(wamid: string, destino: string, resumen: string): void {
+/**
+ * @param plantilla Con cuál reintentar si rebota. Por defecto la de avisos de
+ *   lead; el seguimiento usa la suya, que dice otra cosa.
+ */
+function recordarAviso(wamid: string, destino: string, resumen: string, plantilla?: string): void {
   // Tope duro: si algo dejara de limpiar, esto no puede crecer sin freno.
   if (avisosPendientes.size >= MAX_AVISOS_PENDIENTES) {
     const primero = avisosPendientes.keys().next().value;
     if (primero) avisosPendientes.delete(primero);
   }
-  avisosPendientes.set(wamid, { destino, resumen });
+  avisosPendientes.set(wamid, { destino, resumen, plantilla });
   // Si a los 10 minutos no rebotó, llegó bien: se suelta la memoria.
   setTimeout(() => avisosPendientes.delete(wamid), 10 * 60 * 1000).unref?.();
 }
@@ -672,13 +743,16 @@ async function reintentarAvisoPorPlantilla(wamid: string, error?: string): Promi
   if (!esFalloDeVentana(error)) return; // número inexistente o bloqueo: la plantilla también fallaría
 
   try {
+    const plantilla = pendiente.plantilla || config.whatsapp.templateAvisos;
     await sendTemplate(
       pendiente.destino,
-      config.whatsapp.templateAvisos,
+      plantilla,
       config.whatsapp.templateAvisosIdioma,
       [pendiente.resumen],
     );
-    console.log(`📤 Aviso reenviado por plantilla a ${pendiente.destino} (la ventana de 24 h estaba cerrada).`);
+    console.log(
+      `📤 Reenviado por plantilla "${plantilla}" a ${pendiente.destino} (la ventana de 24 h estaba cerrada).`,
+    );
   } catch (err) {
     console.error(`No se pudo reenviar el aviso por plantilla a ${pendiente.destino}:`, err);
   }
@@ -854,6 +928,37 @@ async function handleIncoming(msg: {
         console.error(`Error volviendo al panel admin para ${msg.from}:`, err);
       }
       return;
+    }
+
+    // ¿Está contestando cómo le fue con un lead? Va PRIMERO: si no, el panel
+    // lee "Sigue en trato" como un comando cualquiera y le muestra el menú.
+    if (!testCliente.has(msg.from)) {
+      try {
+        const r = await registrarRespuesta(msg.from, msg.text);
+        if (r) {
+          void markAsRead(msg.messageId);
+          console.log(
+            `🔁 ${admin.nombre} respondió "${r.respuesta.resultado}" sobre el cliente ${r.seguimiento.clienteTelefono}.`,
+          );
+          // La etapa viaja al CRM con el teléfono del CLIENTE, que es la ficha
+          // que hay que mover, no la del asesor.
+          if (r.respuesta.etapa) {
+            void crm.send({
+              external_id: r.seguimiento.clienteTelefono,
+              name: r.seguimiento.clienteNombre,
+              city: r.seguimiento.ciudad,
+              stage: r.respuesta.etapa,
+              asesor: r.seguimiento.asesorNombre,
+              departamento: departamentoDeLugar(r.seguimiento.ciudad),
+            });
+          }
+          await sendText(msg.from, acuse(r));
+          await enviarPanel(msg.from, await handleAdminCommand(`wa:${msg.from}`, admin, "menu"));
+          return;
+        }
+      } catch (err) {
+        console.error(`Error registrando la respuesta de seguimiento de ${msg.from}:`, err);
+      }
     }
 
     const pidioProbar = /probar/.test(t) && /(cliente|crm|agente|sistema|demo)/.test(t);
@@ -1241,6 +1346,13 @@ async function loguearUso(): Promise<void> {
       (hoy ? ` Hoy (${hoy.fecha}): ${hoy.llamadas} llamada(s).` : ""),
   );
 }
+// Seguimiento al asesor: cada 30 min se mira si hay leads derivados sin
+// resultado a los que ya les toca la pregunta. El intervalo es del chequeo, no
+// de la pregunta: cada lead se pregunta según config.seguimientoAsesor.horas.
+const seguimientoTimer = setInterval(() => void preguntarSeguimientos(), 30 * 60 * 1000);
+if (typeof seguimientoTimer.unref === "function") seguimientoTimer.unref();
+void preguntarSeguimientos();
+
 const usoTimer = setInterval(() => void loguearUso(), 60 * 60 * 1000);
 if (typeof usoTimer.unref === "function") usoTimer.unref();
 void loguearUso();
@@ -1249,6 +1361,7 @@ void loguearUso();
 // Meta falla, el bot arranca igual y los avisos siguen saliendo como texto
 // libre (que es lo que ya hacía).
 void asegurarPlantillaAvisos();
+void asegurarPlantillaSeguimiento();
 
 // ── Cola de avisos del CRM de Prime ─────────────────────────────────────────
 // El CRM encola los avisos de estado de pedido; acá se reclaman y se mandan.
