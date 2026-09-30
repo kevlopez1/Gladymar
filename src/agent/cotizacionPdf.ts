@@ -88,7 +88,9 @@ export function generarCotizacionPDF(cot: Cotizacion): Promise<string> {
     cot.items.forEach((it, i) => {
       // (*) marca el ítem que no salió de la lista oficial (precio estimado).
       // (2ª) segunda selección · (*) precio estimado, fuera de la lista oficial.
-      const marcas = [esSegunda(it.status) ? "(2ª)" : "", it.oficial === false ? "(*)" : ""].filter(Boolean).join(" ");
+      // Ya no hay ítems estimados: lo que no está en la lista se deriva, no se
+      // cotiza. Queda solo la marca de segunda selección.
+      const marcas = esSegunda(it.status) ? "(2ª)" : "";
       // El origen se imprime SOLO cuando la lista lo dice (hojas NAC / IMP).
       // Si no lo dice, no va nada: el cliente prefiere no ver el dato antes que
       // verlo mal, y "nacional por descarte" es lo que reportó Gerencia.
@@ -129,9 +131,6 @@ export function generarCotizacionPDF(cot: Cotizacion): Promise<string> {
         : "• Precios de lista a nivel nacional: no se pudo determinar la región del cliente.\n") +
       (cot.items.some((i) => esSegunda(i.status))
         ? "• Los ítems marcados con (2ª) son de SEGUNDA SELECCIÓN: material comercial, no de primera calidad.\n"
-        : "") +
-      (cot.items.some((i) => i.oficial === false)
-        ? "• Los ítems marcados con (*) no figuran en la lista oficial: su precio es estimado y lo confirma el asesor.\n"
         : "") +
       // La cerámica se despacha por CAJA CERRADA: nadie vende media caja. Así
       // que los m² que se entregan casi nunca son los m² cotizados, y el

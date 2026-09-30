@@ -19,7 +19,7 @@ import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./what
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
 import { CrmIngest, stageDeTipo, tipoSolicitudCrm } from "./integrations/crm.js";
-import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, adminNombrePorCiudad, puedeCotizarPDF, ADMIN_TELEFONO, adminRoster } from "./admin/roles.js";
+import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, adminNombrePorCiudad, ADMIN_TELEFONO, adminRoster } from "./admin/roles.js";
 import { handleAdminCommand, reportes, type AdminReply } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
 import { ciudadesConSucursal } from "./knowledge/sucursales.js";
@@ -1095,14 +1095,17 @@ async function procesarTurnoCliente(
       console.log(`📄 PDF de ${from}: ${documento ? "descargado, se envía al agente" : "no se pudo leer"}`);
     }
 
-    // La cotización en PDF está reservada: la emiten el Gerente General
-    // (Andrés Tejada) y los números cargados en COTIZACION_PDF_TELEFONOS. Lo
-    // decidió Gladymar el 15/09/2026: ni el cliente final ni los admins
-    // regionales la generan.
-    // OJO: esto NO cumple la pág. 8 de la propuesta, que promete el PDF al
-    // cliente. Está así por pedido expreso; si se revierte, alcanza con volver
-    // a poner `cotizacionPDF: true`.
-    const cotizacionPDF = prueba && puedeCotizarPDF(from);
+    // La cotización en PDF va al CLIENTE FINAL, que es lo que promete la
+    // página 8 de la propuesta.
+    //
+    // Estuvo reservada al Gerente General y a COTIZACION_PDF_TELEFONOS desde el
+    // 15/09/2026, mientras los precios se probaban. Gladymar la abrió a todos
+    // los clientes el 30/09/2026, después de que siete asesores la usaran en
+    // producción y de cerrar los tres errores de precio que tenía (la unidad en
+    // cajas, el origen nacional/importado y la segunda selección).
+    //
+    // Para volver a cerrarla: `prueba && puedeCotizarPDF(from)`.
+    const cotizacionPDF = true;
     const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF, prueba, imagen, documento });
 
     // Respuestas en bloques: muestra "escribiendo…" antes de cada bloque (y un mínimo antes del primero).

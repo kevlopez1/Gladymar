@@ -409,11 +409,13 @@ export async function executeTool(
       // Lo de SEGUNDA no se cotiza: se deriva (Gerencia, 20/09/2026). Si TODO
       // lo que pidió es de segunda no hay cotización que mandar, así que se
       // registra el lead y se corta acá, sin PDF.
-      const derivados = cot.derivar
+      const nombrar = (d: (typeof cot.derivar)[number]) =>
         // Sin el paréntesis cuando el cliente nombró el producto tal cual: ahí
         // "X (X)" no aclara nada, solo hace ruido en el aviso al asesor.
-        .map((d) => (d.pedido === d.producto ? `"${d.pedido}"` : `"${d.pedido}" (${d.producto})`))
-        .join(", ");
+        !d.producto || d.pedido === d.producto ? `"${d.pedido}"` : `"${d.pedido}" (${d.producto})`;
+      const segundaDerivada = cot.derivar.filter((d) => d.motivo === "segunda");
+      const fueraDeLista = cot.derivar.filter((d) => d.motivo === "fuera_de_lista");
+      const derivados = cot.derivar.map(nombrar).join(", ");
       if (!cot.items.length) {
         // Se reusa registrarSolicitud para que el lead siga el MISMO camino que
         // cualquier otro: panel, CRM y aviso al asesor de la zona. Su `solicitud`
@@ -425,22 +427,28 @@ export async function executeTool(
             prioridad: "normal",
             ciudad,
             nombre: nombre !== "Cliente" ? nombre : undefined,
-            detalle: `Pide material de SEGUNDA SELECCIÓN: ${derivados}. El bot no cotiza segunda.`,
+            detalle:
+              segundaDerivada.length && !fueraDeLista.length
+                ? `Pide material de SEGUNDA SELECCIÓN: ${derivados}. El bot no cotiza segunda.`
+                : `El bot no pudo cotizar: ${derivados}. Requiere cotización manual del asesor.`,
           },
           telefonoCliente,
           prueba,
         );
-        console.log(`🧾 Cotización derivada (segunda selección) para ${nombre}: ${derivados}`);
+        console.log(`🧾 Cotización derivada para ${nombre}: ${derivados}`);
         return {
           escalated: true,
           solicitud: lead.solicitud,
           content:
-            `Lo que pidió el cliente (${derivados}) es material de SEGUNDA SELECCIÓN, y eso el bot NO lo cotiza. ` +
+            `No se pudo cotizar nada de lo que pidió el cliente (${derivados}): ` +
+            (segundaDerivada.length && !fueraDeLista.length
+              ? "es material de SEGUNDA SELECCIÓN y el bot no lo cotiza. "
+              : "no figura en la lista de precios oficial. ") +
             "El lead ya quedó registrado para el asesor de su zona. " +
-            "Decíselo con naturalidad y sin tecnicismos: que ese material lo maneja directamente un asesor, " +
-            "que ya lo pusiste en contacto y lo van a llamar por este mismo WhatsApp. " +
-            "NO le des ningún precio de ese producto y NO le ofrezcas un reemplazo de primera por tu cuenta: " +
-            "si él quiere ver alternativas de primera, preguntáselo y recién ahí buscá.",
+            "Decíselo con naturalidad y sin tecnicismos: que eso lo ve directamente un asesor, que ya lo " +
+            "pusiste en contacto y lo van a llamar por este mismo WhatsApp. " +
+            "NUNCA le des un precio de esos productos ni lo estimes, y no le ofrezcas un reemplazo por tu " +
+            "cuenta: si quiere ver alternativas, preguntáselo y recién ahí buscá.",
         };
       }
 
@@ -484,10 +492,15 @@ export async function executeTool(
             ? `⚠️ AVISO OBLIGATORIO: ${segundas.map((i) => i.descripcion).join(", ")} es material de SEGUNDA SELECCIÓN (comercial), no de primera. ` +
               "Decíselo al cliente con naturalidad, sin que suene a letra chica, y ofrecele el equivalente de primera por si lo prefiere.\n\n"
             : "") +
-          (cot.derivar.length
-            ? `⚠️ AVISO OBLIGATORIO: ${derivados} es material de SEGUNDA SELECCIÓN y NO se cotiza. ` +
-              "Quedó FUERA de la cotización y del total. Decile al cliente que ese material en particular " +
-              "lo ve directamente un asesor, que ya lo derivaste, y seguí con el resto de su cotización.\n\n"
+          (segundaDerivada.length
+            ? `⚠️ AVISO OBLIGATORIO: ${segundaDerivada.map(nombrar).join(", ")} es material de SEGUNDA SELECCIÓN ` +
+              "y NO se cotiza. Quedó FUERA de la cotización y del total. Decile al cliente que ese material en " +
+              "particular lo ve directamente un asesor, que ya lo derivaste, y seguí con el resto.\n\n"
+            : "") +
+          (fueraDeLista.length
+            ? `⚠️ AVISO OBLIGATORIO: ${fueraDeLista.map(nombrar).join(", ")} no figura en la lista de precios, ` +
+              "así que NO se cotizó y quedó fuera del total. NO le inventes un precio ni lo estimes: decile que " +
+              "ese producto se lo cotiza un asesor y seguí con el resto.\n\n"
             : "") +
           (sustituidos.length
             ? "⚠️ AVISO OBLIGATORIO: el cliente pidió " +
