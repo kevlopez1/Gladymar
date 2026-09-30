@@ -3,7 +3,6 @@
  *
  * ⚠️ Precios REFERENCIALES (ver precios.ts). Cada cotización lo aclara.
  */
-import { precioReferencial } from "../knowledge/precios.js";
 import { esFormatoDescontinuado } from "../knowledge/descontinuados.js";
 import { m2PorCajaDe } from "../knowledge/material.js";
 import {
@@ -60,14 +59,14 @@ export const VIGENCIA_HORAS = 24;
 export interface Cotizacion {
   numero: string;
   /**
-   * Lo que el cliente pidió y NO se cotizó por ser de segunda selección.
+   * Lo que el cliente pidió y NO se cotizó.
    *
    * Va aparte de `items` a propósito: no entra al PDF ni al total. Gerencia
    * pidió que la segunda se derive al asesor, y una línea sin precio dentro de
    * la cotización no es derivar, es dejar un hueco que el cliente interpreta
    * solo. Quien arma la respuesta tiene que decirlo y derivarlo.
    */
-  derivar: { pedido: string; producto: string }[];
+  derivar: { pedido: string; producto?: string; motivo: "segunda" | "fuera_de_lista" }[];
   /** Departamento con cuyo precio se cotizó (undefined = no se pudo determinar). */
   departamento?: string;
   /** Emisión, con hora: con 24 h de vigencia la fecha sola no alcanza. */
@@ -92,7 +91,7 @@ export function construirCotizacion(cliente: string, ciudad: string | undefined,
   // Cruz que en La Paz (hasta 66% de diferencia en la lista de septiembre).
   const departamento = departamentoDeCiudad(ciudad);
 
-  const derivar: { pedido: string; producto: string }[] = [];
+  const derivar: Cotizacion["derivar"] = [];
 
   const items: CotItem[] = entrada.flatMap((it): CotItem[] => {
     const cantidad = Number(it.cantidad) || 1;
@@ -103,7 +102,7 @@ export function construirCotizacion(cliente: string, ciudad: string | undefined,
     // dejaría cotizada la primera calidad de nombre parecido.
     const segunda = pideSegunda(it.producto);
     if (segunda) {
-      derivar.push({ pedido: it.producto, producto: segunda });
+      derivar.push({ pedido: it.producto, producto: segunda, motivo: "segunda" });
       return [];
     }
 
@@ -140,6 +139,7 @@ export function construirCotizacion(cliente: string, ciudad: string | undefined,
           derivar.push({
             pedido: `${cantidad} caja(s) de ${it.producto}`,
             producto: oficial.descripcion,
+            motivo: "fuera_de_lista",
           });
           return [];
         }
@@ -161,19 +161,16 @@ export function construirCotizacion(cliente: string, ciudad: string | undefined,
       }];
     }
 
-    // No está en la lista oficial (un accesorio suelto, algo mal escrito). Se
-    // cotiza con el estimador y se marca, para que el PDF lo distinga: mezclar
-    // precios reales con estimados sin avisar es lo peor de los dos mundos.
-    const ref = precioReferencial(it.producto);
-    return [{
-      descripcion: it.producto,
-      cantidad,
-      unidad: ref.unidad,
-      precioUnit: ref.precio,
-      subtotal: Math.round(ref.precio * cantidad * 100) / 100,
-      oficial: false,
-      ...(pidioDescontinuado ? { reemplaza: it.producto } : {}),
-    }];
+    // No está en la lista oficial. Antes se cotizaba con un estimador de
+    // precios INVENTADOS, marcado con un asterisco. Eso servía mientras la
+    // cotización la veían solo asesores, que saben leer el asterisco; desde que
+    // el PDF va al cliente final con el logo de la empresa, no: el cliente lee
+    // un número y cree que es el precio.
+    //
+    // Se deriva, igual que la segunda selección. Preferimos que un asesor
+    // cotice a mano un accesorio suelto antes que mandar una cifra inventada.
+    derivar.push({ pedido: it.producto, motivo: "fuera_de_lista" });
+    return [];
   });
   const total = items.reduce((s, i) => s + i.subtotal, 0);
 
