@@ -20,6 +20,7 @@ import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
 import { CrmIngest, stageDeTipo, tipoSolicitudCrm } from "./integrations/crm.js";
 import { getAdminByPhone, adminFromRole, adminTelefonoPorCiudad, adminNombrePorCiudad, ADMIN_TELEFONO, adminRoster } from "./admin/roles.js";
+import { asesorDeCliente } from "./admin/reparto.js";
 import { handleAdminCommand, reportes, type AdminReply } from "./admin/commands.js";
 import { bumpConversacion } from "./admin/data.js";
 import { ciudadesConSucursal } from "./knowledge/sucursales.js";
@@ -703,7 +704,10 @@ async function notificarAsesor(
   canal: Canal = "whatsapp",
 ): Promise<void> {
   const ciudad = sol.ciudad || "";
-  const destino = adminTelefonoPorCiudad(ciudad) || ADMIN_TELEFONO;
+  // Reparto por sucursal y por turnos (ver admin/reparto.ts). Si no se puede
+  // resolver, cae al comportamiento de siempre.
+  const asignado = await asesorDeCliente(idParaCrm(canal, from), ciudad);
+  const destino = asignado?.telefono || adminTelefonoPorCiudad(ciudad) || ADMIN_TELEFONO;
   const prio = sol.prioridad === "critica" ? "  🔴 CRÍTICA" : sol.prioridad === "alta" ? "  🟠 ALTA" : "";
   const nombre = sol.nombre || name || "Cliente";
   const lineas = [
@@ -719,7 +723,11 @@ async function notificarAsesor(
   ].filter(Boolean);
   try {
     const wamid = await sendText(destino, lineas.join("\n"));
-    console.log(`📤 Handoff -> asesor ${destino} (cliente ${from}, ${ciudad || "sin ciudad"})`);
+    console.log(
+      `📤 Handoff -> asesor ${asignado?.nombre ?? "?"} ${destino} ` +
+        `(cliente ${from}, ${ciudad || "sin ciudad"}` +
+        `${asignado ? `, ${asignado.sucursal} por ${asignado.via}` : ""})`,
+    );
     // Meta responde 200 aunque la ventana de 24 h esté cerrada: el fallo llega
     // segundos después por el webhook. Guardamos con qué reintentar por si eso
     // pasa; el asesor casi nunca le escribe al bot, así que pasa seguido.
@@ -732,7 +740,7 @@ async function notificarAsesor(
       clienteTelefono: idParaCrm(canal, from),
       clienteNombre: nombre,
       asesorTelefono: destino,
-      asesorNombre: adminNombrePorCiudad(ciudad),
+      asesorNombre: asignado?.nombre || adminNombrePorCiudad(ciudad),
       ciudad,
       tipo: sol.tipo,
       detalle: sol.detalle,
@@ -802,7 +810,8 @@ async function avisarCotizacionAlAsesor(
   cot: Cotizacion,
   urlPdf: string,
 ): Promise<void> {
-  const destino = adminTelefonoPorCiudad(cot.ciudad || "") || ADMIN_TELEFONO;
+  const asignadoCot = await asesorDeCliente(from, cot.ciudad || "");
+  const destino = asignadoCot?.telefono || adminTelefonoPorCiudad(cot.ciudad || "") || ADMIN_TELEFONO;
   const lineas = [
     `🧾 *Cotización ${cot.numero}*${cot.ciudad ? " · " + cot.ciudad : ""}`,
     `👤 ${cot.cliente || nombreCliente || "Cliente"}`,
@@ -1414,6 +1423,7 @@ async function procesarTurnoCliente(
       // undefined y el campo NO viaja: mandarlo vacío borraría en el CRM una
       // asignación que alguien pudo haber hecho a mano.
       const ciudadLead = reply.solicitud?.ciudad || ciudadPorUsuario.get(from);
+      const asesorLead = adminRemitente ? undefined : await asesorDeCliente(idParaCrm(canal, from), ciudadLead);
       void crm.send({
         // Prefijado con el canal cuando no es WhatsApp: un PSID y un teléfono
         // pueden tener los mismos dígitos y serían la misma ficha.
@@ -1425,7 +1435,10 @@ async function procesarTurnoCliente(
         stage: adminRemitente ? undefined : stageDeTipo(reply.solicitud?.tipo),
         tipo_solicitud: adminRemitente ? undefined : tipoSolicitudCrm(reply.solicitud?.tipo),
         interest: adminRemitente ? undefined : reply.solicitud?.detalle,
-        asesor: adminRemitente ? undefined : adminNombrePorCiudad(ciudadLead),
+        // El nombre tiene que ser EXACTO al del padrón: el CRM lo cruza literal
+        // para darle la cartera al asesor. Por eso sale del reparto y no de la
+        // tabla de regionales, que lo tiene con tilde ("Thalía") y no cruzaría.
+        asesor: adminRemitente ? undefined : asesorLead?.nombre || adminNombrePorCiudad(ciudadLead),
         // El departamento viaja aunque NO haya asesor (Beni, Pando): así el CRM
         // puede filtrar por región sin depender del nombre del asesor, y un lead
         // de una región sin asesor asignado igual lo ve alguien.
