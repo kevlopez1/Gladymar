@@ -88,10 +88,34 @@ export function parseMensajesMeta(body: unknown): MensajeMeta[] {
   return out;
 }
 
-function credenciales(canal: Canal): { id: string; token: string } | null {
+interface Credenciales {
+  id: string;
+  token: string;
+  /** Meta tiene DOS dominios y el token sirve en uno solo de los dos. */
+  base: string;
+}
+
+/**
+ * Con qué identidad y contra qué dominio se responde cada canal.
+ *
+ * Instagram admite dos configuraciones y no son intercambiables:
+ *
+ * - "API setup with Facebook login": la cuenta cuelga de la página, se responde
+ *   con el token de página contra graph.facebook.com.
+ * - "API setup with Instagram login": la cuenta se conecta sola a la app, tiene
+ *   su propio token y responde contra graph.instagram.com.
+ *
+ * Mandar el token correcto al dominio equivocado da un 190 sin explicar por
+ * qué, así que el dominio se elige junto con el token y nunca por separado.
+ */
+function credenciales(canal: Canal): Credenciales | null {
+  if (canal === "instagram" && config.meta.instagramToken) {
+    const id = config.meta.instagramId || config.meta.pageId;
+    return id ? { id, token: config.meta.instagramToken, base: "https://graph.instagram.com" } : null;
+  }
   const token = config.meta.pageToken || config.whatsapp.accessToken;
   const id = canal === "instagram" ? config.meta.instagramId || config.meta.pageId : config.meta.pageId;
-  return id && token ? { id, token } : null;
+  return id && token ? { id, token, base: "https://graph.facebook.com" } : null;
 }
 
 export function metaHabilitado(canal: Canal): boolean {
@@ -109,7 +133,7 @@ export async function enviarMeta(canal: Canal, destinatario: string, texto: stri
   const cred = credenciales(canal);
   if (!cred) throw new Error(`Falta META_PAGE_ID o el token para responder por ${canal}.`);
 
-  const url = `https://graph.facebook.com/${config.whatsapp.apiVersion}/${cred.id}/messages`;
+  const url = `${cred.base}/${config.whatsapp.apiVersion}/${cred.id}/messages`;
   const res = await fetch(url, {
     method: "POST",
     headers: { Authorization: `Bearer ${cred.token}`, "Content-Type": "application/json" },
