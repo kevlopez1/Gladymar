@@ -88,7 +88,7 @@ export function parseMensajesMeta(body: unknown): MensajeMeta[] {
   return out;
 }
 
-interface Credenciales {
+export interface Credenciales {
   id: string;
   token: string;
   /** Meta tiene DOS dominios y el token sirve en uno solo de los dos. */
@@ -108,6 +108,10 @@ interface Credenciales {
  * Mandar el token correcto al dominio equivocado da un 190 sin explicar por
  * qué, así que el dominio se elige junto con el token y nunca por separado.
  */
+export function credencialesDe(canal: Canal): Credenciales | null {
+  return credenciales(canal);
+}
+
 function credenciales(canal: Canal): Credenciales | null {
   if (canal === "instagram" && config.meta.instagramToken) {
     const id = config.meta.instagramId || config.meta.pageId;

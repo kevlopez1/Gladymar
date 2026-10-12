@@ -238,6 +238,14 @@ export const config = {
      * este y no el de la página.
      */
     instagramToken: optional("META_INSTAGRAM_TOKEN", ""),
+    /**
+     * Cada cuántos segundos preguntarle a Meta si hay DM nuevos.
+     *
+     * Es el camino alternativo al webhook: sirve cuando Meta no entrega los
+     * eventos. 0 lo apaga. Por debajo de 30 s no baja: cada ciclo son dos
+     * llamadas a la API y el límite de Meta no es generoso.
+     */
+    sondeoSegundos: Math.max(0, Number(optional("META_SONDEO_SEGUNDOS", "0")) || 0),
   },
 
   /**
