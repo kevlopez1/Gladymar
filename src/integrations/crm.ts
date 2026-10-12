@@ -133,9 +133,19 @@ export class CrmIngest {
       // lead?" sin acceso a la base del CRM: el payload se iba sin dejar rastro.
       // No se loguea el mensaje ni la respuesta (son texto del cliente).
       if (p.stage) {
+        // Se loguean las DOS etapas: la que mandamos y la que el CRM terminó
+        // aplicando, que no siempre coinciden — el CRM frena las que el bot
+        // deduce solo (contactado, cotizado) cuando el lead ya está más
+        // adelante. Con una sola de las dos, un resultado que no se aplicó se
+        // ve igual que uno que sí.
+        const devuelta = await res
+          .json()
+          .then((j) => (j as { stage?: string })?.stage)
+          .catch(() => undefined);
+        const quedo = devuelta && devuelta !== p.stage ? ` quedó=${devuelta}` : "";
         console.log(
           `🔗 CRM lead: external_id=${p.external_id} city=${p.city ?? "—"} ` +
-            `departamento=${p.departamento ?? "—"} asesor=${p.asesor ?? "—"} stage=${p.stage}`,
+            `departamento=${p.departamento ?? "—"} asesor=${p.asesor ?? "—"} stage=${p.stage}${quedo}`,
         );
       }
       return "ok";
