@@ -743,3 +743,63 @@ export async function resumenSeguimientos(dias = 30): Promise<Record<string, num
     return null;
   }
 }
+
+/**
+ * Cuántos clientes distintos escribieron, y de cuántos sabemos la ciudad.
+ *
+ * Lo pidió Prime para cuadrar su base con la nuestra: ellos no pueden consultar
+ * esta Postgres y los logs solo dejan rastro de los envíos con etapa, que son
+ * una fracción. Se cuenta sobre `conversaciones`, que es donde queda TODO el
+ * que escribió, no solo el que llegó a pedir algo.
+ */
+export async function resumenLeads(dias = 7): Promise<{
+  dias: number;
+  clientesUnicos: number;
+  conCiudad: number;
+  sinCiudad: number;
+  porCanal: Record<string, number>;
+  porCiudad: Record<string, number>;
+} | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await tablaLista();
+    const desde = Date.now() - dias * 86_400_000;
+    // Una ciudad por cliente: la primera que se le detectó. Un MAX sobre un
+    // texto alcanza — lo que importa es "¿sabemos de dónde es?", no cuál de
+    // dos ciudades quedó registrada primero.
+    const { rows } = await p.query(
+      `SELECT telefono, MAX(ciudad) AS ciudad
+         FROM conversaciones
+        WHERE creado_en >= $1 AND telefono <> ''
+        GROUP BY telefono`,
+      [desde],
+    );
+
+    const porCanal: Record<string, number> = {};
+    const porCiudad: Record<string, number> = {};
+    let conCiudad = 0;
+    for (const r of rows) {
+      const id = String(r.telefono);
+      const i = id.indexOf(":");
+      const canal = i > 0 ? id.slice(0, i) : "whatsapp";
+      porCanal[canal] = (porCanal[canal] || 0) + 1;
+      const ciudad = String(r.ciudad ?? "").trim();
+      if (ciudad) {
+        conCiudad++;
+        porCiudad[ciudad] = (porCiudad[ciudad] || 0) + 1;
+      }
+    }
+    return {
+      dias,
+      clientesUnicos: rows.length,
+      conCiudad,
+      sinCiudad: rows.length - conCiudad,
+      porCanal,
+      porCiudad: Object.fromEntries(Object.entries(porCiudad).sort((a, b) => b[1] - a[1])),
+    };
+  } catch (err) {
+    console.error("No se pudo resumir los leads:", err);
+    return null;
+  }
+}

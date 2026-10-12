@@ -15,6 +15,14 @@ export interface CrmPayload {
   interest?: string;
   message?: string;
   response?: string;
+  /**
+   * Por dónde escribió: "whatsapp", "messenger" o "instagram".
+   *
+   * Sin esto el CRM guardaba todo como WhatsApp y le armaba un enlace de
+   * wa.me a un id de Meta, que no es un teléfono y no lleva a ningún lado.
+   * Si no viene, se deduce del prefijo del external_id.
+   */
+  channel?: string;
   /** Marca de administrador (para que el CRM no lo trate como un cliente/lead más). */
   is_admin?: boolean;
   /** Rol del contacto cuando es administrador (ej. "gerente", "regional"). */
@@ -51,6 +59,18 @@ export interface CrmPayload {
   departamento?: string;
 }
 
+/**
+ * De qué canal es un external_id.
+ *
+ * Se deduce del prefijo que les ponemos a los que no son WhatsApp. Está acá y
+ * no en cada caller a propósito: así ningún envío puede quedarse sin canal por
+ * olvido, que es exactamente el tipo de dato que se pierde callado.
+ */
+function canalDeExternalId(id: string): string {
+  const i = id.indexOf(":");
+  return i > 0 ? id.slice(0, i) : "whatsapp";
+}
+
 export class CrmIngest {
   private readonly url: string;
   private readonly token: string;
@@ -71,11 +91,24 @@ export class CrmIngest {
    */
   async send(p: CrmPayload): Promise<"ok" | "skip" | "fail"> {
     if (!this.enabled) return "skip";
-    // Requisito del CRM: external_id + (message o response). Excepción: un envío
-    // que sólo marca el rol de administrador (is_admin) también es válido.
-    if (!p.external_id || (!p.message && !p.response && !p.is_admin)) return "skip";
+    if (!p.external_id) {
+      console.warn("CRM: descarto el envío porque no trae external_id.");
+      return "skip";
+    }
+    // Lo único que el CRM exige es external_id. El resto de esta condición
+    // existe para no mandarle ruido: un envío que no dice NADA —ni texto, ni
+    // etapa, ni rol— no tiene qué aportarle a una ficha.
+    //
+    // `stage` entró acá después de costarnos dos semanas: la respuesta del
+    // asesor ("ganado", "perdido") viaja sola, sin message ni response, y el
+    // guard la descartaba en silencio. Las dos respuestas reales que hubo
+    // —Ma. René el 09/10 y Thalía el 12/10— nunca llegaron al CRM por esto.
+    if (!p.message && !p.response && !p.is_admin && !p.stage) {
+      console.warn(`CRM: descarto el envío de ${p.external_id} porque no trae message, response, stage ni is_admin.`);
+      return "skip";
+    }
 
-    const body: Record<string, unknown> = { external_id: p.external_id };
+    const body: Record<string, unknown> = { external_id: p.external_id, channel: p.channel || canalDeExternalId(p.external_id) };
     for (const k of ["name", "city", "segment", "stage", "tipo_solicitud", "interest", "message", "response", "role", "asesor", "departamento"] as const) {
       const v = p[k];
       if (v != null && String(v).trim() !== "") body[k] = v;
