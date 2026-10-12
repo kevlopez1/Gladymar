@@ -18,6 +18,7 @@
  */
 import { config } from "../config.js";
 import { credencialesDe, type Canal } from "./messenger.js";
+import { olvidarTokenPagina } from "./tokenPagina.js";
 
 export interface MensajeSondeado {
   canal: Canal;
@@ -75,7 +76,7 @@ export function sondeoHabilitado(): boolean {
  * hilo y responder a cada uno sería hablarle encima.
  */
 export async function sondearMensajes(canal: Canal): Promise<MensajeSondeado[]> {
-  const cred = credencialesDe(canal);
+  const cred = await credencialesDe(canal);
   if (!cred) return [];
 
   const plataforma = canal === "instagram" ? "instagram" : "messenger";
@@ -91,6 +92,7 @@ export async function sondearMensajes(canal: Canal): Promise<MensajeSondeado[]> 
   });
   const json = (await res.json().catch(() => ({}))) as { data?: ConversacionApi[]; error?: unknown };
   if (!res.ok) {
+    if ((json.error as { code?: number } | undefined)?.code === 190) olvidarTokenPagina();
     throw new Error(`No se pudieron leer las conversaciones de ${canal}: ${JSON.stringify(json.error ?? json)}`);
   }
 
@@ -101,7 +103,10 @@ export async function sondearMensajes(canal: Canal): Promise<MensajeSondeado[]> 
     const ultimo = mensajes[0];
     if (!ultimo?.id || !ultimo.from?.id) continue;
     // Lo que escribió la propia cuenta no se contesta: sería el bot leyéndose.
-    if (ultimo.from.id === cred.id) continue;
+    // Se comparan todos nuestros ids: en Instagram los mensajes salientes
+    // vienen firmados con el id de la cuenta de Instagram, no con el de la
+    // página, así que mirar uno solo no alcanza.
+    if (cred.propios.includes(ultimo.from.id)) continue;
     if (yaAtendido(ultimo.id)) continue;
     const texto = (ultimo.message ?? "").trim();
     if (!texto) {

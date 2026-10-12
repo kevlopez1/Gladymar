@@ -44,6 +44,7 @@ import {
   yaAtendido,
   marcarTodoComoVisto,
 } from "./meta/sondeo.js";
+import { datosDePagina, suscribirPagina } from "./meta/tokenPagina.js";
 import { insertarConversacion, obtenerConversaciones, registrarDerivacion } from "./db/index.js";
 import {
   seguimientoAsesorHabilitado,
@@ -510,15 +511,29 @@ app.get("/admin/meta-dm", async (req, res) => {
     res.status(400).json({ error: `Falta META_PAGE_ID/META_INSTAGRAM_ID para ${canal}.` });
     return;
   }
+  // Se informa paso por paso: token, suscripción y conversaciones. Cuando algo
+  // no anda, saber CUÁL de los tres falló es la mitad del arreglo.
+  const diag: Record<string, unknown> = { canal };
+  try {
+    const datos = await datosDePagina();
+    diag.pagina = datos ? { id: datos.id, nombre: datos.nombre, instagram: datos.instagramId ?? null } : null;
+    diag.tokenDePagina = datos ? "ok" : "falta";
+  } catch (err) {
+    diag.tokenDePagina = String(err);
+    res.status(502).json(diag);
+    return;
+  }
+  if (String(req.query.suscribir || "") === "1") {
+    diag.suscripcion = await suscribirPagina().catch((err) => String(err));
+  }
   try {
     const mensajes = await sondearMensajes(canal);
-    res.json({
-      canal,
-      pendientes: mensajes.length,
-      mensajes: mensajes.map((m) => ({ de: m.from, nombre: m.name, texto: m.text })),
-    });
+    diag.pendientes = mensajes.length;
+    diag.mensajes = mensajes.map((m) => ({ de: m.from, nombre: m.name, texto: m.text }));
+    res.json(diag);
   } catch (err) {
-    res.status(502).json({ canal, error: String(err) });
+    diag.error = String(err);
+    res.status(502).json(diag);
   }
 });
 
@@ -1507,6 +1522,40 @@ async function sondearDirectos(): Promise<void> {
       console.error(`No se pudieron sondear los mensajes de ${nombreCanal(canal)}:`, err);
     }
   }
+}
+
+/**
+ * Al arrancar: conseguir el token de página y suscribir la página.
+ *
+ * Son los dos pasos que faltaban para que Messenger e Instagram funcionen, y
+ * ninguno se puede hacer desde el panel de la app:
+ *
+ * 1. El token. Meta rechazaba las llamadas con "(#190) This method must be
+ *    called with a Page Access Token": el token de System User tiene todos los
+ *    permisos pero no ES el token de la página. Se lo pide a Meta y listo.
+ * 2. La suscripción. Elegir los campos en el panel dice qué escucha la app;
+ *    esto dice que los quiere de ESTA página. Sin el paso 2 el panel muestra
+ *    todo suscrito y al webhook no llega nada — lo que venía pasando.
+ */
+if (metaHabilitado("messenger")) {
+  void (async () => {
+    try {
+      const datos = await datosDePagina();
+      if (!datos) return;
+      console.log(
+        `📘 Página de Meta lista: ${datos.nombre ?? datos.id}` +
+          (datos.instagramId ? ` · Instagram ${datos.instagramId}` : " · sin Instagram vinculado"),
+      );
+      const sub = await suscribirPagina();
+      console.log(
+        sub.ok
+          ? `📘 Página suscrita a los eventos: ${sub.detalle}`
+          : `No se pudo suscribir la página a los eventos: ${sub.detalle}`,
+      );
+    } catch (err) {
+      console.error("No se pudo preparar Messenger/Instagram:", err);
+    }
+  })();
 }
 
 if (sondeoHabilitado()) {
