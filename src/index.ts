@@ -26,6 +26,17 @@ import { ciudadesConSucursal } from "./knowledge/sucursales.js";
 import { chequearNotificacionesPedidos } from "./integrations/pedidoEstados.js";
 import { procesarColaAvisos, anotarFalloTardio } from "./integrations/colaAvisos.js";
 import { parseCSV } from "./util/csv.js";
+import {
+  canalDelPayload,
+  parseMensajesMeta,
+  enviarMeta,
+  metaHabilitado,
+  comoContactar,
+  idParaCrm,
+  nombreCanal,
+  type Canal,
+  type MensajeMeta,
+} from "./meta/messenger.js";
 import { insertarConversacion, obtenerConversaciones, registrarDerivacion } from "./db/index.js";
 import {
   seguimientoAsesorHabilitado,
@@ -506,6 +517,27 @@ app.post("/webhook", async (req, res) => {
       }
     }
 
+    // Messenger e Instagram entran por el MISMO webhook, con otro `object` y
+    // otra forma de payload. Se atienden antes de buscar mensajes de WhatsApp,
+    // que no va a encontrar ninguno en ese cuerpo.
+    const canalMeta = canalDelPayload(req.body);
+    if (canalMeta) {
+      for (const m of parseMensajesMeta(req.body)) {
+        if (!metaHabilitado(canalMeta)) {
+          console.warn(
+            `💬 Llegó un mensaje de ${nombreCanal(canalMeta)} de ${m.from} y no se puede contestar: ` +
+              "falta META_PAGE_ID (y META_PAGE_TOKEN si el token de WhatsApp no sirve para la página).",
+          );
+          continue;
+        }
+        console.log(`💬 ${nombreCanal(canalMeta)} ${m.from}: ${m.text || `(${m.adjuntoNoSoportado ?? "imagen"})`}`);
+        void atenderMeta(m).catch((err) =>
+          console.error(`Error atendiendo ${nombreCanal(canalMeta)} a ${m.from}:`, err),
+        );
+      }
+      return;
+    }
+
     const messages = parseIncomingMessages(req.body);
     for (const msg of messages) {
       handleIncoming(msg).catch((err) => console.error(`Error atendiendo a ${msg.from}:`, err));
@@ -558,10 +590,36 @@ function splitLong(text: string, max: number): string[] {
  * Gerente General. Nota: WhatsApp solo permite el envío libre dentro de la
  * ventana de 24h del asesor; si está activo (consultando su panel), llega bien.
  */
+/**
+ * Atiende un mensaje de Messenger o Instagram.
+ *
+ * Reusa el MISMO agente y el mismo flujo que WhatsApp a propósito: el cliente
+ * que escribe por Instagram tiene que recibir la misma atención, los mismos
+ * precios y el mismo handoff. Lo único que cambia es por dónde entra y por
+ * dónde sale.
+ */
+async function atenderMeta(m: MensajeMeta): Promise<void> {
+  // Sin texto no hay nada que mandarle al agente. Las fotos de Messenger e
+  // Instagram vienen por URL y el lector de imágenes todavía espera un media
+  // id de WhatsApp, así que por ahora se avisa en vez de ignorar.
+  if (!m.text) {
+    await enviarMeta(
+      m.canal,
+      m.from,
+      m.imageUrl
+        ? "¡Gracias por la foto! 😊 Por este canal todavía no puedo verla. ¿Me contás con palabras qué estás buscando y seguimos?"
+        : "¡Gracias por tu mensaje! 😊 Por acá todavía no puedo abrir ese tipo de archivo. ¿Me lo escribís y seguimos?",
+    );
+    return;
+  }
+  await procesarTurnoCliente(m.from, m.text, m.messageId, undefined, { canal: m.canal });
+}
+
 async function notificarAsesor(
   from: string,
   name: string | undefined,
   sol: NonNullable<AgentReply["solicitud"]>,
+  canal: Canal = "whatsapp",
 ): Promise<void> {
   const ciudad = sol.ciudad || "";
   const destino = adminTelefonoPorCiudad(ciudad) || ADMIN_TELEFONO;
@@ -570,7 +628,9 @@ async function notificarAsesor(
   const lineas = [
     `🔔 *Nuevo cliente${ciudad ? " · " + ciudad : ""}*${prio}`,
     `👤 ${nombre}`,
-    `📱 ${from}  (wa.me/${from})`,
+    // En Messenger e Instagram el remitente es un PSID, no un teléfono: un
+    // wa.me armado con eso es un enlace roto. Ver meta/messenger.ts.
+    comoContactar(canal, from),
     `🗂️ ${sol.tipo}`,
     sol.detalle ? `🗒️ ${sol.detalle}` : "",
     "",
@@ -588,7 +648,7 @@ async function notificarAsesor(
     // Queda anotado para preguntarle después cómo le fue. Va DESPUÉS del envío
     // y no antes: si el aviso no salió, no hay nada sobre lo que preguntar.
     void registrarDerivacion({
-      clienteTelefono: from,
+      clienteTelefono: idParaCrm(canal, from),
       clienteNombre: nombre,
       asesorTelefono: destino,
       asesorNombre: adminNombrePorCiudad(ciudad),
@@ -1055,18 +1115,33 @@ async function procesarTurnoCliente(
   text: string,
   messageId: string,
   name?: string,
-  opts?: { prueba?: boolean; imageId?: string; documentId?: string; documentName?: string },
+  opts?: {
+    prueba?: boolean;
+    imageId?: string;
+    documentId?: string;
+    documentName?: string;
+    /** De dónde escribió. Por defecto WhatsApp, que es como venía siendo. */
+    canal?: Canal;
+  },
 ): Promise<void> {
+  const canal: Canal = opts?.canal ?? "whatsapp";
+  const esWhatsApp = canal === "whatsapp";
   // En modo prueba (un admin probando como cliente) usamos una sesión aparte
   // y NO registramos nada real (ni KPIs, ni lead, ni CRM/Sheets).
   const prueba = opts?.prueba === true;
   // El QR del catálogo físico manda un texto fijo; se detecta acá para que el
   // PDF salga siempre, sin depender de cómo lo interprete el modelo.
   const porQrCatalogo = !prueba && pideDimensionViva(text);
-  const sessionId = prueba ? `test:${from}` : from;
+  // La sesión de Messenger/Instagram va prefijada con el canal. Dos efectos, y
+  // los dos hacen falta: separa la conversación de la de un WhatsApp con los
+  // mismos dígitos, y hace que brain.ts NO tome el PSID por un teléfono (su
+  // chequeo es /^\d{6,}$/, que un PSID pasa). Sin eso el bot guardaría
+  // "teléfonos" de clientes a los que nadie puede llamar.
+  const sessionId = prueba ? `test:${from}` : idParaCrm(canal, from);
 
-  // Marca leído + "escribiendo…" y suma a KPIs.
-  void markReadAndTyping(messageId);
+  // Marca leído + "escribiendo…" y suma a KPIs. Son llamadas de la API de
+  // WhatsApp; en Messenger e Instagram no existen y fallarían.
+  if (esWhatsApp) void markReadAndTyping(messageId);
   const tEscribiendo = Date.now();
   if (!prueba) bumpConversacion();
 
@@ -1118,11 +1193,21 @@ async function procesarTurnoCliente(
         const transcurrido = Date.now() - tEscribiendo;
         if (transcurrido < 1200) await sleep(1200 - transcurrido);
       } else {
-        void markReadAndTyping(messageId);
+        if (esWhatsApp) void markReadAndTyping(messageId);
         await sleep(typingMs(bloques[i]));
       }
 
-      if (esUltimo && reply.options.length) {
+      // Messenger e Instagram no tienen listas interactivas como WhatsApp: las
+      // opciones van numeradas en el texto, que es lo que ya se usa como
+      // respaldo cuando la lista falla.
+      const comoTexto = (bloque: string) =>
+        reply.options.length
+          ? `${bloque}\n\n${reply.options.map((o, j) => `*${j + 1}.* ${o}`).join("\n")}`
+          : bloque;
+
+      if (!esWhatsApp) {
+        await enviarMeta(canal, from, esUltimo ? comoTexto(bloques[i]) : bloques[i]);
+      } else if (esUltimo && reply.options.length) {
         try {
           // Nunca una lista "pelada": si no vino texto, usamos una guía cálida.
           const cuerpo = (bloques[i] || "").trim() || `${reply.optionsTitle || "Contame"} 😊 ¿Cuál preferís?`;
@@ -1135,10 +1220,7 @@ async function procesarTurnoCliente(
           );
         } catch (err) {
           console.error("Lista interactiva falló; envío como texto:", err);
-          await sendText(
-            from,
-            `${bloques[i]}\n\n${reply.options.map((o, j) => `*${j + 1}.* ${o}`).join("\n")}`,
-          );
+          await sendText(from, comoTexto(bloques[i]));
         }
       } else {
         await sendText(from, bloques[i]);
@@ -1211,7 +1293,7 @@ async function procesarTurnoCliente(
       // Handoff: si se registró una solicitud, avisamos al asesor de su ciudad.
       // Pero NUNCA para números del roster (evita avisos de lead con datos ajenos).
       if (reply.solicitud && !adminRemitente) {
-        void notificarAsesor(from, name, reply.solicitud);
+        void notificarAsesor(from, name, reply.solicitud, canal);
       }
       if (reply.escalated) {
         console.log(`🔔 Derivación a humano para ${from}`);
@@ -1252,7 +1334,9 @@ async function procesarTurnoCliente(
       // asignación que alguien pudo haber hecho a mano.
       const ciudadLead = reply.solicitud?.ciudad || ciudadPorUsuario.get(from);
       void crm.send({
-        external_id: from,
+        // Prefijado con el canal cuando no es WhatsApp: un PSID y un teléfono
+        // pueden tener los mismos dígitos y serían la misma ficha.
+        external_id: idParaCrm(canal, from),
         name: adminRemitente?.nombre || reply.solicitud?.nombre || name,
         city: adminRemitente?.region || ciudadLead,
         segment: adminRemitente ? "Administrador" : undefined,

@@ -215,6 +215,23 @@ export const config = {
   },
 
   /**
+   * Facebook Messenger e Instagram Direct.
+   *
+   * Los tres canales entran por el MISMO webhook y por la misma app de Meta;
+   * lo único que hace falta acá es a qué página contestarle. Sin META_PAGE_ID
+   * el bot sigue atendiendo WhatsApp igual y descarta lo demás con un aviso en
+   * el log, en vez de romperse.
+   */
+  meta: {
+    /** ID de la página de Facebook. Es por donde se responde en los dos canales. */
+    pageId: optional("META_PAGE_ID", ""),
+    /** ID de la cuenta de Instagram, si Meta exige mandarle a ella y no a la página. */
+    instagramId: optional("META_INSTAGRAM_ID", ""),
+    /** Token de página. Si está vacío se usa el de WhatsApp (sirve si es de System User). */
+    pageToken: optional("META_PAGE_TOKEN", ""),
+  },
+
+  /**
    * Seguimiento al ASESOR: el bot le pregunta cómo le fue con el lead.
    *
    * Los valores por defecto son un equilibrio, no una ley: preguntar antes de
