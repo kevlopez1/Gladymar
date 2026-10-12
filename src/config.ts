@@ -229,6 +229,15 @@ export const config = {
     instagramId: optional("META_INSTAGRAM_ID", ""),
     /** Token de página. Si está vacío se usa el de WhatsApp (sirve si es de System User). */
     pageToken: optional("META_PAGE_TOKEN", ""),
+    /**
+     * Token propio de Instagram, del flujo "API setup with Instagram login".
+     *
+     * Ese flujo NO usa la página: conecta la cuenta de Instagram directo a la
+     * app y devuelve su propio token, que además responde por otro dominio
+     * (graph.instagram.com y no graph.facebook.com). Si está cargado, manda
+     * este y no el de la página.
+     */
+    instagramToken: optional("META_INSTAGRAM_TOKEN", ""),
   },
 
   /**
