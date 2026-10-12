@@ -45,7 +45,7 @@ import {
   marcarTodoComoVisto,
 } from "./meta/sondeo.js";
 import { datosDePagina, suscribirPagina } from "./meta/tokenPagina.js";
-import { insertarConversacion, obtenerConversaciones, registrarDerivacion } from "./db/index.js";
+import { insertarConversacion, obtenerConversaciones, registrarDerivacion, resumenLeads } from "./db/index.js";
 import {
   seguimientoAsesorHabilitado,
   pendientes as seguimientosPorPreguntar,
@@ -190,6 +190,30 @@ app.get("/admin/stats", async (req, res) => {
 // Conversaciones guardadas en Postgres, en CSV (mismas columnas que la hoja).
 // Sirve para recuperar lo que el Apps Script de Google no pudo registrar y
 // pegarlo de vuelta en la planilla. Se abre: /admin/conversaciones.csv?key=TU_CLAVE
+/**
+ * Cuántos clientes distintos escribieron y de cuántos sabemos la ciudad.
+ *
+ * Lo pidió Prime para cuadrar su base con la nuestra: desde el CRM no pueden
+ * consultar esta Postgres, y los logs solo dejan rastro de los envíos con
+ * etapa, que son una fracción de los que escriben.
+ *
+ * Se abre: /admin/leads?key=TU_CLAVE&dias=7
+ */
+app.get("/admin/leads", async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  const dias = Math.min(365, Math.max(1, Number(req.query.dias) || 7));
+  const r = await resumenLeads(dias);
+  if (!r) {
+    res.status(503).json({ error: "No hay base de datos configurada o la consulta falló." });
+    return;
+  }
+  res.json(r);
+});
+
 app.get("/admin/conversaciones.csv", async (req, res) => {
   const key = String(req.query.key || "");
   if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
@@ -1394,6 +1418,7 @@ async function procesarTurnoCliente(
         // Prefijado con el canal cuando no es WhatsApp: un PSID y un teléfono
         // pueden tener los mismos dígitos y serían la misma ficha.
         external_id: idParaCrm(canal, from),
+        channel: canal,
         name: adminRemitente?.nombre || reply.solicitud?.nombre || name,
         city: adminRemitente?.region || ciudadLead,
         segment: adminRemitente ? "Administrador" : undefined,
