@@ -80,6 +80,83 @@ const SUCURSAL_POR_ZONA: Record<string, string> = {
   porongo: "Plus",
 };
 
+/**
+ * Zonas de La Paz -> showroom que las atiende.
+ *
+ * Misma lógica y misma salvedad que las de Santa Cruz: sale de dónde está cada
+ * showroom, no de cómo Gladymar reparte su cobertura.
+ *
+ *   · Calacoto (Ballivián)   Av. Ballivián esq. c.16   -> ZONA SUR
+ *   · Montes                 Av. Montes 560            -> CENTRO, laderas y El Alto
+ */
+const ZONAS_LA_PAZ: Record<string, string> = {
+  // Zona Sur.
+  calacoto: "Ballivián",
+  ballivian: "Ballivián",
+  "san miguel": "Ballivián",
+  obrajes: "Ballivián",
+  "alto obrajes": "Ballivián",
+  irpavi: "Ballivián",
+  achumani: "Ballivián",
+  "cota cota": "Ballivián",
+  seguencoma: "Ballivián",
+  "los pinos": "Ballivián",
+  "la florida": "Ballivián",
+  chasquipampa: "Ballivián",
+  ovejuyo: "Ballivián",
+  mallasa: "Ballivián",
+  aranjuez: "Ballivián",
+  // Centro, laderas y El Alto.
+  centro: "Montes",
+  "el prado": "Montes",
+  sopocachi: "Montes",
+  miraflores: "Montes",
+  "san pedro": "Montes",
+  "villa fatima": "Montes",
+  "max paredes": "Montes",
+  "el alto": "Montes",
+  ceja: "Montes",
+  "rio seco": "Montes",
+  achachicala: "Montes",
+  tembladerani: "Montes",
+  cotahuma: "Montes",
+  "garita de lima": "Montes",
+  munaypata: "Montes",
+  "pura pura": "Montes",
+  viacha: "Montes",
+};
+
+/**
+ * Zonas de Cochabamba -> showroom que las atiende.
+ *
+ *   · Blanco Galindo (BG2)   Av. Blanco Galindo Km 1½  -> CORREDOR OESTE
+ *   · Juan de la Rosa (JDR)  Av. Juan de la Rosa y América -> NORTE
+ *
+ * El sur y el este (Valle Hermoso, Alalay, Sacaba) no tienen showroom cerca:
+ * caen en el principal. Como en Santa Cruz, eso no es un olvido — es la zona
+ * que Gladymar todavía no cubre.
+ */
+const ZONAS_COCHABAMBA: Record<string, string> = {
+  // Corredor oeste.
+  "blanco galindo": "BG2",
+  quillacollo: "BG2",
+  colcapirhua: "BG2",
+  vinto: "BG2",
+  "sipe sipe": "BG2",
+  // Norte.
+  "juan de la rosa": "JDR",
+  america: "JDR",
+  "cala cala": "JDR",
+  "queru queru": "JDR",
+  tupuraya: "JDR",
+  sarco: "JDR",
+  hipodromo: "JDR",
+  recoleta: "JDR",
+  muyurina: "JDR",
+  pacata: "JDR",
+  tiquipaya: "JDR",
+};
+
 const SUCURSAL_POR_MUNICIPIO: Record<string, string> = {
   montero: "Montero",
   warnes: "Montero",
@@ -95,6 +172,11 @@ const SUCURSAL_POR_MUNICIPIO: Record<string, string> = {
  */
 const SUCURSAL_PRINCIPAL: Record<string, string> = {
   "Santa Cruz": "Plus",
+  // Beni y Pando no tienen showroom ni asesores propios: los atiende Santa
+  // Cruz directamente (regla de reparto definida el 12/10/2026). Antes sus
+  // leads se quedaban sin asesor y no los veía nadie.
+  Beni: "Plus",
+  Pando: "Plus",
   "La Paz": "Ballivián",
   Cochabamba: "BG2",
   Chuquisaca: "Sucre",
@@ -118,8 +200,9 @@ export function sucursalParaLugar(ciudad?: string): string | undefined {
     // Las zonas de la ciudad PRIMERO, de la clave más larga a la más corta:
     // "canal cotoca" tiene que ganarle a "cotoca", que es otro municipio y otro
     // showroom. Con el orden al revés, todo el este de la ciudad se iría a Plus.
-    for (const zona of Object.keys(SUCURSAL_POR_ZONA).sort((a, b) => b.length - a.length)) {
-      if (t === zona || new RegExp(`(^|\\s)${zona}($|\\s)`).test(t)) return SUCURSAL_POR_ZONA[zona];
+    const zonas = { ...SUCURSAL_POR_ZONA, ...ZONAS_LA_PAZ, ...ZONAS_COCHABAMBA };
+    for (const zona of Object.keys(zonas).sort((a, b) => b.length - a.length)) {
+      if (t === zona || new RegExp(`(^|\\s)${zona}($|\\s)`).test(t)) return zonas[zona];
     }
     for (const [municipio, sucursal] of Object.entries(SUCURSAL_POR_MUNICIPIO)) {
       if (t === municipio || new RegExp(`(^|\\s)${municipio}($|\\s)`).test(t)) return sucursal;

@@ -50,6 +50,23 @@ async function crearTabla(): Promise<void> {
     );
   `);
   await p.query(`CREATE INDEX IF NOT EXISTS solicitudes_creado_en_idx ON solicitudes (creado_en DESC);`);
+
+  // Reparto de leads: turno por sucursal y asignación pegada al cliente.
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS reparto_turno (
+      sucursal TEXT PRIMARY KEY,
+      ultimo INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS asignacion_asesor (
+      cliente TEXT PRIMARY KEY,
+      asesor_nombre TEXT NOT NULL,
+      asesor_telefono TEXT NOT NULL,
+      sucursal TEXT NOT NULL,
+      creado_en BIGINT NOT NULL
+    );
+  `);
   // Clave compuesta (factura, telefono): una factura puede tener dos números de
   // contacto y a ambos hay que avisarles, sin que el aviso a uno marque como
   // "ya notificado" al otro.
@@ -801,5 +818,85 @@ export async function resumenLeads(dias = 7): Promise<{
   } catch (err) {
     console.error("No se pudo resumir los leads:", err);
     return null;
+  }
+}
+
+/**
+ * Reparto de leads por turnos dentro de una sucursal.
+ *
+ * Devuelve un número que crece de uno en uno por sucursal. El turno se calcula
+ * en la base y no en memoria a propósito: el proceso se reinicia seguido, y un
+ * contador en memoria volvería siempre al primer asesor de la lista. El primero
+ * de cada sucursal se llevaría casi todo y el reparto sería de mentira.
+ *
+ * El INSERT ... ON CONFLICT ... RETURNING hace el incremento y la lectura en
+ * una sola sentencia: dos leads simultáneos de la misma sucursal no pueden
+ * llevarse el mismo turno.
+ */
+export async function siguienteTurno(sucursal: string): Promise<number | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await tablaLista();
+    const { rows } = await p.query(
+      `INSERT INTO reparto_turno (sucursal, ultimo) VALUES ($1, 0)
+         ON CONFLICT (sucursal) DO UPDATE SET ultimo = reparto_turno.ultimo + 1
+       RETURNING ultimo`,
+      [sucursal],
+    );
+    return Number(rows[0]?.ultimo ?? 0);
+  } catch (err) {
+    console.error(`No se pudo pedir turno para ${sucursal}:`, err);
+    return null;
+  }
+}
+
+export interface AsignacionRow {
+  asesorNombre: string;
+  asesorTelefono: string;
+  sucursal: string;
+}
+
+/**
+ * El asesor que ya tiene asignado este cliente, si tiene alguno.
+ *
+ * La asignación se PEGA al cliente: sin esto, cada mensaje suyo sacaría un
+ * turno nuevo y su segundo mensaje le llegaría a otro asesor. Para el cliente
+ * eso es que lo atiendan tres personas distintas sin que ninguna sepa lo que
+ * dijo antes; para el asesor, un lead que se le escapa de la cartera solo.
+ */
+export async function asignacionDe(cliente: string): Promise<AsignacionRow | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await tablaLista();
+    const { rows } = await p.query(
+      `SELECT asesor_nombre, asesor_telefono, sucursal FROM asignacion_asesor WHERE cliente = $1`,
+      [cliente],
+    );
+    const r = rows[0];
+    return r
+      ? { asesorNombre: String(r.asesor_nombre), asesorTelefono: String(r.asesor_telefono), sucursal: String(r.sucursal) }
+      : null;
+  } catch (err) {
+    console.error("No se pudo leer la asignación:", err);
+    return null;
+  }
+}
+
+/** Deja asentado a qué asesor le quedó este cliente. El primero gana. */
+export async function guardarAsignacion(cliente: string, a: AsignacionRow): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await tablaLista();
+    await p.query(
+      `INSERT INTO asignacion_asesor (cliente, asesor_nombre, asesor_telefono, sucursal, creado_en)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (cliente) DO NOTHING`,
+      [cliente, a.asesorNombre, a.asesorTelefono, a.sucursal, Date.now()],
+    );
+  } catch (err) {
+    console.error("No se pudo guardar la asignación:", err);
   }
 }
