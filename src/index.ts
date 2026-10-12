@@ -37,6 +37,13 @@ import {
   type Canal,
   type MensajeMeta,
 } from "./meta/messenger.js";
+import {
+  sondeoHabilitado,
+  sondearMensajes,
+  marcarAtendido,
+  yaAtendido,
+  marcarTodoComoVisto,
+} from "./meta/sondeo.js";
 import { insertarConversacion, obtenerConversaciones, registrarDerivacion } from "./db/index.js";
 import {
   seguimientoAsesorHabilitado,
@@ -484,6 +491,37 @@ app.post("/api/admin", async (req, res) => {
 });
 
 // Verificación del webhook (handshake con Meta)
+/**
+ * Diagnóstico: le pregunta a Meta por las conversaciones y devuelve lo que
+ * contesta, en crudo.
+ *
+ * Existe porque cuando Meta no entrega webhooks no hay forma de saber desde
+ * afuera si el token sirve, si la cuenta está conectada o si simplemente no
+ * hay mensajes. Esto lo responde en una llamada, sin tocar nada.
+ */
+app.get("/admin/meta-dm", async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  const canal = String(req.query.canal || "instagram") === "messenger" ? "messenger" : "instagram";
+  if (!metaHabilitado(canal)) {
+    res.status(400).json({ error: `Falta META_PAGE_ID/META_INSTAGRAM_ID para ${canal}.` });
+    return;
+  }
+  try {
+    const mensajes = await sondearMensajes(canal);
+    res.json({
+      canal,
+      pendientes: mensajes.length,
+      mensajes: mensajes.map((m) => ({ de: m.from, nombre: m.name, texto: m.text })),
+    });
+  } catch (err) {
+    res.status(502).json({ canal, error: String(err) });
+  }
+});
+
 app.get("/webhook", (req, res) => {
   const challenge = verifyWebhook(req.query as Record<string, unknown>);
   if (challenge !== null) {
@@ -531,6 +569,10 @@ app.post("/webhook", async (req, res) => {
           continue;
         }
         console.log(`💬 ${nombreCanal(canalMeta)} ${m.from}: ${m.text || `(${m.adjuntoNoSoportado ?? "imagen"})`}`);
+        // El sondeo mira las mismas conversaciones. Si el webhook llegó
+        // primero, esto evita que el otro camino conteste de nuevo.
+        if (yaAtendido(m.messageId)) continue;
+        marcarAtendido(m.messageId);
         void atenderMeta(m).catch((err) =>
           console.error(`Error atendiendo ${nombreCanal(canalMeta)} a ${m.from}:`, err),
         );
@@ -1439,6 +1481,52 @@ async function loguearUso(): Promise<void> {
 const seguimientoTimer = setInterval(() => void preguntarSeguimientos(), 30 * 60 * 1000);
 if (typeof seguimientoTimer.unref === "function") seguimientoTimer.unref();
 void preguntarSeguimientos();
+
+/**
+ * Pregunta por DM nuevos de Messenger e Instagram.
+ *
+ * Es el camino alternativo al webhook, para cuando Meta no entrega los eventos
+ * (le pasó a Gladymar el 12/10/2026: la página suscrita, el token con permisos
+ * y ni un solo POST al webhook). Apagado por defecto: se enciende con
+ * META_SONDEO_SEGUNDOS.
+ */
+async function sondearDirectos(): Promise<void> {
+  if (!sondeoHabilitado() || !metaHabilitado("messenger")) return;
+  for (const canal of ["instagram", "messenger"] as const) {
+    if (!metaHabilitado(canal)) continue;
+    try {
+      const nuevos = await sondearMensajes(canal);
+      for (const m of nuevos) {
+        marcarAtendido(m.messageId);
+        console.log(`💬 ${nombreCanal(canal)} (sondeo) ${m.from}: ${m.text}`);
+        void procesarTurnoCliente(m.from, m.text, m.messageId, m.name, { canal }).catch((err) =>
+          console.error(`Error atendiendo ${nombreCanal(canal)} a ${m.from}:`, err),
+        );
+      }
+    } catch (err) {
+      console.error(`No se pudieron sondear los mensajes de ${nombreCanal(canal)}:`, err);
+    }
+  }
+}
+
+if (sondeoHabilitado()) {
+  // La primera corrida solo MARCA lo que ya existe: sin esto, al encender el
+  // sondeo el bot le escribiría de golpe a todo el que tenga una conversación
+  // abierta, incluidas las de hace meses.
+  void (async () => {
+    for (const canal of ["instagram", "messenger"] as const) {
+      if (!metaHabilitado(canal)) continue;
+      try {
+        const n = await marcarTodoComoVisto(canal);
+        console.log(`💬 Sondeo de ${nombreCanal(canal)} activo (cada ${config.meta.sondeoSegundos}s). ${n} conversación(es) quedaron marcadas como ya vistas.`);
+      } catch (err) {
+        console.error(`No se pudo iniciar el sondeo de ${nombreCanal(canal)}:`, err);
+      }
+    }
+    const t = setInterval(() => void sondearDirectos(), config.meta.sondeoSegundos * 1000);
+    if (typeof t.unref === "function") t.unref();
+  })();
+}
 
 const usoTimer = setInterval(() => void loguearUso(), 60 * 60 * 1000);
 if (typeof usoTimer.unref === "function") usoTimer.unref();
