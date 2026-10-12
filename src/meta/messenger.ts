@@ -13,6 +13,7 @@
  * llamar. Por eso el canal viaja con cada mensaje y nunca se asume WhatsApp.
  */
 import { config } from "../config.js";
+import { datosDePagina, olvidarTokenPagina } from "./tokenPagina.js";
 
 export type Canal = "whatsapp" | "messenger" | "instagram";
 
@@ -89,10 +90,13 @@ export function parseMensajesMeta(body: unknown): MensajeMeta[] {
 }
 
 export interface Credenciales {
+  /** A qué objeto de Meta se le habla. Casi siempre, la página. */
   id: string;
   token: string;
   /** Meta tiene DOS dominios y el token sirve en uno solo de los dos. */
   base: string;
+  /** Ids que somos nosotros, para no leernos a nosotros mismos. */
+  propios: string[];
 }
 
 /**
@@ -100,30 +104,53 @@ export interface Credenciales {
  *
  * Instagram admite dos configuraciones y no son intercambiables:
  *
- * - "API setup with Facebook login": la cuenta cuelga de la página, se responde
- *   con el token de página contra graph.facebook.com.
+ * - "API setup with Facebook login": la cuenta cuelga de la página. TODO se
+ *   hace contra la PÁGINA —no contra la cuenta de Instagram— con el token de
+ *   página y por graph.facebook.com. Pegarle a la cuenta de Instagram devuelve
+ *   un "Object with ID ... does not exist", que se lee como que la cuenta no
+ *   está conectada cuando en realidad solo se tocó el objeto equivocado.
  * - "API setup with Instagram login": la cuenta se conecta sola a la app, tiene
  *   su propio token y responde contra graph.instagram.com.
  *
  * Mandar el token correcto al dominio equivocado da un 190 sin explicar por
  * qué, así que el dominio se elige junto con el token y nunca por separado.
+ *
+ * El token de página NO es el de WhatsApp: ver meta/tokenPagina.ts.
  */
-export function credencialesDe(canal: Canal): Credenciales | null {
-  return credenciales(canal);
-}
-
-function credenciales(canal: Canal): Credenciales | null {
+export async function credencialesDe(canal: Canal): Promise<Credenciales | null> {
   if (canal === "instagram" && config.meta.instagramToken) {
     const id = config.meta.instagramId || config.meta.pageId;
-    return id ? { id, token: config.meta.instagramToken, base: "https://graph.instagram.com" } : null;
+    if (!id) return null;
+    return {
+      id,
+      token: config.meta.instagramToken,
+      base: "https://graph.instagram.com",
+      propios: [id],
+    };
   }
-  const token = config.meta.pageToken || config.whatsapp.accessToken;
-  const id = canal === "instagram" ? config.meta.instagramId || config.meta.pageId : config.meta.pageId;
-  return id && token ? { id, token, base: "https://graph.facebook.com" } : null;
+
+  const datos = await datosDePagina();
+  if (!datos) return null;
+  return {
+    id: datos.id,
+    token: datos.token,
+    base: "https://graph.facebook.com",
+    // La página y su cuenta de Instagram son la misma Gladymar con dos ids.
+    propios: [datos.id, datos.instagramId, config.meta.instagramId].filter(
+      (x): x is string => Boolean(x),
+    ),
+  };
 }
 
+/**
+ * ¿Está configurado este canal? Mira solo la configuración, sin llamar a Meta:
+ * se usa como compuerta antes de cada mensaje y no puede costar una llamada.
+ */
 export function metaHabilitado(canal: Canal): boolean {
-  return Boolean(credenciales(canal));
+  if (canal === "instagram" && config.meta.instagramToken) {
+    return Boolean(config.meta.instagramId || config.meta.pageId);
+  }
+  return Boolean(config.meta.pageId && config.whatsapp.accessToken);
 }
 
 /**
@@ -134,7 +161,7 @@ export function metaHabilitado(canal: Canal): boolean {
  * rechaza fuera de la ventana de 24 h, igual que en WhatsApp.
  */
 export async function enviarMeta(canal: Canal, destinatario: string, texto: string): Promise<string | null> {
-  const cred = credenciales(canal);
+  const cred = await credencialesDe(canal);
   if (!cred) throw new Error(`Falta META_PAGE_ID o el token para responder por ${canal}.`);
 
   const url = `${cred.base}/${config.whatsapp.apiVersion}/${cred.id}/messages`;
@@ -150,6 +177,9 @@ export async function enviarMeta(canal: Canal, destinatario: string, texto: stri
   });
   const json = (await res.json().catch(() => ({}))) as { message_id?: string; error?: unknown };
   if (!res.ok) {
+    // Si Meta rechaza el token, se olvida el derivado para que el próximo
+    // intento lo vuelva a pedir en vez de reusar uno que ya no sirve.
+    if ((json.error as { code?: number } | undefined)?.code === 190) olvidarTokenPagina();
     throw new Error(`Error enviando por ${canal} (${res.status}): ${JSON.stringify(json.error ?? json)}`);
   }
   return json.message_id ?? null;
