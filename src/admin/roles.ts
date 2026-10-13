@@ -39,11 +39,21 @@ export interface Admin {
 /** Número del Gerente General (formato internacional sin "+", como llega de WhatsApp). */
 export const ADMIN_TELEFONO = (process.env.GERENTE_TELEFONO || "59167401827").trim();
 
-/** Administrador regional (persona) por departamento. */
+/**
+ * Administrador regional (persona) por departamento.
+ *
+ * Los nombres van ESCRITOS COMO EN EL PADRÓN, aunque a la vista les falte una
+ * tilde. No es un descuido: el CRM cruza este nombre literal contra el padrón
+ * (/admin/roster) para decidir qué cartera le muestra a cada persona. Mientras
+ * acá decía "Thalía Vera" y el padrón "Thalia Vera", todo lead que cayera por
+ * esta vía llegaba a un nombre que el CRM no podía cruzar, y no aparecía en la
+ * cartera de nadie. Si Gladymar corrige las tildes en su Excel, se corrigen
+ * acá también — pero los dos lados juntos.
+ */
 export const ADMIN_REGIONAL_NOMBRE: Record<string, string> = {
-  "Santa Cruz": "Thalía Vera",
-  "La Paz": "José Ramos",
-  "Cochabamba": "María René Áviles",
+  "Santa Cruz": "Thalia Vera",
+  "La Paz": "Jose Ramos",
+  "Cochabamba": "Ma. René Aviles",
   "Sucre": "Jorge Montecinos",
   "Tarija": "Rosana Patana",
   "Potosí": "Gabriel Flores",
