@@ -52,6 +52,13 @@ async function crearTabla(): Promise<void> {
   await p.query(`CREATE INDEX IF NOT EXISTS solicitudes_creado_en_idx ON solicitudes (creado_en DESC);`);
 
   // Reparto de leads: turno por sucursal y asignación pegada al cliente.
+  // Contadores de documentos que no se pueden repetir entre reinicios.
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS contadores (
+      clave TEXT PRIMARY KEY,
+      valor INTEGER NOT NULL
+    );
+  `);
   await p.query(`
     CREATE TABLE IF NOT EXISTS reparto_turno (
       sucursal TEXT PRIMARY KEY,
@@ -898,5 +905,37 @@ export async function guardarAsignacion(cliente: string, a: AsignacionRow): Prom
     );
   } catch (err) {
     console.error("No se pudo guardar la asignación:", err);
+  }
+}
+
+/**
+ * El próximo número de cotización, que NO se repite entre reinicios.
+ *
+ * Antes el contador vivía en memoria (`let seq = 1000`) y volvía a 1000 cada
+ * vez que el proceso arrancaba. Como el servicio se reinicia seguido, dos
+ * cotizaciones distintas podían salir con el MISMO número, cada una en un PDF
+ * con el logo de la empresa. Un número de documento repetido no es un detalle
+ * estético: es dos clientes con "la cotización COT-2026-1007" y nadie sabiendo
+ * cuál es cuál.
+ *
+ * Arranca en 1100 y no en 1026 (el último que vimos en los logs) a propósito:
+ * no sabemos con certeza cuál fue el máximo ya emitido, porque el contador
+ * viejo se reiniciaba. Un hueco en la numeración no le hace daño a nadie; un
+ * número repetido sí.
+ */
+export async function siguienteNumeroCotizacion(): Promise<number | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await tablaLista();
+    const { rows } = await p.query(
+      `INSERT INTO contadores (clave, valor) VALUES ('cotizacion', 1100)
+         ON CONFLICT (clave) DO UPDATE SET valor = contadores.valor + 1
+       RETURNING valor`,
+    );
+    return Number(rows[0]?.valor ?? 0) || null;
+  } catch (err) {
+    console.error("No se pudo pedir el número de cotización:", err);
+    return null;
   }
 }
