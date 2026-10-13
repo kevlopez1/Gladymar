@@ -4,6 +4,7 @@
  * ⚠️ Precios REFERENCIALES (ver precios.ts). Cada cotización lo aclara.
  */
 import { esFormatoDescontinuado } from "../knowledge/descontinuados.js";
+import { siguienteNumeroCotizacion } from "../db/index.js";
 import { m2PorCajaDe } from "../knowledge/material.js";
 import {
   buscarProductoPrecio,
@@ -79,14 +80,21 @@ export interface Cotizacion {
   total: number;
 }
 
-let seq = 1000;
+/**
+ * Respaldo en memoria del número de cotización.
+ *
+ * Solo se usa si la base no responde. Arranca alto para no pisar los números
+ * que ya emitió la base, y sube de 1 en 1 como el de antes. Sigue sin
+ * sobrevivir a un reinicio — por eso es el respaldo y no el camino normal.
+ */
+let seqRespaldo = 9000;
 
 export function bs(n: number): string {
   return "Bs " + n.toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /** Arma la cotización (calcula precios y total) a partir de los ítems pedidos. */
-export function construirCotizacion(cliente: string, ciudad: string | undefined, entrada: ItemInput[]): Cotizacion {
+export async function construirCotizacion(cliente: string, ciudad: string | undefined, entrada: ItemInput[]): Promise<Cotizacion> {
   // El precio depende de la región: la misma pieza cuesta distinto en Santa
   // Cruz que en La Paz (hasta 66% de diferencia en la lista de septiembre).
   const departamento = departamentoDeCiudad(ciudad);
@@ -191,8 +199,16 @@ export function construirCotizacion(cliente: string, ciudad: string | undefined,
   const fecha = fmt(ahora);
   const vence = fmt(new Date(ahora.getTime() + VIGENCIA_HORAS * 60 * 60 * 1000));
 
+  // El número sale de la base, que lo incrementa de forma atómica: dos
+  // cotizaciones simultáneas no pueden llevarse el mismo. Si la base no está,
+  // se usa el respaldo en memoria y se avisa, porque ahí sí podría repetirse.
+  const numeroBase = await siguienteNumeroCotizacion();
+  if (numeroBase === null) {
+    console.warn("⚠️  Número de cotización del respaldo en memoria: sin base, podría repetirse tras un reinicio.");
+  }
+
   return {
-    numero: `COT-2026-${++seq}`,
+    numero: `COT-2026-${numeroBase ?? ++seqRespaldo}`,
     departamento,
     fecha,
     vence,

@@ -404,7 +404,7 @@ export async function executeTool(
       if (!items.length) {
         return { content: "No hay ítems para cotizar. Pídele al cliente qué productos y cantidades desea." };
       }
-      const cot = construirCotizacion(nombre, ciudad, items);
+      const cot = await construirCotizacion(nombre, ciudad, items);
 
       // Lo de SEGUNDA no se cotiza: se deriva (Gerencia, 20/09/2026). Si TODO
       // lo que pidió es de segunda no hay cotización que mandar, así que se
