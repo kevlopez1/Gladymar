@@ -1574,6 +1574,10 @@ function firmaDeError(err: unknown): string {
 
 function avisarFalloSondeo(canal: Canal, err: unknown): void {
   const firma = firmaDeError(err);
+=======
+function avisarFalloSondeo(canal: Canal, err: unknown): void {
+  const firma = String(err);
+>>>>>>> origin/claude/gradymar-whatsapp-agent-YccEJ
   const previo = ultimoFalloSondeo.get(canal);
   const ahora = Date.now();
 
