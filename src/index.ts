@@ -1543,6 +1543,37 @@ void preguntarSeguimientos();
  * y ni un solo POST al webhook). Apagado por defecto: se enciende con
  * META_SONDEO_SEGUNDOS.
  */
+/**
+ * Avisa de un fallo del sondeo SIN inundar el log.
+ *
+ * El sondeo corre cada minuto, así que un error que no se va —hoy el #230 de
+ * Instagram, que espera un permiso de Meta -- escribe 1.440 líneas por día y
+ * tapa todo lo demás. Un log que nadie puede leer no avisa de nada; lo pidió
+ * Prime después de perder un rato buscando otro error debajo de estas.
+ *
+ * Mientras el error sea EL MISMO, se escribe una vez por hora. Si cambia, se
+ * escribe en el acto: un error distinto es justamente la noticia que estamos
+ * esperando, y hacerla esperar una hora sería el error contrario.
+ */
+const ultimoFalloSondeo = new Map<string, { firma: string; cuando: number; repetidos: number }>();
+const SILENCIO_SONDEO_MS = 60 * 60 * 1000;
+
+function avisarFalloSondeo(canal: Canal, err: unknown): void {
+  const firma = String(err);
+  const previo = ultimoFalloSondeo.get(canal);
+  const ahora = Date.now();
+
+  if (previo && previo.firma === firma && ahora - previo.cuando < SILENCIO_SONDEO_MS) {
+    previo.repetidos++;
+    return;
+  }
+
+  const repetidos = previo && previo.firma === firma ? previo.repetidos : 0;
+  const cola = repetidos > 0 ? ` (y ${repetidos} vez/veces más en la última hora, sin cambios)` : "";
+  console.error(`No se pudieron sondear los mensajes de ${nombreCanal(canal)}${cola}:`, err);
+  ultimoFalloSondeo.set(canal, { firma, cuando: ahora, repetidos: 0 });
+}
+
 async function sondearDirectos(): Promise<void> {
   if (!sondeoHabilitado() || !metaHabilitado("messenger")) return;
   for (const canal of ["instagram", "messenger"] as const) {
@@ -1557,7 +1588,7 @@ async function sondearDirectos(): Promise<void> {
         );
       }
     } catch (err) {
-      console.error(`No se pudieron sondear los mensajes de ${nombreCanal(canal)}:`, err);
+      avisarFalloSondeo(canal, err);
     }
   }
 }

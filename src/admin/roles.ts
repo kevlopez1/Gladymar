@@ -15,7 +15,7 @@
 import { config } from "../config.js";
 import { ciudadesConSucursal } from "../knowledge/sucursales.js";
 import { departamentoDeLugar, REGION_ASESOR, mapaMunicipios } from "../knowledge/departamentos.js";
-import { asesorParaLugar, ASESORES } from "./asesores.js";
+import { asesorParaLugar, asesoresDeSucursal, sucursalParaLugar, ASESORES } from "./asesores.js";
 
 export interface Admin {
   id: string;
@@ -326,12 +326,26 @@ export function adminRoster(): {
  * cada uno, que es exactamente lo que hace el bot en vivo. No se escribe a
  * mano: una lista a mano se desactualiza el día que alguien cambia una regla de
  * derivación, y el síntoma sería una cartera vacía sin ningún error.
+ *
+ * Desde que el reparto es por turnos (12/10/2026) no alcanza con preguntar a
+ * quién se deriva cada municipio: eso devuelve UN nombre por lugar, y los
+ * turnos reparten entre TODO el equipo de la sucursal. Por eso se suma el
+ * equipo completo de cada sucursal que aparece.
+ *
+ * Lo detectó Prime: el CRM le decía a Bricila Saucedo "sus clientes llegan por
+ * Thalia Vera" cuando ya le estaban llegando a su propio nombre.
  */
 export function nombresQueEmiteElBot(): Set<string> {
   const out = new Set<string>();
+  const sucursales = new Set<string>();
   for (const lugar of Object.keys(mapaMunicipios())) {
     const n = adminNombrePorCiudad(lugar);
     if (n) out.add(n);
+    const suc = sucursalParaLugar(lugar);
+    if (suc) sucursales.add(suc);
+  }
+  for (const suc of sucursales) {
+    for (const a of asesoresDeSucursal(suc)) out.add(a.nombre);
   }
   return out;
 }
