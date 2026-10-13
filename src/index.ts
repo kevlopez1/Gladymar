@@ -1554,12 +1554,26 @@ void preguntarSeguimientos();
  * Mientras el error sea EL MISMO, se escribe una vez por hora. Si cambia, se
  * escribe en el acto: un error distinto es justamente la noticia que estamos
  * esperando, y hacerla esperar una hora sería el error contrario.
+ *
+ * "El mismo" se decide SIN el fbtrace_id. Meta manda uno nuevo en cada llamada,
+ * así que compararlo entero hacía que toda repetición pareciera un error nuevo
+ * y el agrupado no agrupara nada: el primer intento quedó escribiendo una línea
+ * por minuto igual que antes. Lo detectó Prime mirando los logs en producción.
  */
 const ultimoFalloSondeo = new Map<string, { firma: string; cuando: number; repetidos: number }>();
 const SILENCIO_SONDEO_MS = 60 * 60 * 1000;
 
+/** Un identificador de traza que cambia en cada llamada no distingue un error de otro. */
+function firmaDeError(err: unknown): string {
+  return String(err)
+    .replace(/"fbtrace_id"\s*:\s*"[^"]*"/g, "")
+    .replace(/,\s*,/g, ",")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function avisarFalloSondeo(canal: Canal, err: unknown): void {
-  const firma = String(err);
+  const firma = firmaDeError(err);
   const previo = ultimoFalloSondeo.get(canal);
   const ahora = Date.now();
 
