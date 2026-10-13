@@ -46,7 +46,7 @@ import {
   marcarTodoComoVisto,
 } from "./meta/sondeo.js";
 import { datosDePagina, suscribirPagina } from "./meta/tokenPagina.js";
-import { insertarConversacion, obtenerConversaciones, registrarDerivacion, resumenLeads } from "./db/index.js";
+import { insertarConversacion, obtenerConversaciones, registrarDerivacion, resumenLeads, resultadosRegistrados } from "./db/index.js";
 import {
   seguimientoAsesorHabilitado,
   pendientes as seguimientosPorPreguntar,
@@ -200,6 +200,49 @@ app.get("/admin/stats", async (req, res) => {
  *
  * Se abre: /admin/leads?key=TU_CLAVE&dias=7
  */
+/**
+ * Reenvía al CRM los resultados que los asesores ya respondieron.
+ *
+ * Existe por un error puntual: el guard de crm.send descartaba los envíos que
+ * solo traían etapa, así que dos respuestas reales —Ma. René el 09/10 y Thalía
+ * el 12/10— nunca llegaron. El bot las tenía guardadas: lo que falló fue el
+ * envío. Sin esto, esas dos fichas quedan con la etapa equivocada para
+ * siempre, y "dato conocido" es una forma elegante de decir "dato mal".
+ *
+ * Es idempotente: el CRM aplica la misma etapa, reenviar no hace daño.
+ *
+ * Se abre: /admin/reenviar-resultados?key=TU_CLAVE&dias=60
+ */
+app.get("/admin/reenviar-resultados", async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  const dias = Math.min(365, Math.max(1, Number(req.query.dias) || 60));
+  const filas = await resultadosRegistrados(dias);
+  if (!filas) {
+    res.status(503).json({ error: "No hay base de datos configurada o la consulta falló." });
+    return;
+  }
+
+  const hechos: { cliente: string; etapa: string; envio: string }[] = [];
+  for (const f of filas) {
+    const etapa = RESPUESTAS.find((r) => r.resultado === f.resultado)?.etapa;
+    if (!etapa) continue;
+    const envio = await crm.send({
+      external_id: f.clienteTelefono,
+      name: f.clienteNombre,
+      city: f.ciudad,
+      stage: etapa,
+      asesor: f.asesorNombre,
+      departamento: departamentoDeLugar(f.ciudad),
+    });
+    hechos.push({ cliente: f.clienteTelefono, etapa, envio });
+  }
+  res.json({ revisados: filas.length, reenviados: hechos.length, detalle: hechos });
+});
+
 app.get("/admin/leads", async (req, res) => {
   const key = String(req.query.key || "");
   if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
