@@ -939,3 +939,49 @@ export async function siguienteNumeroCotizacion(): Promise<number | null> {
     return null;
   }
 }
+
+export interface ResultadoRegistrado {
+  clienteTelefono: string;
+  clienteNombre?: string;
+  ciudad?: string;
+  asesorNombre?: string;
+  resultado: string;
+  respondidoEn: number;
+}
+
+/**
+ * Los resultados que los asesores YA respondieron, para poder reenviarlos.
+ *
+ * Existe por un error concreto: el guard de crm.send descartaba los envíos que
+ * solo traían etapa, así que dos respuestas reales de asesores —Ma. René el
+ * 09/10 y Thalía el 12/10— nunca llegaron al CRM. El bot las tenía guardadas
+ * todo el tiempo: lo que falló fue el envío, no el registro.
+ *
+ * Dejarlas como "dato conocido" significa dos fichas con la etapa equivocada
+ * en el CRM para siempre. Teniendo el dato acá, reenviarlo es barato.
+ */
+export async function resultadosRegistrados(dias = 60): Promise<ResultadoRegistrado[] | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await tablaLista();
+    const { rows } = await p.query(
+      `SELECT cliente_telefono, cliente_nombre, ciudad, asesor_nombre, resultado, respondido_en
+         FROM seguimiento_asesor
+        WHERE resultado IS NOT NULL AND respondido_en >= $1
+        ORDER BY respondido_en`,
+      [Date.now() - dias * 86_400_000],
+    );
+    return rows.map((r) => ({
+      clienteTelefono: String(r.cliente_telefono),
+      clienteNombre: r.cliente_nombre ? String(r.cliente_nombre) : undefined,
+      ciudad: r.ciudad ? String(r.ciudad) : undefined,
+      asesorNombre: r.asesor_nombre ? String(r.asesor_nombre) : undefined,
+      resultado: String(r.resultado),
+      respondidoEn: Number(r.respondido_en),
+    }));
+  } catch (err) {
+    console.error("No se pudieron leer los resultados registrados:", err);
+    return null;
+  }
+}
