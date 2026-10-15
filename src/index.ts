@@ -1427,11 +1427,11 @@ async function procesarTurnoCliente(
     if (reply.verEnAmbiente && esWhatsApp && roomvoHabilitado(from)) {
       // Una sola vez por conversación, y esto lo decide el CÓDIGO.
       //
-      // El prompt ya se lo pide al modelo, pero pedirle a un modelo que no
-      // repita algo no es lo mismo que impedírselo: el 15/10 llegaron dos
-      // botones idénticos seguidos. Mientras no se sepa si fue el modelo
-      // repitiendo el marcador o el turno corriendo dos veces, el guard cubre
-      // los dos casos y no le cuesta nada a nadie.
+      // El 15/10 llegaron dos botones idénticos seguidos. La causa fue un
+      // error de edición: este bloque había quedado escrito DOS VECES en el
+      // archivo, así que el turno mandaba dos. Eso ya está corregido — queda
+      // un solo bloque — y este guard se queda igual, porque el prompt le pide
+      // al modelo que no repita el marcador y pedírselo no es impedírselo.
       if (ambienteOfrecido.has(from)) {
         console.log(`🏠 Visualizador ya ofrecido a ${from} en esta conversación; no se repite.`);
       } else {
