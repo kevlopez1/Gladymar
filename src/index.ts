@@ -1331,6 +1331,24 @@ async function procesarTurnoCliente(
     const cotizacionPDF = true;
     const reply = await agent.handleMessage(sessionId, text, { cotizacionPDF, prueba, imagen, documento });
 
+    // La cotización se GENERA antes de empezar a escribir, para poder mandarla
+    // en medio de los bloques y no al final.
+    //
+    // El orden importa: el modelo escribe un mensaje que presenta la cotización
+    // y otro que cierra ("¿querés que te conecte con un asesor?"). Mandando el
+    // PDF después de TODO el texto, al cliente le llegaba el cierre antes que
+    // la cotización, y la conversación quedaba al revés: se despedía de él
+    // antes de darle lo que había pedido.
+    let pdfCotizacion: string | null = null;
+    if (reply.cotizacion) {
+      try {
+        const rel = await generarCotizacionPDF(reply.cotizacion);
+        pdfCotizacion = `${config.publicBaseUrl.replace(/\/$/, "")}/${rel}`;
+      } catch (err) {
+        console.error(`No se pudo generar la cotización de ${from}:`, err);
+      }
+    }
+
     // Respuestas en bloques: muestra "escribiendo…" antes de cada bloque (y un mínimo antes del primero).
     // El último bloque, si hay opciones, se envía como LISTA interactiva (igual que el demo).
     const bloques = splitBlocks(reply.text);
@@ -1372,6 +1390,43 @@ async function procesarTurnoCliente(
         }
       } else {
         await sendText(from, bloques[i]);
+      }
+
+      // El PDF va pegado al primer bloque, que es el que lo presenta
+      // ("te paso la cotización"), y antes de los que cierran.
+      if (pdfCotizacion && reply.cotizacion && i === 0) {
+        try {
+          await sendDocument(
+            from,
+            pdfCotizacion,
+            `Cotización ${reply.cotizacion.numero}.pdf`,
+            "Precios de lista vigentes hoy ◆ Gladymar",
+          );
+        } catch (err) {
+          console.error(`No se pudo enviar la cotización a ${from}:`, err);
+        }
+      }
+    }
+
+    // "Ver en mi ambiente": botón que abre el visualizador de Gladymar.
+    //
+    // Va como botón y no como link pelado porque el cliente no tiene que
+    // copiar ni pegar nada: toca y se abre el navegador interno de WhatsApp,
+    // sin salir de la app. Es lo más cerca de visualizar dentro del chat que
+    // permite Meta — un Flow no sirve, solo renderiza componentes propios y no
+    // puede correr una web de terceros, que es lo que es el visualizador.
+    if (reply.verEnAmbiente && esWhatsApp && roomvoHabilitado(from)) {
+      try {
+        await sleep(600);
+        await sendBotonUrl(
+          from,
+          `Así podés ver el *${reply.verEnAmbiente}* en tu propio ambiente 😊\n\n` +
+            "Subí una foto de tu espacio (o usá una de las habitaciones de ejemplo) y mirá cómo queda antes de decidir.",
+          "🏠 Ver en mi ambiente",
+          config.roomvo.url,
+        );
+      } catch (err) {
+        console.error(`No se pudo enviar el botón del visualizador a ${from}:`, err);
       }
     }
 
@@ -1435,19 +1490,11 @@ async function procesarTurnoCliente(
       }
     }
 
-    // Cotización en PDF. Hoy solo la genera el Gerente General; el aviso al
-    // asesor queda listo para cuando se habilite para clientes reales.
-    if (reply.cotizacion) {
-      try {
-        const rel = await generarCotizacionPDF(reply.cotizacion);
-        const url = `${config.publicBaseUrl.replace(/\/$/, "")}/${rel}`;
-        await sendDocument(from, url, `Cotización ${reply.cotizacion.numero}.pdf`, "Precios de lista vigentes hoy ◆ Gladymar");
-        // El asesor tiene que ver lo mismo que vio el cliente ANTES de llamarlo:
-        // si no, el cliente le habla de un precio que el asesor no conoce.
-        if (!prueba) void avisarCotizacionAlAsesor(from, name, reply.cotizacion, url);
-      } catch (err) {
-        console.error(`No se pudo generar/enviar la cotización a ${from}:`, err);
-      }
+    // El asesor tiene que ver lo mismo que vio el cliente ANTES de llamarlo:
+    // si no, el cliente le habla de un precio que el asesor no conoce. Va
+    // después de la conversación porque no la interrumpe.
+    if (reply.cotizacion && pdfCotizacion && !prueba) {
+      void avisarCotizacionAlAsesor(from, name, reply.cotizacion, pdfCotizacion);
     }
 
     console.log(`🤖 -> ${prueba ? "[PRUEBA] " : ""}${from}: ${reply.text.slice(0, 120)}...`);
