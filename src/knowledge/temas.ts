@@ -20,10 +20,15 @@ export const TEMAS: Record<string, Tema> = {
   roomvo: {
     id: "roomvo",
     titulo: "Roomvo – Simulador de ambientes",
-    contenido:
-      "Estamos preparando *Roomvo*, nuestro simulador para que veas cómo lucen nuestros productos en tu propio espacio (subís una foto y probás pisos y revestimientos). ✨\n" +
-      "Estará disponible muy pronto en https://gladymar.com.bo. Mientras tanto, con gusto te conecto con un asesor o te invito a visitar nuestro showroom.",
-    confirmado: false,
+    // El texto depende de si el visualizador está encendido. Mientras estuvo
+    // apagado decía "muy pronto", y esa frase sobrevivió al día en que se
+    // encendió: el bot seguía prometiendo para pronto algo que ya tenía puesto.
+    contenido: config.roomvo.url
+      ? "Con *Roomvo* podés ver cómo quedan nuestros productos en tu propio espacio: subís una foto de tu ambiente y probás pisos y revestimientos encima. ✨\n" +
+        "Decime qué producto te interesa y te paso el botón para abrirlo."
+      : "Estamos preparando *Roomvo*, nuestro simulador para que veas cómo lucen nuestros productos en tu propio espacio (subís una foto y probás pisos y revestimientos). ✨\n" +
+        "Estará disponible muy pronto en https://gladymar.com.bo. Mientras tanto, con gusto te conecto con un asesor o te invito a visitar nuestro showroom.",
+    confirmado: Boolean(config.roomvo.url),
   },
 
   catalogo: {
