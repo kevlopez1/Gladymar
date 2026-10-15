@@ -1251,6 +1251,15 @@ async function enviarCatalogo(to: string): Promise<void> {
  * para todos; con lista, solo para esos (así se prueba con dos números antes
  * de abrirlo).
  */
+/**
+ * A quién ya se le ofreció el visualizador.
+ *
+ * En memoria: lo peor que pasa si el proceso se reinicia es que a un cliente
+ * se le ofrezca una segunda vez, horas después. Guardarlo en la base por eso
+ * sería caro para el daño que evita.
+ */
+const ambienteOfrecido = new Set<string>();
+
 function roomvoHabilitado(telefono: string): boolean {
   if (!config.roomvo.url) return false;
   if (!config.roomvo.telefonos.length) return true;
@@ -1416,17 +1425,30 @@ async function procesarTurnoCliente(
     // permite Meta — un Flow no sirve, solo renderiza componentes propios y no
     // puede correr una web de terceros, que es lo que es el visualizador.
     if (reply.verEnAmbiente && esWhatsApp && roomvoHabilitado(from)) {
-      try {
-        await sleep(600);
-        await sendBotonUrl(
-          from,
-          `Así podés ver el *${reply.verEnAmbiente}* en tu propio ambiente 😊\n\n` +
-            "Subí una foto de tu espacio (o usá una de las habitaciones de ejemplo) y mirá cómo queda antes de decidir.",
-          "🏠 Ver en mi ambiente",
-          config.roomvo.url,
-        );
-      } catch (err) {
-        console.error(`No se pudo enviar el botón del visualizador a ${from}:`, err);
+      // Una sola vez por conversación, y esto lo decide el CÓDIGO.
+      //
+      // El prompt ya se lo pide al modelo, pero pedirle a un modelo que no
+      // repita algo no es lo mismo que impedírselo: el 15/10 llegaron dos
+      // botones idénticos seguidos. Mientras no se sepa si fue el modelo
+      // repitiendo el marcador o el turno corriendo dos veces, el guard cubre
+      // los dos casos y no le cuesta nada a nadie.
+      if (ambienteOfrecido.has(from)) {
+        console.log(`🏠 Visualizador ya ofrecido a ${from} en esta conversación; no se repite.`);
+      } else {
+        try {
+          await sleep(600);
+          const wamid = await sendBotonUrl(
+            from,
+            `Así podés ver el *${reply.verEnAmbiente}* en tu propio ambiente 😊\n\n` +
+              "Subí una foto de tu espacio (o usá una de las habitaciones de ejemplo) y mirá cómo queda antes de decidir.",
+            "🏠 Ver en mi ambiente",
+            config.roomvo.url,
+          );
+          ambienteOfrecido.add(from);
+          console.log(`🏠 Visualizador -> ${from} (${reply.verEnAmbiente}) id=${wamid ?? "sin id"}`);
+        } catch (err) {
+          console.error(`No se pudo enviar el botón del visualizador a ${from}:`, err);
+        }
       }
     }
 
