@@ -1251,6 +1251,15 @@ async function enviarCatalogo(to: string): Promise<void> {
  * para todos; con lista, solo para esos (así se prueba con dos números antes
  * de abrirlo).
  */
+/**
+ * A quién ya se le ofreció el visualizador.
+ *
+ * En memoria: lo peor que pasa si el proceso se reinicia es que a un cliente
+ * se le ofrezca una segunda vez, horas después. Guardarlo en la base por eso
+ * sería caro para el daño que evita.
+ */
+const ambienteOfrecido = new Set<string>();
+
 function roomvoHabilitado(telefono: string): boolean {
   if (!config.roomvo.url) return false;
   if (!config.roomvo.telefonos.length) return true;
@@ -1416,39 +1425,30 @@ async function procesarTurnoCliente(
     // permite Meta — un Flow no sirve, solo renderiza componentes propios y no
     // puede correr una web de terceros, que es lo que es el visualizador.
     if (reply.verEnAmbiente && esWhatsApp && roomvoHabilitado(from)) {
-      try {
-        await sleep(600);
-        await sendBotonUrl(
-          from,
-          `Así podés ver el *${reply.verEnAmbiente}* en tu propio ambiente 😊\n\n` +
-            "Subí una foto de tu espacio (o usá una de las habitaciones de ejemplo) y mirá cómo queda antes de decidir.",
-          "🏠 Ver en mi ambiente",
-          config.roomvo.url,
-        );
-      } catch (err) {
-        console.error(`No se pudo enviar el botón del visualizador a ${from}:`, err);
-      }
-    }
-
-    // "Ver en mi ambiente": botón que abre el visualizador de Gladymar.
-    //
-    // Va como botón y no como link pelado porque el cliente no tiene que
-    // copiar ni pegar nada: toca y se abre el navegador interno de WhatsApp,
-    // sin salir de la app. Es lo más cerca de visualizar dentro del chat que
-    // permite Meta — un Flow no sirve, solo renderiza componentes propios y no
-    // puede correr una web de terceros, que es lo que es el visualizador.
-    if (reply.verEnAmbiente && esWhatsApp && roomvoHabilitado(from)) {
-      try {
-        await sleep(600);
-        await sendBotonUrl(
-          from,
-          `Así podés ver el *${reply.verEnAmbiente}* en tu propio ambiente 😊\n\n` +
-            "Subí una foto de tu espacio (o usá una de las habitaciones de ejemplo) y mirá cómo queda antes de decidir.",
-          "🏠 Ver en mi ambiente",
-          config.roomvo.url,
-        );
-      } catch (err) {
-        console.error(`No se pudo enviar el botón del visualizador a ${from}:`, err);
+      // Una sola vez por conversación, y esto lo decide el CÓDIGO.
+      //
+      // El 15/10 llegaron dos botones idénticos seguidos. La causa fue un
+      // error de edición: este bloque había quedado escrito DOS VECES en el
+      // archivo, así que el turno mandaba dos. Eso ya está corregido — queda
+      // un solo bloque — y este guard se queda igual, porque el prompt le pide
+      // al modelo que no repita el marcador y pedírselo no es impedírselo.
+      if (ambienteOfrecido.has(from)) {
+        console.log(`🏠 Visualizador ya ofrecido a ${from} en esta conversación; no se repite.`);
+      } else {
+        try {
+          await sleep(600);
+          const wamid = await sendBotonUrl(
+            from,
+            `Así podés ver el *${reply.verEnAmbiente}* en tu propio ambiente 😊\n\n` +
+              "Subí una foto de tu espacio (o usá una de las habitaciones de ejemplo) y mirá cómo queda antes de decidir.",
+            "🏠 Ver en mi ambiente",
+            config.roomvo.url,
+          );
+          ambienteOfrecido.add(from);
+          console.log(`🏠 Visualizador -> ${from} (${reply.verEnAmbiente}) id=${wamid ?? "sin id"}`);
+        } catch (err) {
+          console.error(`No se pudo enviar el botón del visualizador a ${from}:`, err);
+        }
       }
     }
 
