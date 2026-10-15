@@ -155,6 +155,27 @@ export const config = {
       .filter(Boolean),
   },
 
+  /**
+   * Roomvo: "ver el producto en tu propio ambiente".
+   *
+   * Gladymar ya tiene el visualizador puesto en su web. Acá solo guardamos a
+   * dónde mandar al cliente y a quién se le ofrece todavía.
+   *
+   * La URL va en una variable y no en el código porque al cerrar esto no
+   * sabíamos si íbamos a apuntar al visualizador general o a la ficha de cada
+   * producto: cambiarlo tiene que ser editar una variable, no un despliegue.
+   *
+   * Vacía => la función queda apagada y el bot no la menciona.
+   */
+  roomvo: {
+    url: optional("ROOMVO_URL", "").trim(),
+    /** Quiénes la ven mientras se prueba. Vacío con URL cargada => todos. */
+    telefonos: optional("ROOMVO_TELEFONOS", "")
+      .split(",")
+      .map((t) => t.replace(/\D/g, ""))
+      .filter(Boolean),
+  },
+
   promociones: {
     // Hoja de Google con las promociones vigentes, que administra Gladymar
     // (columnas TITULO, DETALLE, CIUDAD, DESDE, HASTA, ACTIVA). Vacío => el

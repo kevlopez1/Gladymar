@@ -391,3 +391,50 @@ async function postStatus(body: Record<string, unknown>): Promise<void> {
     console.warn("⌨️  Estado/typing falló (red):", err);
   }
 }
+
+/**
+ * Mensaje con un BOTÓN que abre una URL.
+ *
+ * Es lo más cerca de "ver algo sin salir de WhatsApp" que permite Meta: el
+ * cliente toca y se abre el navegador interno de la app, sin copiar ni pegar
+ * nada. Un Flow no sirve para esto — solo renderiza los componentes de Meta y
+ * no puede correr una web de terceros, que es lo que es el visualizador.
+ *
+ * Meta recorta el texto del botón a 20 caracteres sin avisar, así que se
+ * recorta acá para que no llegue cortado a la mitad de una palabra.
+ */
+export async function sendBotonUrl(
+  to: string,
+  body: string,
+  textoBoton: string,
+  url: string,
+): Promise<string | null> {
+  const endpoint = `${BASE}/${config.whatsapp.phoneNumberId}/messages`;
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.whatsapp.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "cta_url",
+        body: { text: (body || "Mirá esto:").slice(0, 1024) },
+        action: {
+          name: "cta_url",
+          parameters: { display_text: (textoBoton || "Abrir").slice(0, 20), url },
+        },
+      },
+    }),
+  });
+  const json = (await res.json().catch(() => ({}))) as { messages?: { id?: string }[]; error?: unknown };
+  if (!res.ok) {
+    console.error(`No se pudo mandar el botón de URL a ${to}:`, JSON.stringify(json.error ?? json));
+    return null;
+  }
+  return json.messages?.[0]?.id ?? null;
+}

@@ -44,6 +44,12 @@ export interface AgentReply {
   solicitud?: { tipo: string; prioridad: string; detalle: string; nombre?: string; ciudad?: string; telefono?: string };
   /** Cotización generada en este turno: la capa de WhatsApp genera el PDF y lo envía. */
   cotizacion?: Cotizacion;
+  /**
+   * El cliente quiere ver un producto en su ambiente: la capa de WhatsApp
+   * manda el botón que abre el visualizador. Guarda el nombre del producto
+   * para poder nombrarlo en el mensaje.
+   */
+  verEnAmbiente?: string;
   /** Bloque EXACTO de sucursales (datos oficiales) para enviar verbatim. */
   sucursales?: string;
 }
@@ -151,6 +157,22 @@ function extractOptions(text: string): ParsedOptions {
     options,
     optionsButton: botonM?.[1]?.trim() || undefined,
     optionsTitle: tituloM?.[1]?.trim() || undefined,
+  };
+}
+
+/**
+ * Extrae el marcador del visualizador: [[AMBIENTE: Statuario 60x120]]
+ *
+ * Va por marcador y no por herramienta a propósito: no hay nada que consultar
+ * ni calcular, solo una decisión de conversación ("¿le ofrezco verlo?"). Una
+ * herramienta para eso sería una llamada de más al modelo en cada turno.
+ */
+function extraerAmbiente(text: string): { text: string; producto?: string } {
+  const m = text.match(/\[\[\s*AMBIENTE\s*:\s*([^\]]+)\]\]/i);
+  if (!m) return { text };
+  return {
+    text: text.replace(m[0], "").replace(/\n{3,}/g, "\n\n").trim(),
+    producto: m[1].trim() || undefined,
   };
 }
 
@@ -315,12 +337,13 @@ export class GladymarAgent {
     const withDoc = extractDocument(
       text || "Disculpe, no pude generar una respuesta. ¿Podría reformular su consulta?",
     );
-    const parsed = extractOptions(withDoc.text);
+    const amb = extraerAmbiente(withDoc.text);
+    const parsed = extractOptions(amb.text);
 
     // Blindaje: nunca dejar marcadores (bien o mal formados) en el texto al cliente.
     let safeText = quitarGuiones(
       parsed.text
-        .replace(/\[\[\s*(OPCIONES|DOCUMENTO)[\s\S]*$/i, "") // marcador sin cerrar al final
+        .replace(/\[\[\s*(OPCIONES|DOCUMENTO|AMBIENTE)[\s\S]*$/i, "") // marcador sin cerrar al final
         .replace(/\[\[[^\]]*\]\]/g, "") // cualquier marcador residual
         .replace(/\n{3,}/g, "\n\n"),
     ).trim();
@@ -338,6 +361,7 @@ export class GladymarAgent {
       options: parsed.options,
       optionsButton: parsed.optionsButton,
       optionsTitle: parsed.optionsTitle,
+      verEnAmbiente: amb.producto,
       document: withDoc.document,
       escalated,
       attachManual,

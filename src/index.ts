@@ -14,7 +14,7 @@ import { generarCotizacionPDF } from "./agent/cotizacionPdf.js";
 import { bs, type Cotizacion } from "./agent/cotizacion.js";
 import { resumenUso, fechaBolivia, PRECIOS_USD_POR_MILLON } from "./agent/uso.js";
 import { InMemorySessionStore } from "./session/store.js";
-import { sendText, sendDocument, sendInteractiveList, sendInteractiveSections, sendTemplate, downloadMedia, downloadDocumento, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
+import { sendText, sendBotonUrl, sendDocument, sendInteractiveList, sendInteractiveSections, sendTemplate, downloadMedia, downloadDocumento, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
 import { SheetsLogger, nowBolivia } from "./integrations/sheets.js";
@@ -1243,6 +1243,21 @@ async function enviarCatalogo(to: string): Promise<void> {
   console.log(`📕 Catálogo Dimensión Viva enviado a ${to}`);
 }
 
+/**
+ * ¿A este número se le ofrece el visualizador?
+ *
+ * Sin URL cargada queda apagado para todos: mandar un botón que no lleva a
+ * ningún lado es peor que no mandarlo. Con URL y sin lista de teléfonos, va
+ * para todos; con lista, solo para esos (así se prueba con dos números antes
+ * de abrirlo).
+ */
+function roomvoHabilitado(telefono: string): boolean {
+  if (!config.roomvo.url) return false;
+  if (!config.roomvo.telefonos.length) return true;
+  const d = telefono.replace(/\D/g, "");
+  return config.roomvo.telefonos.some((t) => d === t || d.endsWith(t));
+}
+
 async function procesarTurnoCliente(
   from: string,
   text: string,
@@ -1357,6 +1372,28 @@ async function procesarTurnoCliente(
         }
       } else {
         await sendText(from, bloques[i]);
+      }
+    }
+
+    // "Ver en mi ambiente": botón que abre el visualizador de Gladymar.
+    //
+    // Va como botón y no como link pelado porque el cliente no tiene que
+    // copiar ni pegar nada: toca y se abre el navegador interno de WhatsApp,
+    // sin salir de la app. Es lo más cerca de visualizar dentro del chat que
+    // permite Meta — un Flow no sirve, solo renderiza componentes propios y no
+    // puede correr una web de terceros, que es lo que es el visualizador.
+    if (reply.verEnAmbiente && esWhatsApp && roomvoHabilitado(from)) {
+      try {
+        await sleep(600);
+        await sendBotonUrl(
+          from,
+          `Así podés ver el *${reply.verEnAmbiente}* en tu propio ambiente 😊\n\n` +
+            "Subí una foto de tu espacio (o usá una de las habitaciones de ejemplo) y mirá cómo queda antes de decidir.",
+          "🏠 Ver en mi ambiente",
+          config.roomvo.url,
+        );
+      } catch (err) {
+        console.error(`No se pudo enviar el botón del visualizador a ${from}:`, err);
       }
     }
 
