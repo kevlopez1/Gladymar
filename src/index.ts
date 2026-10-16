@@ -48,7 +48,7 @@ import {
   marcarTodoComoVisto,
 } from "./meta/sondeo.js";
 import { datosDePagina, suscribirPagina } from "./meta/tokenPagina.js";
-import { insertarConversacion, obtenerConversaciones, registrarDerivacion, resumenLeads, resultadosRegistrados, primeraVez } from "./db/index.js";
+import { insertarConversacion, obtenerConversaciones, registrarDerivacion, resumenLeads, resultadosRegistrados, primeraVez, borrarMarca } from "./db/index.js";
 import {
   seguimientoAsesorHabilitado,
   pendientes as seguimientosPorPreguntar,
@@ -1917,8 +1917,11 @@ if (config.plantillaEnvio) {
 
     // El candado va ANTES del envío: si se cuelga a mitad, preferimos que no
     // se mande a que se mande dos veces a una persona real.
-    if (!(await primeraVez(`plantilla:${nombre}:${destino}`))) {
-      console.log(`📣 La plantilla "${nombre}" ya se le mandó a ${destino}; no se repite.`);
+    // El candado incluye CON QUÉ se manda: reintentar la misma plantilla al
+    // mismo número pero con otra media es otro envío, no una repetición.
+    const candado = `plantilla:${nombre}:${destino}:${mediaFinal || "sin-media"}`;
+    if (!(await primeraVez(candado))) {
+      console.log(`📣 La plantilla "${nombre}" ya se le mandó a ${destino} con esta media; no se repite.`);
       return;
     }
 
@@ -1931,11 +1934,16 @@ if (config.plantillaEnvio) {
       components.push({ type: "header", parameters: [{ type: tipo, [tipo]: ref }] });
     }
     const envio = await sendTemplateCrudo(destino, nombre, pl.language || "es", components);
-    console.log(
-      envio.ok
-        ? `📣 Plantilla "${nombre}" ENVIADA a ${destino} (id=${envio.wamid ?? "sin id"}).`
-        : `📣 Falló el envío de "${nombre}" a ${destino}: ${JSON.stringify(envio.error)}`,
-    );
+    if (envio.ok) {
+      console.log(`📣 Plantilla "${nombre}" ENVIADA a ${destino} (id=${envio.wamid ?? "sin id"}).`);
+    } else {
+      // La API contestó con un error explícito: no se entregó nada, así que se
+      // suelta el candado para que el reintento pueda salir. Un timeout o un
+      // corte de red NO llegan acá: en esos casos no se sabe si llegó y el
+      // candado se queda puesto a propósito.
+      await borrarMarca(candado);
+      console.error(`📣 Falló el envío de "${nombre}" a ${destino}: ${JSON.stringify(envio.error)}`);
+    }
   })();
 }
 

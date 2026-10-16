@@ -1010,3 +1010,26 @@ export async function primeraVez(clave: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Borra una marca de "ya hecho".
+ *
+ * Hace falta porque el candado de las órdenes de una sola vez se toma ANTES de
+ * ejecutarlas —para que un cuelgue a mitad de camino no termine en un envío
+ * duplicado— y entonces un intento FALLIDO dejaba la marca puesta y bloqueaba
+ * el reintento bueno. Pasó con la plantilla dexco_gladymar: el primer intento
+ * falló por un problema de formato y el segundo, ya correcto, no salió nunca.
+ *
+ * Solo se borra cuando la API contestó con un error explícito: ahí sabemos que
+ * no se entregó nada. Si fue un timeout o se cortó la red no se toca, porque
+ * no se sabe si llegó.
+ */
+export async function borrarMarca(clave: string): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await p.query(`DELETE FROM contadores WHERE clave = $1`, [clave]);
+  } catch (err) {
+    console.error(`No se pudo borrar la marca "${clave}":`, err);
+  }
+}
