@@ -438,3 +438,43 @@ export async function sendBotonUrl(
   }
   return json.messages?.[0]?.id ?? null;
 }
+
+/**
+ * Manda una plantilla ya aprobada, armando los componentes que esa plantilla
+ * realmente tiene.
+ *
+ * `sendTemplate` siempre manda un componente `body` con parámetros, que sirve
+ * para las dos plantillas del bot. Una plantilla de marketing hecha a mano
+ * puede tener encabezado con video o imagen, botones, y un cuerpo sin
+ * variables: mandarle un `body` vacío o faltarle el encabezado la rechaza con
+ * un error de componentes que no dice gran cosa.
+ *
+ * Por eso acá los componentes se pasan tal cual, ya armados por quien sabe
+ * cómo es la plantilla.
+ */
+export async function sendTemplateCrudo(
+  to: string,
+  templateName: string,
+  languageCode: string,
+  components: unknown[],
+): Promise<{ ok: boolean; wamid?: string; error?: unknown }> {
+  const url = `${BASE}/${config.whatsapp.phoneNumberId}/messages`;
+  const cuerpo: Record<string, unknown> = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "template",
+    template: { name: templateName, language: { code: languageCode } },
+  };
+  if (components.length) {
+    (cuerpo.template as Record<string, unknown>).components = components;
+  }
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${config.whatsapp.accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(cuerpo),
+  });
+  const json = (await res.json().catch(() => ({}))) as { messages?: { id?: string }[]; error?: unknown };
+  if (!res.ok) return { ok: false, error: json.error ?? json };
+  return { ok: true, wamid: json.messages?.[0]?.id };
+}
