@@ -80,15 +80,23 @@ export async function sondearMensajes(canal: Canal): Promise<MensajeSondeado[]> 
   if (!cred) return [];
 
   const plataforma = canal === "instagram" ? "instagram" : "messenger";
+  // Se pide EL ÚLTIMO mensaje de las 10 conversaciones más recientes.
+  //
+  // Antes eran 3 mensajes de 25 conversaciones, y Meta empezó a contestar
+  // {"code":1,"message":"Please reduce the amount of data you're asking for"}
+  // y a agotar el timeout. Los otros dos mensajes nunca se usaron: el código
+  // mira solo el primero de la lista. Y 10 conversaciones alcanzan de sobra
+  // para un ciclo de 60 segundos — si entraran once en un minuto, el resto se
+  // levanta en el ciclo siguiente.
   const url =
     `${cred.base}/${config.whatsapp.apiVersion}/${cred.id}/conversations` +
     `?platform=${plataforma}` +
-    `&fields=${encodeURIComponent("messages.limit(3){id,created_time,from,message}")}` +
-    `&limit=25`;
+    `&fields=${encodeURIComponent("messages.limit(1){id,created_time,from,message}")}` +
+    `&limit=10`;
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${cred.token}` },
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(30_000),
   });
   const json = (await res.json().catch(() => ({}))) as { data?: ConversacionApi[]; error?: unknown };
   if (!res.ok) {
