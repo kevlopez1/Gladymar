@@ -985,3 +985,28 @@ export async function resultadosRegistrados(dias = 60): Promise<ResultadoRegistr
     return null;
   }
 }
+
+/**
+ * Marca que algo ya se hizo UNA vez, y dice si era la primera.
+ *
+ * Devuelve true solo la primera vez que se llama con esa clave. Existe para
+ * las órdenes de una sola vez que se dan por variable de entorno: la variable
+ * queda puesta, el proceso se reinicia seguido, y sin esto la orden se
+ * ejecutaría en cada arranque. Es exactamente lo que le pasaba al reporte
+ * diario, que salía de nuevo cada vez que el servicio levantaba.
+ */
+export async function primeraVez(clave: string): Promise<boolean> {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await tablaLista();
+    const { rowCount } = await p.query(
+      `INSERT INTO contadores (clave, valor) VALUES ($1, 1) ON CONFLICT (clave) DO NOTHING`,
+      [clave],
+    );
+    return (rowCount ?? 0) > 0;
+  } catch (err) {
+    console.error(`No se pudo marcar "${clave}" como hecho:`, err);
+    return false;
+  }
+}
