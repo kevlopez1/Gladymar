@@ -14,6 +14,8 @@ import { generarCotizacionPDF } from "./agent/cotizacionPdf.js";
 import { bs, type Cotizacion } from "./agent/cotizacion.js";
 import { resumenUso, fechaBolivia, PRECIOS_USD_POR_MILLON } from "./agent/uso.js";
 import { InMemorySessionStore } from "./session/store.js";
+import { sendTemplateCrudo } from "./whatsapp/client.js";
+import { leerPlantilla } from "./whatsapp/plantillas.js";
 import { sendText, sendBotonUrl, sendDocument, sendInteractiveList, sendInteractiveSections, sendTemplate, downloadMedia, downloadDocumento, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
@@ -241,6 +243,83 @@ app.get("/admin/reenviar-resultados", async (req, res) => {
     hechos.push({ cliente: f.clienteTelefono, etapa, envio });
   }
   res.json({ revisados: filas.length, reenviados: hechos.length, detalle: hechos });
+});
+
+/**
+ * Ver una plantilla de Meta y, si se pide, mandarla a UN número.
+ *
+ * Sin `to` solo MUESTRA cómo está aprobada la plantilla (estado, categoría,
+ * idioma y componentes). Eso va primero a propósito: una plantilla de
+ * marketing hecha a mano puede tener encabezado con video, botones o
+ * variables, y mandarla a ciegas o falla con un error de componentes o le
+ * llega mal a una persona real.
+ *
+ * Con `to` la manda a ESE número y a ninguno más. No hay envío masivo acá:
+ * si alguna vez hace falta, que sea una función pensada para eso y no un
+ * parámetro de más en una herramienta de diagnóstico.
+ *
+ *   Ver:     /admin/plantilla?key=CLAVE&nombre=dexco_gladymar
+ *   Enviar:  /admin/plantilla?key=CLAVE&nombre=dexco_gladymar&to=59172155226
+ *            (&video=URL  si el encabezado es de video y hay que pasarlo)
+ */
+app.get("/admin/plantilla", async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  const nombre = String(req.query.nombre || "").trim();
+  if (!nombre) {
+    res.status(400).json({ error: "Falta el parámetro nombre." });
+    return;
+  }
+
+  const def = await leerPlantilla(nombre);
+  if (!Array.isArray(def)) {
+    res.status(502).json({ nombre, ...def });
+    return;
+  }
+  if (!def.length) {
+    res.status(404).json({ error: `Meta no tiene ninguna plantilla llamada "${nombre}".` });
+    return;
+  }
+
+  const destino = String(req.query.to || "").replace(/\D/g, "");
+  if (!destino) {
+    res.json({ nombre, plantillas: def, nota: "Para enviarla, agregá &to=NUMERO (con 591)." });
+    return;
+  }
+
+  const plantilla = def[0];
+  const idioma = plantilla.language || "es";
+  const components: unknown[] = [];
+
+  // Encabezado de media: Meta EXIGE la media al enviar, aunque la plantilla
+  // aprobada traiga un ejemplo. El ejemplo es solo para la revisión.
+  const header = plantilla.components?.find((c) => c.type === "HEADER");
+  const formato = String(header?.format || "").toUpperCase();
+  const video = String(req.query.video || "").trim();
+  if (formato === "VIDEO" || formato === "IMAGE" || formato === "DOCUMENT") {
+    if (!video) {
+      res.status(400).json({
+        error: `La plantilla "${nombre}" tiene encabezado de ${formato}. Pasá la URL pública con &video=...`,
+        plantillas: def,
+      });
+      return;
+    }
+    components.push({
+      type: "header",
+      parameters: [{ type: formato.toLowerCase(), [formato.toLowerCase()]: { link: video } }],
+    });
+  }
+
+  const envio = await sendTemplateCrudo(destino, nombre, idioma, components);
+  console.log(
+    envio.ok
+      ? `📣 Plantilla "${nombre}" enviada a ${destino} (id=${envio.wamid ?? "sin id"}).`
+      : `📣 No se pudo enviar la plantilla "${nombre}" a ${destino}: ${JSON.stringify(envio.error)}`,
+  );
+  res.status(envio.ok ? 200 : 502).json({ nombre, idioma, destino, ...envio });
 });
 
 app.get("/admin/leads", async (req, res) => {

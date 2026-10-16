@@ -266,3 +266,30 @@ export function esFalloDeVentana(error?: string): boolean {
   const m = /\[(\d+)\]/.exec(error);
   return m ? CODIGOS_VENTANA_CERRADA.has(Number(m[1])) : false;
 }
+
+export interface PlantillaMeta {
+  name: string;
+  status?: string;
+  category?: string;
+  language?: string;
+  components?: { type?: string; format?: string; text?: string; example?: unknown }[];
+}
+
+/** Lee de Meta la definición de una plantilla, tal como está aprobada. */
+export async function leerPlantilla(nombre: string): Promise<PlantillaMeta[] | { error: string }> {
+  const wabaId = config.whatsapp.wabaId;
+  const accessToken = config.whatsapp.accessToken;
+  if (!wabaId || !accessToken) return { error: "Falta WHATSAPP_WABA_ID o el token." };
+  try {
+    const url =
+      `https://graph.facebook.com/${config.whatsapp.apiVersion}/${wabaId}/message_templates` +
+      `?name=${encodeURIComponent(nombre)}&fields=name,status,category,language,components&limit=50` +
+      `&access_token=${encodeURIComponent(accessToken)}`;
+    const res = await fetch(url);
+    const json = (await res.json().catch(() => ({}))) as { data?: PlantillaMeta[]; error?: unknown };
+    if (!res.ok) return { error: JSON.stringify(json.error ?? json) };
+    return (json.data ?? []).filter((t) => t.name === nombre);
+  } catch (err) {
+    return { error: String(err) };
+  }
+}
