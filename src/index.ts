@@ -48,7 +48,7 @@ import {
   marcarTodoComoVisto,
 } from "./meta/sondeo.js";
 import { datosDePagina, suscribirPagina } from "./meta/tokenPagina.js";
-import { insertarConversacion, obtenerConversaciones, registrarDerivacion, resumenLeads, resultadosRegistrados } from "./db/index.js";
+import { insertarConversacion, obtenerConversaciones, registrarDerivacion, resumenLeads, resultadosRegistrados, primeraVez } from "./db/index.js";
 import {
   seguimientoAsesorHabilitado,
   pendientes as seguimientosPorPreguntar,
@@ -1844,6 +1844,77 @@ if (metaHabilitado("messenger")) {
     } catch (err) {
       console.error("No se pudo preparar Messenger/Instagram:", err);
     }
+  })();
+}
+
+/**
+ * Orden de una sola vez: ver una plantilla y, si se pidió, mandarla.
+ *
+ * Se dispara con PLANTILLA_ENVIO porque desde el entorno de desarrollo no hay
+ * salida ni a la API de Meta ni a este servicio, así que la variable es la
+ * única palanca. Corre UNA vez aunque la variable siga puesta: el servicio se
+ * reinicia seguido y una orden que se repite en cada arranque ya nos mordió
+ * con el reporte diario, que volvía a salir cada vez que el proceso levantaba.
+ */
+if (config.plantillaEnvio) {
+  void (async () => {
+    const [nombre, destinoCrudo, media] = config.plantillaEnvio.split("|").map((x) => x.trim());
+    const destino = (destinoCrudo || "").replace(/\D/g, "");
+    if (!nombre) return;
+
+    const def = await leerPlantilla(nombre);
+    if (!Array.isArray(def)) {
+      console.error(`📣 No pude leer la plantilla "${nombre}": ${def.error}`);
+      return;
+    }
+    if (!def.length) {
+      console.error(`📣 Meta no tiene ninguna plantilla llamada "${nombre}".`);
+      return;
+    }
+    const pl = def[0];
+    const header = pl.components?.find((c) => c.type === "HEADER");
+    const formato = String(header?.format || "TEXTO").toUpperCase();
+    const cuerpo = pl.components?.find((c) => c.type === "BODY");
+    const variables = String(cuerpo?.text || "").match(/\{\{\d+\}\}/g)?.length ?? 0;
+    console.log(
+      `📣 Plantilla "${nombre}": estado ${pl.status ?? "?"}, categoría ${pl.category ?? "?"}, ` +
+        `idioma ${pl.language ?? "?"}, encabezado ${formato}, ${variables} variable(s) en el cuerpo.`,
+    );
+
+    if (!destino) {
+      console.log("📣 Sin destino en PLANTILLA_ENVIO: solo se muestra, no se manda nada.");
+      return;
+    }
+    if (variables > 0) {
+      console.error(`📣 NO la mando: el cuerpo tiene ${variables} variable(s) y no sé con qué llenarlas.`);
+      return;
+    }
+    if (["VIDEO", "IMAGE", "DOCUMENT"].includes(formato) && !media) {
+      console.error(
+        `📣 NO la mando: el encabezado es de ${formato} y Meta exige la media al enviar ` +
+          "(el ejemplo aprobado no sirve). Agregá la URL pública al final de PLANTILLA_ENVIO.",
+      );
+      return;
+    }
+
+    // El candado va ANTES del envío: si se cuelga a mitad, preferimos que no
+    // se mande a que se mande dos veces a una persona real.
+    if (!(await primeraVez(`plantilla:${nombre}:${destino}`))) {
+      console.log(`📣 La plantilla "${nombre}" ya se le mandó a ${destino}; no se repite.`);
+      return;
+    }
+
+    const components: unknown[] = [];
+    if (["VIDEO", "IMAGE", "DOCUMENT"].includes(formato)) {
+      const tipo = formato.toLowerCase();
+      components.push({ type: "header", parameters: [{ type: tipo, [tipo]: { link: media } }] });
+    }
+    const envio = await sendTemplateCrudo(destino, nombre, pl.language || "es", components);
+    console.log(
+      envio.ok
+        ? `📣 Plantilla "${nombre}" ENVIADA a ${destino} (id=${envio.wamid ?? "sin id"}).`
+        : `📣 Falló el envío de "${nombre}" a ${destino}: ${JSON.stringify(envio.error)}`,
+    );
   })();
 }
 

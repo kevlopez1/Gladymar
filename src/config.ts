@@ -176,6 +176,21 @@ export const config = {
       .filter(Boolean),
   },
 
+  /**
+   * Orden de una sola vez: mandar una plantilla a UN número al arrancar.
+   *
+   * Formato: "nombre|destino" o "nombre|destino|urlDelEncabezado".
+   *
+   * Existe porque desde el entorno de desarrollo no hay salida a la API de
+   * Meta ni al propio servicio: la única palanca es una variable. Se ejecuta
+   * UNA vez (queda anotado en la base) aunque la variable siga puesta, porque
+   * el servicio se reinicia seguido y una orden que se repite en cada arranque
+   * ya nos mordió una vez con el reporte diario.
+   *
+   * Sin destino, solo MUESTRA la plantilla en el log, sin mandar nada.
+   */
+  plantillaEnvio: optional("PLANTILLA_ENVIO", "").trim(),
+
   promociones: {
     // Hoja de Google con las promociones vigentes, que administra Gladymar
     // (columnas TITULO, DETALLE, CIUDAD, DESDE, HASTA, ACTIVA). Vacío => el
