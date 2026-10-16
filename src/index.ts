@@ -1889,12 +1889,30 @@ if (config.plantillaEnvio) {
       console.error(`📣 NO la mando: el cuerpo tiene ${variables} variable(s) y no sé con qué llenarlas.`);
       return;
     }
-    if (["VIDEO", "IMAGE", "DOCUMENT"].includes(formato) && !media) {
-      console.error(
-        `📣 NO la mando: el encabezado es de ${formato} y Meta exige la media al enviar ` +
-          "(el ejemplo aprobado no sirve). Agregá la URL pública al final de PLANTILLA_ENVIO.",
-      );
-      return;
+    // Si el encabezado es de media y no nos pasaron la URL, se intenta con el
+    // identificador que Meta guardó del archivo que se usó para APROBAR la
+    // plantilla (example.header_handle).
+    //
+    // No está documentado que sirva para enviar — ese handle es de la subida
+    // de revisión, no un media id — pero el intento cuesta una llamada
+    // fallida y evita tener que ir a buscar el archivo. Si Meta lo rechaza, lo
+    // dice y pedimos la URL, que es donde estábamos igual.
+    let mediaFinal = media;
+    let deEjemplo = false;
+    if (["VIDEO", "IMAGE", "DOCUMENT"].includes(formato) && !mediaFinal) {
+      const ej = (header as { example?: { header_handle?: string[] } } | undefined)?.example;
+      const handle = ej?.header_handle?.[0];
+      if (handle) {
+        mediaFinal = handle;
+        deEjemplo = true;
+        console.log(`📣 Sin URL propia: pruebo con el archivo del ejemplo aprobado (handle de ${formato}).`);
+      } else {
+        console.error(
+          `📣 NO la mando: el encabezado es de ${formato}, Meta exige la media al enviar y la ` +
+            "plantilla tampoco trae un ejemplo reutilizable. Agregá la URL pública al final de PLANTILLA_ENVIO.",
+        );
+        return;
+      }
     }
 
     // El candado va ANTES del envío: si se cuelga a mitad, preferimos que no
@@ -1907,7 +1925,10 @@ if (config.plantillaEnvio) {
     const components: unknown[] = [];
     if (["VIDEO", "IMAGE", "DOCUMENT"].includes(formato)) {
       const tipo = formato.toLowerCase();
-      components.push({ type: "header", parameters: [{ type: tipo, [tipo]: { link: media } }] });
+      // Una URL va como `link`; un identificador guardado por Meta, como `id`.
+      // Mandar un handle en `link` da un error de descarga que no se entiende.
+      const ref = deEjemplo ? { id: mediaFinal } : { link: mediaFinal };
+      components.push({ type: "header", parameters: [{ type: tipo, [tipo]: ref }] });
     }
     const envio = await sendTemplateCrudo(destino, nombre, pl.language || "es", components);
     console.log(
