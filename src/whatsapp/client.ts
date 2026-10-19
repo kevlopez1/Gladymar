@@ -478,3 +478,26 @@ export async function sendTemplateCrudo(
   if (!res.ok) return { ok: false, error: json.error ?? json };
   return { ok: true, wamid: json.messages?.[0]?.id };
 }
+
+/**
+ * Vuelve a registrar el número en la API de WhatsApp Cloud.
+ *
+ * Hace falta cuando Meta contesta "(#133010) Account not registered": el
+ * número sigue existiendo y el token sigue siendo válido, pero el número dejó
+ * de estar registrado para la API y NADA entra ni sale. Pasa cuando alguien
+ * usa ese número en la app de WhatsApp Business del teléfono, cuando lo mueven
+ * de cuenta, o cuando Meta lo desregistra por un cambio en la configuración.
+ *
+ * El PIN es el de verificación en dos pasos del número. No se puede adivinar
+ * ni recuperar desde acá: lo tiene Gladymar.
+ */
+export async function registrarNumero(pin: string): Promise<{ ok: boolean; detalle: unknown }> {
+  const url = `${BASE}/${config.whatsapp.phoneNumberId}/register`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${config.whatsapp.accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ messaging_product: "whatsapp", pin }),
+  });
+  const json = (await res.json().catch(() => ({}))) as { success?: boolean; error?: unknown };
+  return { ok: res.ok && json.success !== false, detalle: json.error ?? json };
+}
