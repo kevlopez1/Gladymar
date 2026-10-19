@@ -14,7 +14,7 @@ import { generarCotizacionPDF } from "./agent/cotizacionPdf.js";
 import { bs, type Cotizacion } from "./agent/cotizacion.js";
 import { resumenUso, fechaBolivia, PRECIOS_USD_POR_MILLON } from "./agent/uso.js";
 import { InMemorySessionStore } from "./session/store.js";
-import { sendTemplateCrudo } from "./whatsapp/client.js";
+import { sendTemplateCrudo, registrarNumero } from "./whatsapp/client.js";
 import { leerPlantilla } from "./whatsapp/plantillas.js";
 import { sendText, sendBotonUrl, sendDocument, sendInteractiveList, sendInteractiveSections, sendTemplate, downloadMedia, downloadDocumento, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./whatsapp/webhook.js";
@@ -1906,6 +1906,28 @@ if (metaHabilitado("messenger")) {
  * reinicia seguido y una orden que se repite en cada arranque ya nos mordió
  * con el reporte diario, que volvía a salir cada vez que el proceso levantaba.
  */
+/**
+ * Re-registrar el número si Gladymar cargó el PIN.
+ *
+ * Se corre ANTES que todo lo demás: con el número desregistrado, cada envío
+ * del arranque (reportes, seguimientos, plantillas) falla con 133010 y solo
+ * llena el log de ruido.
+ *
+ * No es de una sola vez: registrar un número ya registrado no hace daño, y si
+ * el número se vuelve a caer queremos que el próximo arranque lo levante sin
+ * que nadie tenga que mirar.
+ */
+if (config.registroPin) {
+  void (async () => {
+    const r = await registrarNumero(config.registroPin);
+    console.log(
+      r.ok
+        ? "📞 Número re-registrado en la API de WhatsApp."
+        : `📞 No se pudo re-registrar el número: ${JSON.stringify(r.detalle)}`,
+    );
+  })();
+}
+
 if (config.plantillaEnvio) {
   void (async () => {
     const [nombre, destinoCrudo, media] = config.plantillaEnvio.split("|").map((x) => x.trim());

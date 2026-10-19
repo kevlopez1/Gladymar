@@ -192,6 +192,17 @@ export const config = {
   plantillaEnvio: optional("PLANTILLA_ENVIO", "").trim(),
 
   /**
+   * PIN de verificación en dos pasos del número, para re-registrarlo.
+   *
+   * Solo se usa si Meta está contestando "(#133010) Account not registered",
+   * que deja al bot mudo y sordo: no entra ni sale un mensaje. Con el PIN
+   * cargado, el bot intenta registrarse solo al arrancar.
+   *
+   * Vacío => no se intenta nada.
+   */
+  registroPin: optional("WHATSAPP_REGISTER_PIN", "").trim(),
+
+  /**
    * PDF que se manda cuando alguien toca el botón del catálogo en la campaña
    * DEXCO. Es OTRO archivo que el catálogo Dimensión Viva de siempre: aquel
    * es de productos y este es de showrooms, y la campaña promete este.
