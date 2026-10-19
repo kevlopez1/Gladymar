@@ -1977,8 +1977,6 @@ if (config.plantillaEnvio) {
       }
     }
 
-    // El candado va ANTES del envío: si se cuelga a mitad, preferimos que no
-    // se mande a que se mande dos veces a una persona real.
     const components: unknown[] = [];
     if (["VIDEO", "IMAGE", "DOCUMENT"].includes(formato)) {
       const tipo = formato.toLowerCase();
