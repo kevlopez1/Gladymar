@@ -191,6 +191,15 @@ export const config = {
    */
   plantillaEnvio: optional("PLANTILLA_ENVIO", "").trim(),
 
+  /**
+   * PDF que se manda cuando alguien toca el botón del catálogo en la campaña
+   * DEXCO. Es OTRO archivo que el catálogo Dimensión Viva de siempre: aquel
+   * es de productos y este es de showrooms, y la campaña promete este.
+   *
+   * Vacío => el botón no manda nada y queda solo la respuesta del agente.
+   */
+  catalogoCampana: optional("CATALOGO_CAMPANA_URL", "").trim(),
+
   promociones: {
     // Hoja de Google con las promociones vigentes, que administra Gladymar
     // (columnas TITULO, DETALLE, CIUDAD, DESDE, HASTA, ACTIVA). Vacío => el
