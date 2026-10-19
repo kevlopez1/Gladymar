@@ -1043,6 +1043,8 @@ interface BufferCliente {
   messageId: string;
   name?: string;
   prueba?: boolean;
+  /** El grupo arrancó con el clic de un botón de plantilla. */
+  deBotonPlantilla?: boolean;
   /** Última foto del grupo de mensajes (si mandó varias, vale la más reciente). */
   imageId?: string;
   /** Último PDF del grupo de mensajes. */
@@ -1090,6 +1092,7 @@ function programarCliente(
     text: string;
     messageId: string;
     name?: string;
+    deBotonPlantilla?: boolean;
     imageId?: string;
     documentId?: string;
     documentName?: string;
@@ -1107,6 +1110,7 @@ function programarCliente(
   if (msg.text) buf.textos.push(msg.text);
   buf.messageId = msg.messageId;
   buf.prueba = prueba;
+  if (msg.deBotonPlantilla) buf.deBotonPlantilla = true;
   if (msg.imageId) buf.imageId = msg.imageId;
   if (msg.documentId) {
     buf.documentId = msg.documentId;
@@ -1140,6 +1144,7 @@ async function vaciarCliente(from: string): Promise<void> {
   try {
     await procesarTurnoCliente(from, text, buf.messageId, buf.name, {
       prueba: buf.prueba,
+      deBotonPlantilla: buf.deBotonPlantilla,
       imageId: buf.imageId,
       documentId: buf.documentId,
       documentName: buf.documentName,
@@ -1155,6 +1160,7 @@ async function handleIncoming(msg: {
   messageId: string;
   name?: string;
   esAudio?: boolean;
+  deBotonPlantilla?: boolean;
   imageId?: string;
   documentId?: string;
   documentName?: string;
@@ -1339,6 +1345,22 @@ async function enviarCatalogo(to: string): Promise<void> {
  */
 const ambienteOfrecido = new Set<string>();
 
+/**
+ * ¿El texto que llegó es el botón del catálogo de la campaña?
+ *
+ * Se compara contra el TEXTO del botón, que es lo que WhatsApp manda cuando no
+ * hay payload. Se acepta cualquier variante que mencione el catálogo para no
+ * depender de una tilde o una mayúscula: el botón lo escribió una persona en
+ * el panel de Meta y puede cambiar sin que nos enteremos.
+ */
+function esBotonCatalogo(texto: string): boolean {
+  const t = (texto || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return t.includes("catalogo");
+}
+
 function roomvoHabilitado(telefono: string): boolean {
   if (!config.roomvo.url) return false;
   if (!config.roomvo.telefonos.length) return true;
@@ -1358,6 +1380,8 @@ async function procesarTurnoCliente(
     documentName?: string;
     /** De dónde escribió. Por defecto WhatsApp, que es como venía siendo. */
     canal?: Canal;
+    /** Tocó un botón de una plantilla (campaña), no escribió el texto. */
+    deBotonPlantilla?: boolean;
   },
 ): Promise<void> {
   const canal: Canal = opts?.canal ?? "whatsapp";
@@ -1385,6 +1409,32 @@ async function procesarTurnoCliente(
   if (!prueba) {
     const cd = detectarCiudad(text);
     if (cd) ciudadPorUsuario.set(from, cd);
+  }
+
+  // Botón del catálogo de la campaña DEXCO.
+  //
+  // Va ANTES del agente y manda el PDF directo: el cliente tocó un botón que
+  // dice que quiere el catálogo, así que la respuesta es el catálogo. Pasarlo
+  // por el modelo para que "decida" sería agregarle una oportunidad de
+  // equivocarse a algo que ya está decidido.
+  //
+  // Es OTRO archivo que el catálogo Dimensión Viva: aquel es de productos y
+  // este es de showrooms, que es lo que promete la campaña.
+  if (opts?.deBotonPlantilla && config.catalogoCampana && esBotonCatalogo(text)) {
+    void markAsRead(messageId);
+    try {
+      await sendDocument(
+        from,
+        config.catalogoCampana,
+        "Showrooms Gladymar.pdf",
+        "Nuestros showrooms ◆ Gladymar",
+      );
+      console.log(`📕 Catálogo de showrooms -> ${from} (botón "${text}").`);
+    } catch (err) {
+      console.error(`No se pudo mandar el catálogo de showrooms a ${from}:`, err);
+    }
+    // Y SIGUE al agente: después del PDF tiene que haber una conversación, no
+    // un archivo suelto. El cliente acaba de levantar la mano.
   }
 
   try {
@@ -1859,7 +1909,12 @@ if (metaHabilitado("messenger")) {
 if (config.plantillaEnvio) {
   void (async () => {
     const [nombre, destinoCrudo, media] = config.plantillaEnvio.split("|").map((x) => x.trim());
-    const destino = (destinoCrudo || "").replace(/\D/g, "");
+    // Varios números separados por coma: la campaña va a una lista corta y
+    // mandarla de a uno obligaba a un despliegue por destinatario.
+    const destinos = (destinoCrudo || "")
+      .split(",")
+      .map((d) => d.replace(/\D/g, ""))
+      .filter(Boolean);
     if (!nombre) return;
 
     const def = await leerPlantilla(nombre);
@@ -1876,12 +1931,19 @@ if (config.plantillaEnvio) {
     const formato = String(header?.format || "TEXTO").toUpperCase();
     const cuerpo = pl.components?.find((c) => c.type === "BODY");
     const variables = String(cuerpo?.text || "").match(/\{\{\d+\}\}/g)?.length ?? 0;
+    // Los botones se loguean porque de ellos depende qué hace el bot cuando el
+    // cliente los toca: hay que saber el texto EXACTO para reconocerlo.
+    const botones = (pl.components?.find((c) => c.type === "BUTTONS") as
+      | { buttons?: { type?: string; text?: string }[] }
+      | undefined)?.buttons;
     console.log(
       `📣 Plantilla "${nombre}": estado ${pl.status ?? "?"}, categoría ${pl.category ?? "?"}, ` +
-        `idioma ${pl.language ?? "?"}, encabezado ${formato}, ${variables} variable(s) en el cuerpo.`,
+        `idioma ${pl.language ?? "?"}, encabezado ${formato}, ${variables} variable(s) en el cuerpo` +
+        (botones?.length ? `, botones: ${botones.map((b) => `${b.type}:"${b.text}"`).join(" | ")}` : ", sin botones") +
+        ".",
     );
 
-    if (!destino) {
+    if (!destinos.length) {
       console.log("📣 Sin destino en PLANTILLA_ENVIO: solo se muestra, no se manda nada.");
       return;
     }
@@ -1917,14 +1979,6 @@ if (config.plantillaEnvio) {
 
     // El candado va ANTES del envío: si se cuelga a mitad, preferimos que no
     // se mande a que se mande dos veces a una persona real.
-    // El candado incluye CON QUÉ se manda: reintentar la misma plantilla al
-    // mismo número pero con otra media es otro envío, no una repetición.
-    const candado = `plantilla:${nombre}:${destino}:${mediaFinal || "sin-media"}`;
-    if (!(await primeraVez(candado))) {
-      console.log(`📣 La plantilla "${nombre}" ya se le mandó a ${destino} con esta media; no se repite.`);
-      return;
-    }
-
     const components: unknown[] = [];
     if (["VIDEO", "IMAGE", "DOCUMENT"].includes(formato)) {
       const tipo = formato.toLowerCase();
@@ -1933,16 +1987,28 @@ if (config.plantillaEnvio) {
       const ref = deEjemplo ? { id: mediaFinal } : { link: mediaFinal };
       components.push({ type: "header", parameters: [{ type: tipo, [tipo]: ref }] });
     }
-    const envio = await sendTemplateCrudo(destino, nombre, pl.language || "es", components);
-    if (envio.ok) {
-      console.log(`📣 Plantilla "${nombre}" ENVIADA a ${destino} (id=${envio.wamid ?? "sin id"}).`);
-    } else {
-      // La API contestó con un error explícito: no se entregó nada, así que se
-      // suelta el candado para que el reintento pueda salir. Un timeout o un
-      // corte de red NO llegan acá: en esos casos no se sabe si llegó y el
-      // candado se queda puesto a propósito.
-      await borrarMarca(candado);
-      console.error(`📣 Falló el envío de "${nombre}" a ${destino}: ${JSON.stringify(envio.error)}`);
+
+    for (const destino of destinos) {
+      // El candado es POR DESTINATARIO e incluye CON QUÉ se manda: reintentar
+      // la misma plantilla al mismo número pero con otra media es otro envío,
+      // no una repetición. Y que uno ya esté mandado no puede frenar a los
+      // demás de la lista.
+      const candado = `plantilla:${nombre}:${destino}:${mediaFinal || "sin-media"}`;
+      if (!(await primeraVez(candado))) {
+        console.log(`📣 La plantilla "${nombre}" ya se le mandó a ${destino} con esta media; no se repite.`);
+        continue;
+      }
+      const envio = await sendTemplateCrudo(destino, nombre, pl.language || "es", components);
+      if (envio.ok) {
+        console.log(`📣 Plantilla "${nombre}" ENVIADA a ${destino} (id=${envio.wamid ?? "sin id"}).`);
+      } else {
+        // La API contestó con un error explícito: no se entregó nada, así que
+        // se suelta el candado para que el reintento pueda salir. Un timeout o
+        // un corte de red NO llegan acá: en esos casos no se sabe si llegó y el
+        // candado se queda puesto a propósito.
+        await borrarMarca(candado);
+        console.error(`📣 Falló el envío de "${nombre}" a ${destino}: ${JSON.stringify(envio.error)}`);
+      }
     }
   })();
 }

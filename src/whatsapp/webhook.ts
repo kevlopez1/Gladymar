@@ -33,6 +33,8 @@ export interface IncomingMessage {
   documentName?: string;
   /** true si mandó una NOTA DE VOZ. Ver el manejo en index.ts. */
   esAudio?: boolean;
+  /** true si tocó un botón de una PLANTILLA (no de un mensaje interactivo). */
+  deBotonPlantilla?: boolean;
 }
 
 /**
@@ -73,6 +75,19 @@ export function parseIncomingMessages(body: unknown): IncomingMessage[] {
           if (text) {
             result.push({ from: msg.from, text, messageId: msg.id, name });
           }
+        } else if (msg.type === "button" && (msg.button?.payload || msg.button?.text)) {
+          // Botón de una PLANTILLA. Llega como type "button", NO como
+          // "interactive": son dos cosas distintas en la API y este caso no
+          // estaba contemplado, así que todo clic en un botón de plantilla se
+          // descartaba en silencio y el cliente se quedaba sin respuesta
+          // después de haber hecho exactamente lo que le pedía el mensaje.
+          result.push({
+            from: msg.from,
+            text: (msg.button.payload || msg.button.text || "").trim(),
+            messageId: msg.id,
+            name,
+            deBotonPlantilla: true,
+          });
         } else if (msg.type === "document" && msg.document?.id) {
           // PDF: una cotización de otra casa, una orden, una ficha escrita.
           result.push({
@@ -170,6 +185,8 @@ interface WebhookPayload {
           image?: { id?: string; caption?: string; mime_type?: string };
           document?: { id?: string; caption?: string; filename?: string; mime_type?: string };
           audio?: { id?: string; mime_type?: string; voice?: boolean };
+          /** Respuesta rápida de una PLANTILLA. No es `interactive`. */
+          button?: { text?: string; payload?: string };
         }>;
         statuses?: Array<{
           id?: string;
