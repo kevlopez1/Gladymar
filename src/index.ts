@@ -2022,18 +2022,35 @@ if (config.plantillaEnvio) {
     botonesPl?.forEach((b, i) => {
       if (String(b.type).toUpperCase() !== "URL") return;
       if (!String(b.url || "").includes("{{")) return; // URL fija: no lleva parámetro
-      const ejemplo = b.example?.[0];
-      if (!ejemplo) {
+      // Meta quiere SOLO la parte variable, no la URL completa.
+      const base = String(b.url).split("{{")[0];
+      const parteVariable = (valor: string) =>
+        (valor.startsWith(base) ? valor.slice(base.length) : valor).trim();
+
+      // Primero el ejemplo aprobado. El 20/10 "dexco_gladymarbolivia" llegó
+      // con el ejemplo vacío (o igual a la base), y mandar el parámetro en
+      // blanco lo rechaza Meta con "(#100) Parameter 'text' ... cannot be
+      // empty". En ese caso se usa el enlace de campaña que ya está cargado
+      // en CATALOGO_CAMPANA_URL, que apunta a la misma base: es una dirección
+      // que eligió Gladymar, no una inventada acá.
+      let sufijo = parteVariable(b.example?.[0] || "");
+      if (!sufijo && config.catalogoCampana.startsWith(base)) {
+        sufijo = parteVariable(config.catalogoCampana);
+        if (sufijo) {
+          console.log(
+            `📣 El botón ${i} ("${b.text}") no trae ejemplo en la plantilla; uso el final de CATALOGO_CAMPANA_URL.`,
+          );
+        }
+      }
+      if (!sufijo) {
         console.error(
-          `📣 El botón ${i} ("${b.text}") es de URL dinámica y la plantilla no trae ejemplo. ` +
-            "No invento una dirección: hay que cargarle un ejemplo a la plantilla en Meta.",
+          `📣 El botón ${i} ("${b.text}") es de URL dinámica y no hay de dónde sacar su valor: ` +
+            `la plantilla no trae ejemplo y CATALOGO_CAMPANA_URL no empieza con "${base}". ` +
+            "No invento una dirección: cargale un ejemplo al botón en Meta.",
         );
         faltaEjemplo = true;
         return;
       }
-      // Meta quiere SOLO la parte variable, no la URL completa.
-      const base = String(b.url).split("{{")[0];
-      const sufijo = ejemplo.startsWith(base) ? ejemplo.slice(base.length) : ejemplo;
       components.push({
         type: "button",
         sub_type: "url",
