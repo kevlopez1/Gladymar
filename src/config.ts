@@ -97,6 +97,10 @@ export const config = {
     // lado (CDN, sitio de Gladymar) con CATALOGO_URL.
     // Es el que se envía cuando el cliente llega por el QR del catálogo físico.
     catalogoUrl: optional("CATALOGO_URL", "/catalogo-dimension-viva.pdf"),
+    // Segundo catálogo: Eleganza. Solo sale cuando el cliente lo pide por su
+    // nombre (Kevin, 20/10: "cuando el cliente lo pida"). Vacío => apagado,
+    // y el bot ni lo menciona.
+    catalogoEleganzaUrl: optional("CATALOGO_ELEGANZA_URL", "").trim(),
   },
 
   sheets: {

@@ -1316,6 +1316,34 @@ function urlCatalogo(): string {
   return /^https?:\/\//i.test(u) ? u : `${config.publicBaseUrl.replace(/\/$/, "")}${u.startsWith("/") ? "" : "/"}${u}`;
 }
 
+/** Igual que urlCatalogo pero para cualquier ruta configurada. */
+function urlPublica(u: string): string {
+  if (!u) return "";
+  return /^https?:\/\//i.test(u) ? u : `${config.publicBaseUrl.replace(/\/$/, "")}${u.startsWith("/") ? "" : "/"}${u}`;
+}
+
+/** ¿Está pidiendo el catálogo Eleganza por su nombre? */
+function pideEleganza(texto: string): boolean {
+  return /\beleganza\b/i.test(
+    texto.normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
+  );
+}
+
+/** A quién ya se le mandó Eleganza en esta conversación. */
+const eleganzaYaEnviado = new Set<string>();
+
+async function enviarEleganza(to: string): Promise<void> {
+  const url = urlPublica(config.assets.catalogoEleganzaUrl);
+  if (!url) return;
+  await sendDocument(
+    to,
+    url,
+    "Gladymar - Catálogo Eleganza.pdf",
+    "Colección Eleganza ◆ Gladymar",
+  );
+  console.log(`📕 Catálogo Eleganza enviado a ${to}`);
+}
+
 async function enviarCatalogo(to: string): Promise<void> {
   const url = urlCatalogo();
   if (!url) return;
@@ -1392,6 +1420,9 @@ async function procesarTurnoCliente(
   // El QR del catálogo físico manda un texto fijo; se detecta acá para que el
   // PDF salga siempre, sin depender de cómo lo interprete el modelo.
   const porQrCatalogo = !prueba && pideDimensionViva(text);
+  // Eleganza no se ofrece sola: sale solo si el cliente la nombra.
+  const porNombreEleganza =
+    !prueba && Boolean(config.assets.catalogoEleganzaUrl) && pideEleganza(text);
   // La sesión de Messenger/Instagram va prefijada con el canal. Dos efectos, y
   // los dos hacen falta: separa la conversación de la de un WhatsApp con los
   // mismos dígitos, y hace que brain.ts NO tome el PSID por un teléfono (su
@@ -1610,6 +1641,14 @@ async function procesarTurnoCliente(
 
     // Catálogo Dimensión Viva: se adjunta si el agente lo ofreció, o si el
     // cliente llegó por el QR del catálogo físico (ver `llegaPorQrCatalogo`).
+    if (porNombreEleganza && !eleganzaYaEnviado.has(from)) {
+      try {
+        await enviarEleganza(from);
+        eleganzaYaEnviado.add(from);
+      } catch (err) {
+        console.error(`No pude mandar el catálogo Eleganza a ${from}:`, err);
+      }
+    }
     if ((reply.attachCatalogo || porQrCatalogo) && !catalogoYaEnviado.has(from)) {
       try {
         await enviarCatalogo(from);
