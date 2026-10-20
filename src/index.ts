@@ -1322,6 +1322,78 @@ function urlPublica(u: string): string {
   return /^https?:\/\//i.test(u) ? u : `${config.publicBaseUrl.replace(/\/$/, "")}${u.startsWith("/") ? "" : "/"}${u}`;
 }
 
+// ── Reconocer un nombre propio mal escrito ──────────────────────────────────
+// El cliente escucha el nombre y lo escribe de memoria: "terrafote",
+// "terreforte", "platinun". Parchar letra por letra no termina nunca, así que
+// se compara por DISTANCIA DE EDICIÓN contra el nombre real.
+function distancia(a: string, b: string): number {
+  const fila = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let previo = fila[0];
+    fila[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const guardado = fila[j];
+      fila[j] = Math.min(
+        fila[j] + 1, // borrar
+        fila[j - 1] + 1, // insertar
+        previo + (a[i - 1] === b[j - 1] ? 0 : 1), // sustituir
+      );
+      previo = guardado;
+    }
+  }
+  return fila[b.length];
+}
+
+/**
+ * Deja la palabra en cómo SUENA en español, no en cómo se escribe. La falta
+ * de ortografía más común no cambia el sonido: "elejansa" por "eleganza",
+ * "bisenza" por "vicenza". Comparando el sonido, esas dejan de ser errores.
+ */
+function comoSuena(palabra: string): string {
+  return palabra
+    .replace(/h/g, "")              // hache muda
+    .replace(/qu|k/g, "k")
+    .replace(/[gj](?=[ei])/g, "j")  // gente = jente
+    .replace(/g/g, "g")
+    .replace(/c(?=[ei])/g, "s")     // cena = sena
+    .replace(/[zc]/g, "s")          // za/zo/zu y ca/co/cu -> s/k ya cubiertos
+    .replace(/v/g, "b")             // vaca = baca
+    .replace(/ll/g, "y")
+    .replace(/(.)\1+/g, "$1");     // letras dobladas
+}
+
+/**
+ * Cuántas letras de diferencia se perdonan. Una palabra corta no perdona
+ * nada (cambiarle una letra la convierte en otra), una larga perdona dos.
+ */
+function margen(palabra: string): number {
+  if (palabra.length <= 6) return 0;
+  if (palabra.length <= 9) return 1;
+  return 2;
+}
+
+/**
+ * Palabras corrientes que, al compararlas por sonido, caen demasiado cerca
+ * del nombre de una colección. "Busco algo con elegancia" no es un pedido
+ * del catálogo Eleganza.
+ */
+const NO_SON_NOMBRES = new Set(["elegancia", "elegante", "elegantes"]);
+
+/** ¿El texto nombra alguno de estos nombres, aun escrito con errores? */
+function nombraAlguno(texto: string, nombres: string[]): boolean {
+  const palabras = texto.split(/[^a-z0-9]+/).filter((p) => p && !NO_SON_NOMBRES.has(p));
+  // También los pares pegados, para "tera forte" => "teraforte".
+  const candidatos = [...palabras];
+  for (let i = 0; i + 1 < palabras.length; i++) candidatos.push(palabras[i] + palabras[i + 1]);
+  return nombres.some((nombre) => {
+    const n = comoSuena(nombre);
+    return candidatos.some((c) => {
+      const s = comoSuena(c);
+      return Math.abs(s.length - n.length) <= 2 && distancia(s, n) <= margen(n);
+    });
+  });
+}
+
 // ── Catálogos adicionales ───────────────────────────────────────────────────
 // Ninguno de estos se ofrece solo: el que manda por defecto sigue siendo
 // Dimensión Viva. Cada uno sale cuando el cliente lo nombra o cuando habla de
@@ -1332,8 +1404,8 @@ const CATALOGOS_EXTRA: {
   archivo: string;
   pie: string;
   url: () => string;
-  /** Nombre propio del catálogo o de su colección. */
-  nombra: RegExp;
+  /** Nombres propios que lo identifican (se comparan tolerando errores). */
+  nombra: string[];
   /** De qué habla un cliente al que le sirve este catálogo. */
   interesa: RegExp;
 }[] = [
@@ -1343,7 +1415,7 @@ const CATALOGOS_EXTRA: {
     archivo: "Gladymar - Catálogo Eleganza.pdf",
     pie: "Colección Eleganza ◆ Gladymar",
     url: () => config.assets.catalogoEleganzaUrl,
-    nombra: /\belegan[zs]a\b/,
+    nombra: ["eleganza"],
     interesa: /(?!)/, // solo por nombre, hasta que Gladymar defina qué cubre
   },
   {
@@ -1357,10 +1429,7 @@ const CATALOGOS_EXTRA: {
     archivo: "Gladymar - Catálogo Platinum Terraforte Artema 2026.pdf",
     pie: "Platinum ◆ Terraforte ◆ Artema 2026 ◆ Gladymar",
     url: () => config.assets.catalogoPlatTerrArtUrl,
-    // Tolerante al tipeo: Kevin probó "terrafote" (sin la r) y no disparaba.
-    // Un nombre propio que el cliente escucha y escribe de memoria casi
-    // siempre llega con una letra de menos o cambiada.
-    nombra: /\b(plat[ia]n(um|un|ium|o)|terr?a ?f[oa]r?te|arte+ma)\b/,
+    nombra: ["platinum", "platino", "terraforte", "artema"],
     interesa: new RegExp(
       "\\b(" +
         // Quien compra por volumen: este catálogo es el suyo.
@@ -1401,7 +1470,7 @@ async function enviarCatalogoExtra(
 function catalogosExtraPara(texto: string): typeof CATALOGOS_EXTRA {
   const t = texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   return CATALOGOS_EXTRA.filter(
-    (c) => c.url() && (c.nombra.test(t) || c.interesa.test(t)),
+    (c) => c.url() && (nombraAlguno(t, c.nombra) || c.interesa.test(t)),
   );
 }
 
