@@ -210,6 +210,9 @@ export const config = {
    * Vacío => el botón no manda nada y queda solo la respuesta del agente.
    */
   catalogoCampana: optional("CATALOGO_CAMPANA_URL", "").trim(),
+  // Valor para el botón de URL dinámica de una plantilla, cuando la plantilla
+  // aprobada no trae ejemplo. Es SOLO la parte variable, no la URL entera.
+  botonUrlValor: optional("PLANTILLA_BOTON_URL_VALOR", "").trim(),
 
   promociones: {
     // Hoja de Google con las promociones vigentes, que administra Gladymar

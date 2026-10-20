@@ -2034,6 +2034,14 @@ if (config.plantillaEnvio) {
       // en CATALOGO_CAMPANA_URL, que apunta a la misma base: es una dirección
       // que eligió Gladymar, no una inventada acá.
       let sufijo = parteVariable(b.example?.[0] || "");
+      // Kevin, 20/10: "no sé, cualquiera, solo envíalo ahora". PLANTILLA_BOTON_URL_VALOR
+      // es ese valor elegido a mano cuando la plantilla no trae ejemplo.
+      if (!sufijo && config.botonUrlValor) {
+        sufijo = parteVariable(config.botonUrlValor);
+        if (sufijo) {
+          console.log(`📣 El botón ${i} ("${b.text}") usa el valor de PLANTILLA_BOTON_URL_VALOR.`);
+        }
+      }
       if (!sufijo && config.catalogoCampana.startsWith(base)) {
         sufijo = parteVariable(config.catalogoCampana);
         if (sufijo) {
@@ -2045,7 +2053,8 @@ if (config.plantillaEnvio) {
       if (!sufijo) {
         console.error(
           `📣 El botón ${i} ("${b.text}") es de URL dinámica y no hay de dónde sacar su valor: ` +
-            `la plantilla no trae ejemplo y CATALOGO_CAMPANA_URL no empieza con "${base}". ` +
+            `la plantilla no trae ejemplo, PLANTILLA_BOTON_URL_VALOR está vacía y ` +
+            `CATALOGO_CAMPANA_URL no empieza con "${base}". ` +
             "No invento una dirección: cargale un ejemplo al botón en Meta.",
         );
         faltaEjemplo = true;
