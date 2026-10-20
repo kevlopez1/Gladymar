@@ -1343,7 +1343,7 @@ const CATALOGOS_EXTRA: {
     archivo: "Gladymar - Catálogo Eleganza.pdf",
     pie: "Colección Eleganza ◆ Gladymar",
     url: () => config.assets.catalogoEleganzaUrl,
-    nombra: /\beleganza\b/,
+    nombra: /\belegan[zs]a\b/,
     interesa: /(?!)/, // solo por nombre, hasta que Gladymar defina qué cubre
   },
   {
@@ -1357,7 +1357,10 @@ const CATALOGOS_EXTRA: {
     archivo: "Gladymar - Catálogo Platinum Terraforte Artema 2026.pdf",
     pie: "Platinum ◆ Terraforte ◆ Artema 2026 ◆ Gladymar",
     url: () => config.assets.catalogoPlatTerrArtUrl,
-    nombra: /\b(platinum|terraforte|artema)\b/,
+    // Tolerante al tipeo: Kevin probó "terrafote" (sin la r) y no disparaba.
+    // Un nombre propio que el cliente escucha y escribe de memoria casi
+    // siempre llega con una letra de menos o cambiada.
+    nombra: /\b(plat[ia]n(um|un|ium|o)|terr?a ?f[oa]r?te|arte+ma)\b/,
     interesa: new RegExp(
       "\\b(" +
         // Quien compra por volumen: este catálogo es el suyo.
