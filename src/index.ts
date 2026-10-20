@@ -1478,7 +1478,9 @@ async function procesarTurnoCliente(
   // El QR del catálogo físico manda un texto fijo; se detecta acá para que el
   // PDF salga siempre, sin depender de cómo lo interprete el modelo.
   const porQrCatalogo = !prueba && pideDimensionViva(text);
-  const extrasQueTocan = prueba ? [] : catalogosExtraPara(text);
+  // También en modo prueba: mandar un PDF no crea lead ni avisa a nadie, y si
+  // no, no hay forma de probarlo desde el panel.
+  const extrasQueTocan = catalogosExtraPara(text);
   // La sesión de Messenger/Instagram va prefijada con el canal. Dos efectos, y
   // los dos hacen falta: separa la conversación de la de un WhatsApp con los
   // mismos dígitos, y hace que brain.ts NO tome el PSID por un teléfono (su
@@ -1564,6 +1566,26 @@ async function procesarTurnoCliente(
     // PDF después de TODO el texto, al cliente le llegaba el cierre antes que
     // la cotización, y la conversación quedaba al revés: se despedía de él
     // antes de darle lo que había pedido.
+    // El catálogo va PRIMERO, antes del texto. Kevin, 20/10: "tendría que
+    // enviar el catálogo primero para que el cliente vea... y después ya el
+    // cliente le pregunta o le envía un screenshot". Si el bot pregunta antes
+    // de dar el PDF, le pide al cliente que decida sobre algo que todavía no
+    // vio.
+    for (const cat of extrasQueTocan) {
+      let mandados = extraYaEnviado.get(cat.clave);
+      if (!mandados) {
+        mandados = new Set<string>();
+        extraYaEnviado.set(cat.clave, mandados);
+      }
+      if (mandados.has(from)) continue;
+      try {
+        await enviarCatalogoExtra(from, cat);
+        mandados.add(from);
+      } catch (err) {
+        console.error(`No pude mandar el catálogo ${cat.nombre} a ${from}:`, err);
+      }
+    }
+
     let pdfCotizacion: string | null = null;
     if (reply.cotizacion) {
       try {
@@ -1697,20 +1719,6 @@ async function procesarTurnoCliente(
 
     // Catálogo Dimensión Viva: se adjunta si el agente lo ofreció, o si el
     // cliente llegó por el QR del catálogo físico (ver `llegaPorQrCatalogo`).
-    for (const cat of extrasQueTocan) {
-      let mandados = extraYaEnviado.get(cat.clave);
-      if (!mandados) {
-        mandados = new Set<string>();
-        extraYaEnviado.set(cat.clave, mandados);
-      }
-      if (mandados.has(from)) continue;
-      try {
-        await enviarCatalogoExtra(from, cat);
-        mandados.add(from);
-      } catch (err) {
-        console.error(`No pude mandar el catálogo ${cat.nombre} a ${from}:`, err);
-      }
-    }
     if ((reply.attachCatalogo || porQrCatalogo) && !catalogoYaEnviado.has(from)) {
       try {
         await enviarCatalogo(from);
