@@ -1322,26 +1322,84 @@ function urlPublica(u: string): string {
   return /^https?:\/\//i.test(u) ? u : `${config.publicBaseUrl.replace(/\/$/, "")}${u.startsWith("/") ? "" : "/"}${u}`;
 }
 
-/** ¿Está pidiendo el catálogo Eleganza por su nombre? */
-function pideEleganza(texto: string): boolean {
-  return /\beleganza\b/i.test(
-    texto.normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
-  );
+// ── Catálogos adicionales ───────────────────────────────────────────────────
+// Ninguno de estos se ofrece solo: el que manda por defecto sigue siendo
+// Dimensión Viva. Cada uno sale cuando el cliente lo nombra o cuando habla de
+// lo que ese catálogo cubre. Agregar otro es una fila más en esta tabla.
+const CATALOGOS_EXTRA: {
+  clave: string;
+  nombre: string;
+  archivo: string;
+  pie: string;
+  url: () => string;
+  /** Nombre propio del catálogo o de su colección. */
+  nombra: RegExp;
+  /** De qué habla un cliente al que le sirve este catálogo. */
+  interesa: RegExp;
+}[] = [
+  {
+    clave: "eleganza",
+    nombre: "Eleganza",
+    archivo: "Gladymar - Catálogo Eleganza.pdf",
+    pie: "Colección Eleganza ◆ Gladymar",
+    url: () => config.assets.catalogoEleganzaUrl,
+    nombra: /\beleganza\b/,
+    interesa: /(?!)/, // solo por nombre, hasta que Gladymar defina qué cubre
+  },
+  {
+    // CATÁLOGO DISTRIBUIDORES 2026. Porcelanato 60,8x60,8, PEI 4, 8 mm,
+    // 2,22 m2 por caja (6 piezas), en tres líneas: PLATINUM, TERRAFORTE y
+    // ARTEMA. Al ser de distribuidores, "interesa" incluye a quien se
+    // presenta como distribuidor o mayorista, además de quien nombra una
+    // de las colecciones.
+    clave: "plat_terr_art",
+    nombre: "Platinum · Terraforte · Artema",
+    archivo: "Gladymar - Catálogo Platinum Terraforte Artema 2026.pdf",
+    pie: "Platinum ◆ Terraforte ◆ Artema 2026 ◆ Gladymar",
+    url: () => config.assets.catalogoPlatTerrArtUrl,
+    nombra: /\b(platinum|terraforte|artema)\b/,
+    interesa: new RegExp(
+      "\\b(" +
+        // Quien compra por volumen: este catálogo es el suyo.
+        "distribuidor(es)?|mayorista|revendedor|ferreteria|" +
+        // PLATINUM
+        "elvis gris|luna graffito|oxidum|paladio sand|prima blanco|" +
+        "calacatta silver|madera marfil|leno wengue|ebano venato|taj ?mahal|" +
+        "steelix|pedra cinza|arena beige|" +
+        // TERRAFORTE
+        "teefe|silver stone|madera ceniza|cimento cinza|rock cream|" +
+        "rovere toscano|vicenza roble|nogal nocturno|onice bianco|" +
+        "alamo beige|kuentin|piedra marcada|oxido camel|" +
+        // ARTEMA
+        "carrara venato|jaspe plata|blanco hielo|calacatta blanco|" +
+        "perlino|oro bianco|marmol bianco|beige claro|marmol light" +
+        ")\\b",
+    ),
+  },
+];
+
+/** A quién ya se le mandó cada catálogo extra, para no repetirlo. */
+const extraYaEnviado = new Map<string, Set<string>>();
+
+async function enviarCatalogoExtra(
+  to: string,
+  cat: (typeof CATALOGOS_EXTRA)[number],
+): Promise<void> {
+  const url = urlPublica(cat.url());
+  if (!url) return;
+  await sendDocument(to, url, cat.archivo, cat.pie);
+  console.log(`📕 Catálogo ${cat.nombre} enviado a ${to}`);
 }
 
-/** A quién ya se le mandó Eleganza en esta conversación. */
-const eleganzaYaEnviado = new Set<string>();
-
-async function enviarEleganza(to: string): Promise<void> {
-  const url = urlPublica(config.assets.catalogoEleganzaUrl);
-  if (!url) return;
-  await sendDocument(
-    to,
-    url,
-    "Gladymar - Catálogo Eleganza.pdf",
-    "Colección Eleganza ◆ Gladymar",
+/**
+ * Qué catálogos extra corresponden a este mensaje. Un catálogo sin URL
+ * cargada no entra: mandar un enlace roto es peor que no mandar nada.
+ */
+function catalogosExtraPara(texto: string): typeof CATALOGOS_EXTRA {
+  const t = texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return CATALOGOS_EXTRA.filter(
+    (c) => c.url() && (c.nombra.test(t) || c.interesa.test(t)),
   );
-  console.log(`📕 Catálogo Eleganza enviado a ${to}`);
 }
 
 async function enviarCatalogo(to: string): Promise<void> {
@@ -1420,9 +1478,7 @@ async function procesarTurnoCliente(
   // El QR del catálogo físico manda un texto fijo; se detecta acá para que el
   // PDF salga siempre, sin depender de cómo lo interprete el modelo.
   const porQrCatalogo = !prueba && pideDimensionViva(text);
-  // Eleganza no se ofrece sola: sale solo si el cliente la nombra.
-  const porNombreEleganza =
-    !prueba && Boolean(config.assets.catalogoEleganzaUrl) && pideEleganza(text);
+  const extrasQueTocan = prueba ? [] : catalogosExtraPara(text);
   // La sesión de Messenger/Instagram va prefijada con el canal. Dos efectos, y
   // los dos hacen falta: separa la conversación de la de un WhatsApp con los
   // mismos dígitos, y hace que brain.ts NO tome el PSID por un teléfono (su
@@ -1641,12 +1697,18 @@ async function procesarTurnoCliente(
 
     // Catálogo Dimensión Viva: se adjunta si el agente lo ofreció, o si el
     // cliente llegó por el QR del catálogo físico (ver `llegaPorQrCatalogo`).
-    if (porNombreEleganza && !eleganzaYaEnviado.has(from)) {
+    for (const cat of extrasQueTocan) {
+      let mandados = extraYaEnviado.get(cat.clave);
+      if (!mandados) {
+        mandados = new Set<string>();
+        extraYaEnviado.set(cat.clave, mandados);
+      }
+      if (mandados.has(from)) continue;
       try {
-        await enviarEleganza(from);
-        eleganzaYaEnviado.add(from);
+        await enviarCatalogoExtra(from, cat);
+        mandados.add(from);
       } catch (err) {
-        console.error(`No pude mandar el catálogo Eleganza a ${from}:`, err);
+        console.error(`No pude mandar el catálogo ${cat.nombre} a ${from}:`, err);
       }
     }
     if ((reply.attachCatalogo || porQrCatalogo) && !catalogoYaEnviado.has(from)) {
