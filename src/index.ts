@@ -2008,6 +2008,41 @@ if (config.plantillaEnvio) {
       components.push({ type: "header", parameters: [{ type: tipo, [tipo]: ref }] });
     }
 
+    // Botones de URL DINÁMICA: la plantilla define la base y cada envío tiene
+    // que mandar la parte variable. Sin eso Meta rechaza con
+    // "(#131008) Button at index N of type Url requires a parameter".
+    //
+    // El valor sale del ejemplo que Gladymar aprobó con la plantilla. No se
+    // inventa ninguno: mandar a un cliente a una dirección que nadie eligió es
+    // peor que no mandarle el mensaje.
+    const botonesPl = (pl.components?.find((c) => c.type === "BUTTONS") as
+      | { buttons?: { type?: string; text?: string; url?: string; example?: string[] }[] }
+      | undefined)?.buttons;
+    let faltaEjemplo = false;
+    botonesPl?.forEach((b, i) => {
+      if (String(b.type).toUpperCase() !== "URL") return;
+      if (!String(b.url || "").includes("{{")) return; // URL fija: no lleva parámetro
+      const ejemplo = b.example?.[0];
+      if (!ejemplo) {
+        console.error(
+          `📣 El botón ${i} ("${b.text}") es de URL dinámica y la plantilla no trae ejemplo. ` +
+            "No invento una dirección: hay que cargarle un ejemplo a la plantilla en Meta.",
+        );
+        faltaEjemplo = true;
+        return;
+      }
+      // Meta quiere SOLO la parte variable, no la URL completa.
+      const base = String(b.url).split("{{")[0];
+      const sufijo = ejemplo.startsWith(base) ? ejemplo.slice(base.length) : ejemplo;
+      components.push({
+        type: "button",
+        sub_type: "url",
+        index: String(i),
+        parameters: [{ type: "text", text: sufijo }],
+      });
+    });
+    if (faltaEjemplo) return;
+
     for (const destino of destinos) {
       // El candado es POR DESTINATARIO e incluye CON QUÉ se manda: reintentar
       // la misma plantilla al mismo número pero con otra media es otro envío,
