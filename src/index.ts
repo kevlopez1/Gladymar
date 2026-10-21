@@ -2285,14 +2285,22 @@ if (config.plantillaEnvio) {
     });
     if (faltaEjemplo) return;
 
+    // Huella de ESTA versión de la plantilla. Si Gladymar la edita en Meta
+    // (el 21/10 cambiaron el texto y el botón), el contenido es otro y el
+    // mensaje vuelve a salir. Sin esto, una plantilla ya mandada quedaba
+    // congelada: se editaba y el candado seguía bloqueando la versión nueva.
+    const huella = Array.from(
+      JSON.stringify(pl.components ?? []) + (pl.language || ""),
+    ).reduce((h, c) => ((h * 31 + c.charCodeAt(0)) | 0), 7).toString(36);
+
     for (const destino of destinos) {
-      // El candado es POR DESTINATARIO e incluye CON QUÉ se manda: reintentar
-      // la misma plantilla al mismo número pero con otra media es otro envío,
-      // no una repetición. Y que uno ya esté mandado no puede frenar a los
-      // demás de la lista.
-      const candado = `plantilla:${nombre}:${destino}:${mediaFinal || "sin-media"}`;
+      // El candado es POR DESTINATARIO e incluye CON QUÉ se manda y QUÉ dice:
+      // reintentar la misma plantilla al mismo número con otra media, o con
+      // el texto editado, es otro envío y no una repetición. Y que uno ya
+      // esté mandado no puede frenar a los demás de la lista.
+      const candado = `plantilla:${nombre}:${destino}:${mediaFinal || "sin-media"}:${huella}`;
       if (!(await primeraVez(candado))) {
-        console.log(`📣 La plantilla "${nombre}" ya se le mandó a ${destino} con esta media; no se repite.`);
+        console.log(`📣 La plantilla "${nombre}" (versión ${huella}) ya se le mandó a ${destino}; no se repite.`);
         continue;
       }
       const envio = await sendTemplateCrudo(destino, nombre, pl.language || "es", components);
