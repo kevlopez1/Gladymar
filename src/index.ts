@@ -15,7 +15,7 @@ import { bs, type Cotizacion } from "./agent/cotizacion.js";
 import { resumenUso, fechaBolivia, PRECIOS_USD_POR_MILLON } from "./agent/uso.js";
 import { InMemorySessionStore } from "./session/store.js";
 import { sendTemplateCrudo, registrarNumero } from "./whatsapp/client.js";
-import { leerPlantilla } from "./whatsapp/plantillas.js";
+import { leerPlantilla, listarPlantillas } from "./whatsapp/plantillas.js";
 import { sendText, sendBotonUrl, sendDocument, sendInteractiveList, sendInteractiveSections, sendTemplate, downloadMedia, downloadDocumento, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
@@ -262,6 +262,41 @@ app.get("/admin/reenviar-resultados", async (req, res) => {
  *   Enviar:  /admin/plantilla?key=CLAVE&nombre=dexco_gladymar&to=59172155226
  *            (&video=URL  si el encabezado es de video y hay que pasarlo)
  */
+/**
+ * Las plantillas de la WABA de Gladymar, para que Difusión (CRM de Prime) las
+ * liste sin guardar el token de este servicio en otra base.
+ *
+ *   /admin/plantillas?key=CLAVE              -> solo las APPROVED
+ *   /admin/plantillas?key=CLAVE&todas=1      -> todas, con su estado
+ */
+app.get("/admin/plantillas", async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  const todas = await listarPlantillas();
+  if (!Array.isArray(todas)) {
+    res.status(502).json(todas);
+    return;
+  }
+  const lista = req.query.todas ? todas : todas.filter((p) => p.status === "APPROVED");
+  res.json({
+    waba: config.whatsapp.wabaId,
+    total: lista.length,
+    plantillas: lista.map((p) => ({
+      nombre: p.name,
+      estado: p.status,
+      categoria: p.category,
+      idioma: p.language,
+      // Los componentes van completos: Difusión necesita saber si lleva
+      // encabezado de media, cuántas variables tiene el cuerpo y qué botones,
+      // para armar bien el envío.
+      componentes: p.components ?? [],
+    })),
+  });
+});
+
 app.get("/admin/plantilla", async (req, res) => {
   const key = String(req.query.key || "");
   if (!config.crm.backfillKey || key !== config.crm.backfillKey) {

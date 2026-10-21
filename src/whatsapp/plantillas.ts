@@ -275,6 +275,32 @@ export interface PlantillaMeta {
   components?: { type?: string; format?: string; text?: string; example?: unknown }[];
 }
 
+/**
+ * Lista TODAS las plantillas de la WABA, tal como están en Meta.
+ *
+ * Existe para Difusión, en el CRM de Prime: ese panel buscaba el WABA y el
+ * token de cada línea en su propia base, y Gladymar no está ahí — sus
+ * credenciales viven solo en las variables de ESTE servicio. En vez de
+ * copiarle el token a otra base, el bot las expone ya leídas.
+ */
+export async function listarPlantillas(): Promise<PlantillaMeta[] | { error: string }> {
+  const wabaId = config.whatsapp.wabaId;
+  const accessToken = config.whatsapp.accessToken;
+  if (!wabaId || !accessToken) return { error: "Falta WHATSAPP_WABA_ID o el token." };
+  try {
+    const url =
+      `https://graph.facebook.com/${config.whatsapp.apiVersion}/${wabaId}/message_templates` +
+      `?fields=name,status,category,language,components&limit=200` +
+      `&access_token=${encodeURIComponent(accessToken)}`;
+    const res = await fetch(url);
+    const json = (await res.json().catch(() => ({}))) as { data?: PlantillaMeta[]; error?: unknown };
+    if (!res.ok) return { error: JSON.stringify(json.error ?? json) };
+    return json.data ?? [];
+  } catch (err) {
+    return { error: String(err) };
+  }
+}
+
 /** Lee de Meta la definición de una plantilla, tal como está aprobada. */
 export async function leerPlantilla(nombre: string): Promise<PlantillaMeta[] | { error: string }> {
   const wabaId = config.whatsapp.wabaId;
