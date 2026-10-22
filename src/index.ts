@@ -2325,27 +2325,57 @@ if (config.plantillaEnvio) {
       JSON.stringify(pl.components ?? []) + (pl.language || ""),
     ).reduce((h, c) => ((h * 31 + c.charCodeAt(0)) | 0), 7).toString(36);
 
-    for (const destino of destinos) {
+    // Esto dejó de ser "mandarle a un par de números": el 22/10 la campaña de
+    // arquitectos son 243. De a dos daba igual; de a cientos hay que ir
+    // parejo, parar cuando Meta dice basta, y dejar un resumen contable.
+    let mandados = 0;
+    let fallados = 0;
+    let repetidos = 0;
+    for (const [i, destino] of destinos.entries()) {
       // El candado es POR DESTINATARIO e incluye CON QUÉ se manda y QUÉ dice:
       // reintentar la misma plantilla al mismo número con otra media, o con
       // el texto editado, es otro envío y no una repetición. Y que uno ya
       // esté mandado no puede frenar a los demás de la lista.
       const candado = `plantilla:${nombre}:${destino}:${mediaFinal || "sin-media"}:${huella}`;
       if (!(await primeraVez(candado))) {
+        repetidos++;
         console.log(`📣 La plantilla "${nombre}" (versión ${huella}) ya se le mandó a ${destino}; no se repite.`);
         continue;
       }
       const envio = await sendTemplateCrudo(destino, nombre, pl.language || "es", components);
       if (envio.ok) {
-        console.log(`📣 Plantilla "${nombre}" ENVIADA a ${destino} (id=${envio.wamid ?? "sin id"}).`);
+        mandados++;
+        console.log(
+          `📣 [${i + 1}/${destinos.length}] Plantilla "${nombre}" ENVIADA a ${destino} (id=${envio.wamid ?? "sin id"}).`,
+        );
       } else {
         // La API contestó con un error explícito: no se entregó nada, así que
         // se suelta el candado para que el reintento pueda salir. Un timeout o
         // un corte de red NO llegan acá: en esos casos no se sabe si llegó y el
         // candado se queda puesto a propósito.
         await borrarMarca(candado);
-        console.error(`📣 Falló el envío de "${nombre}" a ${destino}: ${JSON.stringify(envio.error)}`);
+        fallados++;
+        const detalle = JSON.stringify(envio.error);
+        console.error(`📣 [${i + 1}/${destinos.length}] Falló el envío de "${nombre}" a ${destino}: ${detalle}`);
+        // Si se agotó el cupo diario de Meta, el resto va a fallar igual:
+        // seguir solo quema intentos y ensucia el log. Los que quedaron sin
+        // mandar no tienen candado, así que salen en el próximo arranque.
+        if (/\b(131056|130429|80007)\b/.test(detalle) || /limit/i.test(detalle)) {
+          console.error(
+            `📣 Meta cortó por límite de mensajes. Freno con ${destinos.length - i - 1} sin mandar; ` +
+              "salen en el próximo arranque, cuando se renueve el cupo.",
+          );
+          break;
+        }
       }
+      // Ritmo parejo: cuida la calificación del número y evita el 131056.
+      if (i < destinos.length - 1) await sleep(1200);
+    }
+    if (destinos.length > 1) {
+      console.log(
+        `📣 Resumen de "${nombre}": ${mandados} enviados, ${fallados} fallados, ` +
+          `${repetidos} ya estaban, de ${destinos.length}.`,
+      );
     }
   })();
 }
