@@ -1221,6 +1221,30 @@ async function handleIncoming(msg: {
     return;
   }
 
+  // El botón de la campaña se atiende ANTES que cualquier otra cosa, incluido
+  // el panel de administrador.
+  //
+  // El 22/10 Kevin tocó "Showrooms" en la plantilla y el bot le contestó "No
+  // reconocí ese comando": su número es admin, y los admins se desvían al
+  // panel antes de llegar a la lógica de cliente. Lo mismo le habría pasado a
+  // cualquier asesor o gerente de la lista. Quien toca el botón de una
+  // campaña espera el PDF, sea quien sea.
+  if (msg.deBotonPlantilla && config.catalogoCampana && esBotonCatalogo(msg.text)) {
+    void markAsRead(msg.messageId);
+    try {
+      await sendDocument(
+        msg.from,
+        config.catalogoCampana,
+        "Showrooms Gladymar.pdf",
+        "Nuestros showrooms ◆ Gladymar",
+      );
+      console.log(`📕 Catálogo de showrooms -> ${msg.from} (botón "${msg.text}").`);
+    } catch (err) {
+      console.error(`No se pudo mandar el catálogo de showrooms a ${msg.from}:`, err);
+    }
+    return;
+  }
+
   // Si el número es de un administrador, va al panel admin (no al agente cliente).
   const admin = getAdminByPhone(msg.from);
   if (admin) {
