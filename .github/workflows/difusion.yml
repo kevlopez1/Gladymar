@@ -1,0 +1,70 @@
+# Manda una plantilla de WhatsApp a una lista, desde GitHub.
+#
+# No toca Railway: corre en los servidores de GitHub y se lanza a mano desde
+# la pestaña Actions. Existe porque el 22/10 Railway pausó los builds de los
+# planes Hobby y la campaña no podía esperar al deploy.
+#
+# La lista NO vive en el repositorio: se guarda como secreto LISTA_CSV, para
+# que los teléfonos de los clientes no queden en el historial de git.
+name: Difusión de plantilla
+
+on:
+  workflow_dispatch:
+    inputs:
+      limite:
+        description: "Cuántos mandar como máximo (empezá con 1)"
+        required: true
+        default: "1"
+      enserio:
+        description: "MANDAR DE VERDAD. En 'false' solo simula."
+        type: boolean
+        default: false
+      plantilla:
+        description: "Nombre de la plantilla en Meta"
+        required: true
+        default: "dexco_gladymarbolivia"
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Preparar la lista
+        env:
+          LISTA_CSV: ${{ secrets.LISTA_CSV }}
+        run: |
+          printf '%s' "$LISTA_CSV" > lista.csv
+          echo "Filas en la lista: $(( $(wc -l < lista.csv) - 1 ))"
+
+      - name: Enviar
+        env:
+          WHATSAPP_ACCESS_TOKEN: ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
+          WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+          PLANTILLA: ${{ inputs.plantilla }}
+          VIDEO_URL: https://gladymar-production.up.railway.app/media/dexco-gladymar.mp4
+          BOTON_URL_VALOR: "?utm_source=whatsapp&utm_medium=plantilla&utm_campaign=dexco"
+        run: |
+          node scripts/difusion.mjs lista.csv "${{ inputs.limite }}" \
+            ${{ inputs.enserio && '--enserio' || '' }}
+
+      # El registro de a quién se le mandó y a quién no. Se descarga desde la
+      # misma pantalla de Actions y se borra solo a los 7 días.
+      - name: Guardar el registro
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: registro-difusion
+          path: |
+            enviados.csv
+            fallidos.csv
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # La lista no debe quedar en el runner más de lo necesario.
+      - name: Borrar la lista
+        if: always()
+        run: rm -f lista.csv
