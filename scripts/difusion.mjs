@@ -37,6 +37,22 @@ if (!archivo) {
 
 /** Lee el CSV y se queda con los celulares bolivianos únicos. */
 function destinos(ruta) {
+  // NUMEROS gana sobre el archivo: es el modo de prueba, con dos o tres
+  // números escritos a mano, para no cargar la lista entera solo para
+  // mandarse un mensaje a uno mismo.
+  const sueltos = (process.env.NUMEROS || "").trim();
+  if (sueltos) {
+    const vistos = new Set();
+    const out = [];
+    for (const n of sueltos.split(",")) {
+      let t = n.replace(/\D/g, "");
+      if (t.startsWith("591")) t = t.slice(3);
+      if (!(t.length === 8 && "67".includes(t[0])) || vistos.has(t)) continue;
+      vistos.add(t);
+      out.push({ telefono: `591${t}`, nombre: "" });
+    }
+    return out;
+  }
   const lineas = readFileSync(ruta, "utf8").split(/\r?\n/).filter(Boolean);
   const cab = lineas[0].toLowerCase().split(",").map((c) => c.trim());
   const iTel = cab.findIndex((c) => c.includes("tel"));

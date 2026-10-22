@@ -23,6 +23,10 @@ on:
         description: "Nombre de la plantilla en Meta"
         required: true
         default: "dexco_gladymarbolivia"
+      numeros:
+        description: "Números sueltos para probar, separados por coma. Si lo llenás, se ignora la lista."
+        required: false
+        default: ""
 
 jobs:
   enviar:
@@ -33,7 +37,9 @@ jobs:
         with:
           node-version: "22"
 
+      # Con números sueltos no hace falta la lista: es el modo prueba.
       - name: Preparar la lista
+        if: inputs.numeros == ''
         env:
           LISTA_CSV: ${{ secrets.LISTA_CSV }}
         run: |
@@ -43,12 +49,15 @@ jobs:
       - name: Enviar
         env:
           WHATSAPP_ACCESS_TOKEN: ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
-          WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+          # El id del número no es secreto: queda acá para que la prueba
+          # necesite cargar un solo secreto, el token.
+          WHATSAPP_PHONE_NUMBER_ID: "1187661431096753"
+          NUMEROS: ${{ inputs.numeros }}
           PLANTILLA: ${{ inputs.plantilla }}
           VIDEO_URL: https://gladymar-production.up.railway.app/media/dexco-gladymar.mp4
           BOTON_URL_VALOR: "?utm_source=whatsapp&utm_medium=plantilla&utm_campaign=dexco"
         run: |
-          node scripts/difusion.mjs lista.csv "${{ inputs.limite }}" \
+          node scripts/difusion.mjs "${LISTA:-lista.csv}" "${{ inputs.limite }}" \
             ${{ inputs.enserio && '--enserio' || '' }}
 
       # El registro de a quién se le mandó y a quién no. Se descarga desde la
