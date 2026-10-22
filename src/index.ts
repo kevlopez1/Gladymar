@@ -1546,12 +1546,20 @@ const ambienteOfrecido = new Set<string>();
  * depender de una tilde o una mayúscula: el botón lo escribió una persona en
  * el panel de Meta y puede cambiar sin que nos enteremos.
  */
+/**
+ * ¿El cliente tocó el botón que pide el catálogo de showrooms?
+ *
+ * Mira el TEXTO del botón, que lo elige Gladymar al armar la plantilla y
+ * cambia entre versiones: la primera decía "Quiero el catálogo" y la del
+ * 21/10 dice "Showrooms". Con solo "catalogo" la versión nueva no disparaba
+ * nada y el cliente se quedaba sin el PDF.
+ */
 function esBotonCatalogo(texto: string): boolean {
   const t = (texto || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
-  return t.includes("catalogo");
+  return t.includes("catalogo") || t.includes("showroom");
 }
 
 function roomvoHabilitado(telefono: string): boolean {
