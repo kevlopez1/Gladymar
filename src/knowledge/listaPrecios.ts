@@ -80,10 +80,23 @@ const ORIGEN_POR_FAMILIA: Record<string, string> = {
  * exactamente lo contrario de derivar. Quedan cargados para poder reconocerlos
  * y decir "esto lo ve un asesor".
  *
- * GRANEL y LIQUIDACIÓN (70 productos) siguen cotizándose con su aviso: Gerencia
- * habló de segunda, y no me toca a mí estirar la instrucción.
+ * GRANEL y LIQUIDACIÓN se suman el 27/10/2026, por orden de Kevin tras un
+ * error en producción: a un cliente de Cochabamba se le cotizaron 80 m² de
+ * "PISO 31X31 ROJO LUSTRE SEMIBRILLO GRANEL VAL" a Bs 750 el m², total
+ * Bs 60.000. El 750 NO es un precio por m²: es el del paquete. El mismo piso,
+ * por metro, vale Bs 40,90 — la cotización salió diez veces inflada.
+ *
+ * No es un caso aislado: los 65 GRANEL valen 600, 750, 1000 o 1100 en una
+ * lista donde el m² va de 26 a 238 bolivianos. Mientras no esté cargado cuánto
+ * rinde cada paquete, ningún precio de granel se puede convertir a m², así que
+ * se deriva al asesor igual que la segunda.
+ *
+ * Efecto secundario buscado: el formato 31x31 deja de ofrecerse solo. Solo
+ * existe como SEGUNDA (9) y GRANEL (6), ninguno de portafolio — por eso el bot
+ * lo ofrecía como reemplazo del 41x41 descontinuado, y Gerencia avisó que
+ * Gladymar no vende ese formato.
  */
-const ESTADOS_NO_COTIZABLES = new Set(["SEGUNDA"]);
+const ESTADOS_NO_COTIZABLES = new Set(["SEGUNDA", "GRANEL", "LIQUIDACIÓN", "LIQUIDACION"]);
 
 /** ¿El bot puede ponerle precio a esto, o lo tiene que derivar? */
 export function esCotizable(p: ProductoPrecio): boolean {
