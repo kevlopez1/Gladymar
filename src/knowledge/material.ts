@@ -68,6 +68,29 @@ function m2PorCajaDeFormato(formato: string): number | undefined {
 }
 
 /**
+ * ¿El producto es del mismo formato que la colección?
+ *
+ * El nombre solo no alcanza: "PISO 47X47 LETRAN AMBAR" contiene "AMBAR", que
+ * es una colección de Dimensión Viva de 60x120, y así se le asignaba el
+ * rendimiento de un producto que no tiene nada que ver. Lo mismo con
+ * "89X89 VOLCANO".
+ *
+ * La comparación es con tolerancia porque la lista mezcla la medida nominal
+ * con la real: 19x120 y 20x120 son la misma pieza, igual que 19x19 y 20x20.
+ * Un 10% separa eso de un formato realmente distinto.
+ */
+function mismoFormato(producto: string, formatoColeccion?: string): boolean {
+  const a = formatoNormalizado(producto);
+  const b = formatoNormalizado(formatoColeccion || "");
+  // Sin formato en alguno de los dos no hay con qué desmentir al nombre.
+  if (!a || !b) return true;
+  const [a1, a2] = a.split("X").map(Number);
+  const [b1, b2] = b.split("X").map(Number);
+  const parecido = (x: number, y: number) => Math.abs(x - y) <= Math.max(x, y) * 0.1;
+  return parecido(a1, b1) && parecido(a2, b2);
+}
+
+/**
  * m² que cubre una caja de ese producto, si se puede saber.
  *
  * Es la vuelta inversa de lo que hace el resto del archivo: sirve para cuando
@@ -77,7 +100,9 @@ function m2PorCajaDeFormato(formato: string): number | undefined {
  */
 export function m2PorCajaDe(producto: string): { m2: number; exacto: boolean } | undefined {
   const texto = (producto || "").toUpperCase();
-  const coleccion = DIMENSION_VIVA.find((c) => texto.includes(c.nombre.toUpperCase()));
+  const coleccion = DIMENSION_VIVA.find(
+    (c) => texto.includes(c.nombre.toUpperCase()) && mismoFormato(producto, c.formato),
+  );
   if (coleccion?.m2PorCaja) return { m2: coleccion.m2PorCaja, exacto: true };
   const formato = formatoNormalizado(producto);
   const m2 = formato ? m2PorCajaDeFormato(formato) : undefined;

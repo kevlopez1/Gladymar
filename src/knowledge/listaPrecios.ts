@@ -153,6 +153,25 @@ export function fechaLista(): string {
   return DATOS.origen;
 }
 
+/** Cuándo se generó el JSON desde el Excel de Gladymar. */
+export function generadoEl(): string {
+  return DATOS.generado;
+}
+
+/** Las columnas de precio del Excel: SCZ, CBBA, LPZ, TRJ, SRE. */
+export function regionesDeLista(): string[] {
+  return [...DATOS.regiones];
+}
+
+/**
+ * La lista completa, sin filtrar. La usa el endpoint público del catálogo,
+ * que aplica sus propios filtros; para buscar y cotizar están buscarVarios y
+ * buscarProductoPrecio, que ya trabajan solo sobre lo cotizable.
+ */
+export function todosLosProductos(): ProductoPrecio[] {
+  return DATOS.productos;
+}
+
 /**
  * Precio de un producto en una región.
  *

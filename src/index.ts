@@ -58,6 +58,7 @@ import {
   registrarRespuesta,
   acuse,
 } from "./admin/seguimientoAsesor.js";
+import { catalogoPublico, CACHE_SEGUNDOS } from "./api/catalogo.js";
 import { pideDimensionViva } from "./knowledge/dimensionViva.js";
 import { departamentoDeLugar, mapaMunicipios, municipiosReconocidos } from "./knowledge/departamentos.js";
 import { asegurarPlantillaAvisos, asegurarPlantillaSeguimiento, resumenLead, esFalloDeVentana } from "./whatsapp/plantillas.js";
@@ -110,6 +111,29 @@ app.use(express.static(path.join(process.cwd(), "public")));
 // Healthcheck
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "gladymar-whatsapp-agent" });
+});
+
+/**
+ * Catálogo público para la app de clientes: GET /api/catalogo
+ *
+ * Solo lectura y sin datos de clientes. Devuelve la lista de precios con los
+ * mismos filtros y cálculos que usa el bot, para que la app y WhatsApp no
+ * muestren precios distintos del mismo producto.
+ */
+app.get("/api/catalogo", (_req, res) => {
+  try {
+    const catalogo = catalogoPublico();
+    // La app puede cachear una hora; los intermediarios también. El JSON se
+    // rearma desde un archivo del repositorio, así que no cambia entre
+    // despliegues: servirlo viejo por una hora no tiene costo.
+    res.set("Cache-Control", `public, max-age=${CACHE_SEGUNDOS}`);
+    // Es un catálogo público: cualquier origen puede leerlo desde el navegador.
+    res.set("Access-Control-Allow-Origin", "*");
+    res.json(catalogo);
+  } catch (err) {
+    console.error("No se pudo armar el catálogo público:", err);
+    res.status(500).json({ error: "No se pudo armar el catálogo." });
+  }
 });
 
 // Migración única del histórico del Google Sheet al CRM de Prime.
