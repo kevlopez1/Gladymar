@@ -1578,13 +1578,24 @@ async function enviarCatalogo(to: string): Promise<void> {
  * de abrirlo).
  */
 /**
- * A quién ya se le ofreció el visualizador.
+ * Cuántas veces se le mandó el botón del visualizador a cada número.
  *
- * En memoria: lo peor que pasa si el proceso se reinicia es que a un cliente
- * se le ofrezca una segunda vez, horas después. Guardarlo en la base por eso
- * sería caro para el daño que evita.
+ * Nació como un "una sola vez por conversación" para que no salieran dos
+ * botones seguidos. Resultó demasiado estricto: el 18/11 una clienta escribió
+ * "¿podrías dejarme el botón anterior? No logro dónde debo colocar la foto",
+ * el modelo contestó "acá te dejo el botón otra vez" y el código lo saltó en
+ * silencio. La clienta se quedó buscando un botón que nunca llegó.
+ *
+ * Ahora se permite repetirlo hasta TOPE_AMBIENTE veces: alcanza para que
+ * quien lo pide de nuevo lo reciba, y sigue cortando la repetición sola.
+ *
+ * En memoria: lo peor que pasa si el proceso se reinicia es que el contador
+ * vuelva a cero y se le ofrezca otra vez, horas después.
  */
-const ambienteOfrecido = new Set<string>();
+const ambienteOfrecido = new Map<string, number>();
+
+/** Cuántas veces como máximo se manda el botón en una conversación. */
+const TOPE_AMBIENTE = 3;
 
 /**
  * ¿El texto que llegó es el botón del catálogo de la campaña?
@@ -1833,8 +1844,22 @@ async function procesarTurnoCliente(
       // archivo, así que el turno mandaba dos. Eso ya está corregido — queda
       // un solo bloque — y este guard se queda igual, porque el prompt le pide
       // al modelo que no repita el marcador y pedírselo no es impedírselo.
-      if (ambienteOfrecido.has(from)) {
-        console.log(`🏠 Visualizador ya ofrecido a ${from} en esta conversación; no se repite.`);
+      const vecesOfrecido = ambienteOfrecido.get(from) ?? 0;
+      if (vecesOfrecido >= TOPE_AMBIENTE) {
+        // Tope alcanzado. No se calla: el modelo ya le dijo al cliente que le
+        // deja el botón, así que al menos le llega el enlace en texto. Un
+        // mensaje que promete algo y no lo manda es peor que uno sin botón.
+        console.log(`🏠 Visualizador ya ofrecido ${vecesOfrecido} veces a ${from}; mando el enlace en texto.`);
+        try {
+          await sleep(600);
+          await sendText(
+            from,
+            `Acá tenés el visualizador otra vez 😊\n${config.roomvo.url}\n\n` +
+              "Abrilo, subí una foto de tu ambiente desde la galería y elegí el modelo para verlo puesto.",
+          );
+        } catch (err) {
+          console.error(`No se pudo mandar el enlace del visualizador a ${from}:`, err);
+        }
       } else {
         try {
           await sleep(600);
@@ -1845,8 +1870,11 @@ async function procesarTurnoCliente(
             "🏠 Ver en mi ambiente",
             config.roomvo.url,
           );
-          ambienteOfrecido.add(from);
-          console.log(`🏠 Visualizador -> ${from} (${reply.verEnAmbiente}) id=${wamid ?? "sin id"}`);
+          ambienteOfrecido.set(from, vecesOfrecido + 1);
+          console.log(
+            `🏠 Visualizador -> ${from} (${reply.verEnAmbiente}) id=${wamid ?? "sin id"} ` +
+              `[${vecesOfrecido + 1}/${TOPE_AMBIENTE}]`,
+          );
         } catch (err) {
           console.error(`No se pudo enviar el botón del visualizador a ${from}:`, err);
         }
