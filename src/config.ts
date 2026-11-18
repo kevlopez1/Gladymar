@@ -198,6 +198,16 @@ export const config = {
   plantillaEnvio: optional("PLANTILLA_ENVIO", "").trim(),
 
   /**
+   * Orden de una sola vez: mandarle el botón del visualizador a uno o varios
+   * números al arrancar, pidiendo disculpas.
+   *
+   * Formato: "591...,591..." (coma). Igual que PLANTILLA_ENVIO, se ejecuta UNA
+   * vez por destinatario aunque la variable siga puesta: el servicio se
+   * reinicia seguido y una disculpa repetida es peor que ninguna.
+   */
+  visualizadorEnvio: optional("VISUALIZADOR_ENVIO", "").trim(),
+
+  /**
    * PIN de verificación en dos pasos del número, para re-registrarlo.
    *
    * Solo se usa si Meta está contestando "(#133010) Account not registered",

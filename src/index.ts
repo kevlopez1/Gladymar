@@ -2289,6 +2289,54 @@ if (config.registroPin) {
   })();
 }
 
+/**
+ * Orden de una sola vez: el visualizador, con disculpa, a quien se quedó
+ * esperándolo.
+ *
+ * El 18/11 se descubrió que ROOMVO_TELEFONOS tenía todavía la lista de prueba
+ * de octubre: durante casi un mes el bot ofreció el visualizador y no se lo
+ * mandó a ningún cliente. Christian López pidió el botón dos veces y las dos
+ * se quedó mirando un mensaje que prometía algo que no llegaba.
+ *
+ * Va por acá y no por el endpoint a mano porque así no hace falta que nadie
+ * abra una URL con la clave: se pone la variable y sale al arrancar.
+ */
+if (config.visualizadorEnvio && config.roomvo.url) {
+  void (async () => {
+    const destinos = config.visualizadorEnvio
+      .split(",")
+      .map((d) => d.replace(/\D/g, ""))
+      .filter(Boolean);
+    for (const destino of destinos) {
+      // Una disculpa que se repite en cada reinicio deja de ser una disculpa.
+      const candado = `visualizador-disculpa:${destino}`;
+      if (!(await primeraVez(candado))) {
+        console.log(`🏠 Al ${destino} ya se le mandó el visualizador con disculpa; no se repite.`);
+        continue;
+      }
+      try {
+        const wamid = await sendBotonUrl(
+          destino,
+          "¡Hola! Perdoná la confusión de antes 🙏 Te dije que te dejaba el botón " +
+            "del visualizador y no te llegó — fue una falla nuestra, no algo que " +
+            "hayas hecho mal.\n\nAcá está, ahora sí. Tocalo, subí una foto de tu " +
+            "ambiente desde la galería y vas a poder ver el piso puesto ahí antes " +
+            "de decidir.",
+          "🏠 Ver en mi ambiente",
+          config.roomvo.url,
+        );
+        ambienteOfrecido.set(destino, (ambienteOfrecido.get(destino) ?? 0) + 1);
+        console.log(`🏠 Visualizador con disculpa -> ${destino} id=${wamid ?? "sin id"}`);
+      } catch (err) {
+        // Se suelta el candado: si falló, no se mandó, y el reintento tiene
+        // que poder salir. El caso típico es la ventana de 24 h cerrada.
+        await borrarMarca(candado);
+        console.error(`🏠 No se pudo mandar el visualizador con disculpa a ${destino}:`, err);
+      }
+    }
+  })();
+}
+
 if (config.plantillaEnvio) {
   void (async () => {
     const [nombre, destinoCrudo, media] = config.plantillaEnvio.split("|").map((x) => x.trim());
