@@ -1552,6 +1552,12 @@ const CATALOGOS_EXTRA: {
   nombra: string[];
   /** De qué habla un cliente al que le sirve este catálogo. */
   interesa: RegExp;
+  /**
+   * Último día en que se ofrece, para las campañas con fecha (YYYY-MM-DD).
+   * Pasado ese día el catálogo deja de mandarse solo, sin que nadie tenga que
+   * acordarse de apagarlo.
+   */
+  hasta?: string;
 }[] = [
   {
     clave: "eleganza",
@@ -1568,6 +1574,24 @@ const CATALOGOS_EXTRA: {
     // ARTEMA. Al ser de distribuidores, "interesa" incluye a quien se
     // presenta como distribuidor o mayorista, además de quien nombra una
     // de las colecciones.
+    // Campaña BLACK DAYS: 119 precios de promoción, hasta 70% de descuento,
+    // sobre unos 43 productos (porcelanato nacional e importado, grifería,
+    // sanitarios y lavamanos).
+    //
+    // Kevin, 18/11: solo se manda el PDF. Los precios NO se cargaron en la
+    // lista, así que el bot sigue cotizando precio de lista. Por eso el pie
+    // dice que los de la promoción son los del catálogo: el cliente tiene que
+    // saber cuál mirar si los ve distintos.
+    clave: "black_days",
+    nombre: "Black Days",
+    archivo: "Gladymar - Black Days.pdf",
+    pie: "Black Days ◆ Precios de promoción vigentes hasta el 30/11 ◆ Gladymar",
+    url: () => config.assets.catalogoBlackDaysUrl,
+    hasta: "2026-11-30",
+    nombra: ["black days", "blackdays"],
+    interesa: /\b(black ?days?|ofertas?|promocion(es)?|descuentos?|rebajas?|liquidacion)\b/,
+  },
+  {
     clave: "plat_terr_art",
     nombre: "Platinum · Terraforte · Artema",
     archivo: "Gladymar - Catálogo Platinum Terraforte Artema 2026.pdf",
@@ -1613,9 +1637,15 @@ async function enviarCatalogoExtra(
  */
 function catalogosExtraPara(texto: string): typeof CATALOGOS_EXTRA {
   const t = texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  return CATALOGOS_EXTRA.filter(
-    (c) => c.url() && (nombraAlguno(t, c.nombra) || c.interesa.test(t)),
-  );
+  // La fecha de Bolivia, no la del servidor, que corre en UTC: a las 21:00 de
+  // Santa Cruz en Railway ya es el día siguiente, y la promoción se cortaría
+  // tres horas antes de tiempo.
+  const hoy = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return CATALOGOS_EXTRA.filter((c) => {
+    if (!c.url()) return false;
+    if (c.hasta && hoy > c.hasta) return false;
+    return nombraAlguno(t, c.nombra) || c.interesa.test(t);
+  });
 }
 
 async function enviarCatalogo(to: string): Promise<void> {

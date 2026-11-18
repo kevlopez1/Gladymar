@@ -103,6 +103,10 @@ export const config = {
     // conversación e interés"). Vacío => apagado, y el bot ni lo menciona.
     catalogoEleganzaUrl: optional("CATALOGO_ELEGANZA_URL", "").trim(),
     catalogoPlatTerrArtUrl: optional("CATALOGO_PLAT_TERR_ART_URL", "").trim(),
+    // Campaña Black Days. Lleva fecha de fin en el código: una promoción que
+    // se sigue ofreciendo cuando ya terminó es una promesa que Gladymar no
+    // puede cumplir.
+    catalogoBlackDaysUrl: optional("CATALOGO_BLACK_DAYS_URL", "").trim(),
   },
 
   sheets: {
