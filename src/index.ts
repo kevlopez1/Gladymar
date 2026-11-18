@@ -321,6 +321,67 @@ app.get("/admin/plantillas", async (req, res) => {
   });
 });
 
+/**
+ * Mandarle el botón del visualizador a uno o varios clientes, a mano.
+ *
+ *   /admin/visualizador?key=CLAVE&to=59170565136
+ *   /admin/visualizador?key=CLAVE&to=591...,591...   (varios, por coma)
+ *
+ * Existe por el 18/11: ROOMVO_TELEFONOS había quedado con la lista de prueba
+ * de octubre, así que durante casi un mes el bot ofreció el visualizador y no
+ * se lo mandó a ningún cliente. Arreglada la variable, los que ya habían
+ * quedado esperando necesitaban recibirlo sin tener que escribir de nuevo.
+ *
+ * Solo funciona con la ventana de 24 h abierta: si el cliente no escribió en
+ * las últimas 24 horas, Meta lo rechaza y acá se ve el error.
+ */
+app.get("/admin/visualizador", async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  if (!config.roomvo.url) {
+    res.status(400).json({ error: "ROOMVO_URL no está configurada." });
+    return;
+  }
+  const destinos = String(req.query.to || "")
+    .split(",")
+    .map((d) => d.replace(/\D/g, ""))
+    .filter(Boolean);
+  if (!destinos.length) {
+    res.status(400).json({ error: "Falta to=NUMERO (con 591). Varios, separados por coma." });
+    return;
+  }
+
+  const resultados: { destino: string; ok: boolean; id?: string; error?: string }[] = [];
+  for (const destino of destinos) {
+    try {
+      const wamid = await sendBotonUrl(
+        destino,
+        "Acá tenés el visualizador de Gladymar 😊\n\n" +
+          "Tocá el botón, subí una foto de tu ambiente desde la galería y vas a ver el piso puesto ahí.",
+        "🏠 Ver en mi ambiente",
+        config.roomvo.url,
+      );
+      // Cuenta para el tope, igual que un envío normal: si después el modelo
+      // lo vuelve a ofrecer, no se le duplica.
+      ambienteOfrecido.set(destino, (ambienteOfrecido.get(destino) ?? 0) + 1);
+      resultados.push({ destino, ok: true, id: wamid ?? undefined });
+      console.log(`🏠 Visualizador (a mano) -> ${destino} id=${wamid ?? "sin id"}`);
+    } catch (err) {
+      resultados.push({ destino, ok: false, error: String(err) });
+      console.error(`🏠 No se pudo mandar el visualizador a ${destino}:`, err);
+    }
+  }
+  const fallados = resultados.filter((r) => !r.ok).length;
+  res.status(fallados === resultados.length ? 502 : 200).json({
+    enviados: resultados.length - fallados,
+    fallados,
+    resultados,
+  });
+});
+
 app.get("/admin/plantilla", async (req, res) => {
   const key = String(req.query.key || "");
   if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
