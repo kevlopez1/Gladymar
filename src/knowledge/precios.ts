@@ -35,7 +35,10 @@ function categoriaDe(texto: string, hint?: string): string {
 }
 
 const BASE_M2: Record<string, Record<string, number>> = {
-  // Sin 41X41: descontinuado (Gerencia, 17/09/2026). Cae al DEF si alguien lo pide.
+  // Sin 41X41 a propósito: el formato se fabrica (volvió al portafolio el
+  // 23/11/2026) pero Gerencia pidió no dar precios de ese formato por ahora,
+  // y acá los precios son estimados. Quien cotiza lo deriva al asesor antes
+  // de llegar hasta este estimador (ver formatosSinPrecio.ts).
   GLADYMAR: { "60X60": 89, "80X80": 118, "90X90": 139, DEF: 95 },
   "PISOS IMPORTADOS": { "10X10": 245, "45X15": 210, "20X120": 179, "60X120": 199, "90X90": 189, "100X100": 229, "120X120": 259, DEF: 199 },
 };

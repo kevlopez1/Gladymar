@@ -8,7 +8,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { buscarCategorias, formatearCategoria } from "../knowledge/productos.js";
 import { buscarCatalogo, formatearProductoCat } from "../knowledge/catalogo.js";
-import { esFormatoDescontinuado } from "../knowledge/descontinuados.js";
+import { esFormatoSinPrecio } from "../knowledge/formatosSinPrecio.js";
 import { buscarVarios, formatearProductoLista } from "../knowledge/listaPrecios.js";
 import { buscarColecciones, formatearColeccion } from "../knowledge/dimensionViva.js";
 import {
@@ -269,14 +269,16 @@ export async function executeTool(
         // los datos que el catálogo suelto no trae (tipo de uso, m² por caja).
         const colecciones = buscarColecciones(consulta, 2);
         const bloques: string[] = [];
-        // El cliente preguntó por un formato que ya no se fabrica. Decirlo acá
-        // y no dejar que el modelo lo deduzca: la lista y el catálogo ya no lo
-        // traen, así que sin este aviso la respuesta sería "no lo encuentro".
-        if (esFormatoDescontinuado(consulta)) {
+        // El cliente preguntó por el 41x41. Decirlo acá y no dejar que el
+        // modelo lo deduzca: la lista de precios todavía no lo trae, así que
+        // sin este aviso la respuesta sería "está descontinuado" (lo que se
+        // decía hasta el 23/11/2026) o un precio de otro formato.
+        if (esFormatoSinPrecio(consulta)) {
           bloques.push(
-            "AVISO PARA VOS (no lo copies literal): el formato 41x41 fue *descontinuado* por Gladymar. " +
-              "Decíselo al cliente con naturalidad y ofrecele los formatos vigentes que van abajo. " +
-              "Nunca lo sugieras vos.",
+            "AVISO PARA VOS (no lo copies literal): el formato 41x41 SÍ se fabrica y volvió al portafolio de " +
+              "Gladymar. NUNCA digas que está descontinuado ni que ya no se fabrica. Lo único que no podés dar " +
+              "es su PRECIO: ese lo confirma un asesor. Si el cliente lo pide, mostrale los modelos y decile que " +
+              "el precio se lo pasa un asesor; no le pongas el precio de otro formato.",
           );
         }
         if (productos.length) {
@@ -415,6 +417,8 @@ export async function executeTool(
         !d.producto || d.pedido === d.producto ? `"${d.pedido}"` : `"${d.pedido}" (${d.producto})`;
       const segundaDerivada = cot.derivar.filter((d) => d.motivo === "segunda");
       const fueraDeLista = cot.derivar.filter((d) => d.motivo === "fuera_de_lista");
+      // 41x41: se fabrica, pero el precio lo da un asesor (Gerencia, 23/11/2026).
+      const sinPrecio = cot.derivar.filter((d) => d.motivo === "sin_precio");
       const derivados = cot.derivar.map(nombrar).join(", ");
       if (!cot.items.length) {
         // Se reusa registrarSolicitud para que el lead siga el MISMO camino que
@@ -428,9 +432,11 @@ export async function executeTool(
             ciudad,
             nombre: nombre !== "Cliente" ? nombre : undefined,
             detalle:
-              segundaDerivada.length && !fueraDeLista.length
+              segundaDerivada.length && !fueraDeLista.length && !sinPrecio.length
                 ? `Pide material de SEGUNDA SELECCIÓN: ${derivados}. El bot no cotiza segunda.`
-                : `El bot no pudo cotizar: ${derivados}. Requiere cotización manual del asesor.`,
+                : sinPrecio.length && !fueraDeLista.length && !segundaDerivada.length
+                  ? `Pide ${derivados}: el 41x41 volvió al portafolio pero el bot todavía no da precios de ese formato. Requiere precio del asesor.`
+                  : `El bot no pudo cotizar: ${derivados}. Requiere cotización manual del asesor.`,
           },
           telefonoCliente,
           prueba,
@@ -480,9 +486,6 @@ export async function executeTool(
         ["GRANEL", "LIQUIDACIÓN", "LIQUIDACION"].includes((i.status || "").toUpperCase()),
       );
 
-      // Pidió un formato que ya no se fabrica: lo que se cotizó es OTRA cosa.
-      const sustituidos = cot.items.filter((i) => i.reemplaza);
-
       console.log(`🧾 Cotización ${cot.numero} para ${nombre} — Total ${bs(cot.total)}`);
       return {
         content:
@@ -502,12 +505,11 @@ export async function executeTool(
               "así que NO se cotizó y quedó fuera del total. NO le inventes un precio ni lo estimes: decile que " +
               "ese producto se lo cotiza un asesor y seguí con el resto.\n\n"
             : "") +
-          (sustituidos.length
-            ? "⚠️ AVISO OBLIGATORIO: el cliente pidió " +
-              sustituidos.map((i) => `"${i.reemplaza}"`).join(", ") +
-              ", que es un formato DESCONTINUADO. Lo que se cotizó es una alternativa vigente" +
-              ` (${sustituidos.map((i) => i.descripcion).join(", ")}), NO lo que pidió. ` +
-              "Decíselo claramente antes de darle el total: que ese formato ya no se fabrica y que esto es el reemplazo.\n\n"
+          (sinPrecio.length
+            ? `⚠️ AVISO OBLIGATORIO: ${sinPrecio.map(nombrar).join(", ")} SÍ se fabrica y está en el portafolio, ` +
+              "pero su precio todavía lo confirma un asesor, así que quedó FUERA de la cotización y del total. " +
+              "NO digas que está descontinuado ni que ya no se fabrica, y NO le pongas el precio de otro formato: " +
+              "decile que ese precio se lo pasa un asesor, que ya lo derivaste, y seguí con el resto.\n\n"
             : "") +
           "Al responder, confirmá que le enviaste la cotización y aclarale que son los *precios de lista vigentes hoy* para su región, " +
           "y que el asesor confirma la disponibilidad. NO digas que los precios son 'referenciales' o 'estimados': salen de la lista oficial de Gladymar.",

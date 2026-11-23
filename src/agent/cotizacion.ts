@@ -3,7 +3,7 @@
  *
  * ⚠️ Precios REFERENCIALES (ver precios.ts). Cada cotización lo aclara.
  */
-import { esFormatoDescontinuado } from "../knowledge/descontinuados.js";
+import { esFormatoSinPrecio } from "../knowledge/formatosSinPrecio.js";
 import { siguienteNumeroCotizacion } from "../db/index.js";
 import { m2PorCajaDe } from "../knowledge/material.js";
 import {
@@ -38,13 +38,6 @@ export interface CotItem {
   /** STATUS de la lista: PORTAFOLIO, NUEVO, SEGUNDA, GRANEL, LIQUIDACIÓN... */
   status?: string;
   /**
-   * El cliente pidió un formato descontinuado y esto NO es lo que pidió.
-   *
-   * Sin esta marca el ítem sale igual y el cliente cree que le cotizaron su
-   * 41x41. Quien arma la respuesta tiene que decirlo.
-   */
-  reemplaza?: string;
-  /**
    * "Nacional" | "Importado" según la hoja de origen del Excel (NAC / IMP).
    *
    * undefined cuando la lista no lo dice (sanitarios, grifería, cemento,
@@ -67,7 +60,7 @@ export interface Cotizacion {
    * la cotización no es derivar, es dejar un hueco que el cliente interpreta
    * solo. Quien arma la respuesta tiene que decirlo y derivarlo.
    */
-  derivar: { pedido: string; producto?: string; motivo: "segunda" | "fuera_de_lista" }[];
+  derivar: { pedido: string; producto?: string; motivo: "segunda" | "fuera_de_lista" | "sin_precio" }[];
   /** Departamento con cuyo precio se cotizó (undefined = no se pudo determinar). */
   departamento?: string;
   /** Emisión, con hora: con 24 h de vigencia la fecha sola no alcanza. */
@@ -104,6 +97,17 @@ export async function construirCotizacion(cliente: string, ciudad: string | unde
   const items: CotItem[] = entrada.flatMap((it): CotItem[] => {
     const cantidad = Number(it.cantidad) || 1;
 
+    // Primero de todo el 41x41: se fabrica otra vez (Gerencia, 23/11/2026)
+    // pero sin precio por ahora. Va antes que todo lo demás porque los dos
+    // caminos de abajo lo clasifican mal: el buscador de segunda engancha
+    // cualquier "cerámica 41x41" con una impresa comercial, y el de precios,
+    // al no tener el formato en la lista, devuelve el producto que MÁS se le
+    // parece —un 60x60, otro granel— y lo cotizaría como si fuera lo pedido.
+    if (esFormatoSinPrecio(it.producto)) {
+      derivar.push({ pedido: it.producto, motivo: "sin_precio" });
+      return [];
+    }
+
     // Primero: ¿está pidiendo SEGUNDA? Si sí, no se cotiza ni se le ofrece un
     // reemplazo de primera por las nuestras — se deriva, que es lo que pidió
     // Gerencia. Va ANTES de buscar el cotizable a propósito: preguntar después
@@ -115,13 +119,6 @@ export async function construirCotizacion(cliente: string, ciudad: string | unde
     }
 
     const oficial = buscarProductoPrecio(it.producto);
-    // El 41x41 ya no está en la lista, así que el buscador devuelve el
-    // producto que MÁS se le parece — un 60x60, otro granel — y lo cotiza como
-    // si fuera lo pedido. Eso es peor que no encontrarlo: el cliente recibe un
-    // precio por algo que no pidió. Se cotiza igual (le sirve de alternativa)
-    // pero queda marcado.
-    const pidioDescontinuado = esFormatoDescontinuado(it.producto);
-
     if (oficial) {
       const { precio, region } = precioEnRegion(oficial, departamento);
       // La unidad la decide el PRODUCTO, nunca quien pide la cotización. El
@@ -165,7 +162,6 @@ export async function construirCotizacion(cliente: string, ciudad: string | unde
         oficial: true,
         status: oficial.status,
         origen: origenDe(oficial),
-        ...(pidioDescontinuado ? { reemplaza: it.producto } : {}),
       }];
     }
 

@@ -45,7 +45,13 @@ const HOJAS_EXCLUIDAS: Record<string, string> = {
 };
 
 /**
- * Formatos descontinuados. No se cotizan ni se sugieren.
+ * Formatos cuyos precios NO se cargan.
+ *
+ * El 41X41 volvió al portafolio el 23/11/2026, pero los precios que trae esta
+ * lista son los de septiembre y Gerencia pidió no darlos por ahora. Las filas
+ * se descartan acá para que no haya un número que el bot pueda llegar a usar;
+ * el producto sí se ofrece (ver src/knowledge/formatosSinPrecio.ts). Cuando
+ * Gladymar mande los precios nuevos, se vacía este set.
  *
  * Se compara normalizado (sin espacios, mayúsculas, la "x" unificada) porque en
  * el Excel el mismo formato aparece escrito de varias maneras.

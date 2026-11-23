@@ -4,7 +4,6 @@
  * GRIFERIA, SANITARIOS, PERFILES, CEMENTO (adhesivos).
  */
 import { origenDeMarca } from "./listaPrecios.js";
-import { esFormatoDescontinuado } from "./descontinuados.js";
 import { claveDeProducto, formatoParaMostrar, mejorVariante } from "./formato.js";
 
 export interface ProductoCatalogo {
@@ -21,14 +20,10 @@ function norm(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
-/**
- * Este archivo es un Excel viejo convertido a TypeScript: no se regenera con
- * `npm run precios` y tiene 89 filas de 41X41 adentro. Filtrarlas en la
- * búsqueda es la única forma de que no salgan sin reescribirlo entero a mano.
- */
-function descontinuado(p: ProductoCatalogo): boolean {
-  return esFormatoDescontinuado(p.formato) || esFormatoDescontinuado(p.descripcion);
-}
+// Las 89 filas de 41X41 de este archivo se filtraban en la búsqueda mientras
+// el formato estaba descontinuado. Volvió al portafolio el 23/11/2026, así que
+// vuelven a salir; lo único que no se da de ellas es el precio, y eso lo
+// resuelve formatosSinPrecio.ts donde se cotiza.
 
 /** Busca productos del catálogo por palabras (categoría, marca, descripción, formato, acabado). */
 export function buscarCatalogo(query: string, max = 8): ProductoCatalogo[] {
@@ -36,7 +31,6 @@ export function buscarCatalogo(query: string, max = 8): ProductoCatalogo[] {
   if (!tokens.length) return [];
   const scored: { p: ProductoCatalogo; score: number }[] = [];
   for (const p of CATALOGO) {
-    if (descontinuado(p)) continue;
     const hay = norm(`${p.categoria} ${p.marca} ${p.descripcion} ${p.formato} ${p.acabado}`);
     let score = 0;
     for (const t of tokens) if (hay.includes(t)) score++;

@@ -6,9 +6,9 @@
  * verdades, y el cliente vería un número en la app y otro en WhatsApp.
  *
  * Por eso no se limita a volcar el JSON: devuelve los productos ya pasados
- * por las mismas reglas que usa el bot —los formatos descontinuados quedan
- * afuera— y con los m² por caja ya calculados, que es el dato con el que se
- * convierten cajas a metros.
+ * por las mismas reglas que usa el bot —lo que el bot no cotiza llega con
+ * `cotizable: false`— y con los m² por caja ya calculados, que es el dato con
+ * el que se convierten cajas a metros.
  *
  * No toca la base ni los datos de clientes: solo lee la lista de precios, que
  * ya está en el repositorio.
@@ -21,7 +21,7 @@ import {
   type ProductoPrecio,
 } from "../knowledge/listaPrecios.js";
 import { m2PorCajaDe } from "../knowledge/material.js";
-import { esFormatoDescontinuado } from "../knowledge/descontinuados.js";
+import { esFormatoSinPrecio } from "../knowledge/formatosSinPrecio.js";
 
 /** Un producto del catálogo público: el de la lista más lo calculado. */
 export interface ProductoCatalogo extends ProductoPrecio {
@@ -37,6 +37,9 @@ export interface ProductoCatalogo extends ProductoPrecio {
    * número que NO es por m²: el 27/10 un granel a 750 se cotizó como si lo
    * fuera y salió un total diez veces inflado. El bot dejó de cotizarlos; si
    * la app los muestra como precio por metro, repite el mismo error.
+   *
+   * También queda en false el 41x41: volvió al portafolio el 23/11/2026 pero
+   * Gerencia pidió no dar precios de ese formato por ahora.
    */
   cotizable: boolean;
 }
@@ -55,15 +58,16 @@ let cache: { armado: RespuestaCatalogo; vence: number } | null = null;
 function armar(): RespuestaCatalogo {
   const productos: ProductoCatalogo[] = [];
   for (const p of todosLosProductos()) {
-    // Misma regla que el bot: un formato que Gladymar ya no fabrica no se
-    // ofrece. Se mira la descripción y el formato, porque hay filas donde el
-    // formato real está solo en el texto.
-    if (esFormatoDescontinuado(`${p.descripcion} ${p.formato ?? ""}`)) continue;
     const caja = m2PorCajaDe(p.descripcion);
+    // Misma regla que el bot: el producto se muestra, pero si es un formato
+    // sin precio aprobado la app no debe poner número. Se mira la descripción
+    // y el formato, porque hay filas donde el formato real está solo en el
+    // texto.
+    const sinPrecio = esFormatoSinPrecio(`${p.descripcion} ${p.formato ?? ""}`);
     productos.push({
       ...p,
       ...(caja ? { m2PorCaja: caja.m2, exacto: caja.exacto } : {}),
-      cotizable: esCotizable(p),
+      cotizable: esCotizable(p) && !sinPrecio,
     });
   }
   return { generado: generadoEl(), regiones: regionesDeLista(), productos };
