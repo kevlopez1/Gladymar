@@ -18,6 +18,16 @@ const BASE = `https://graph.facebook.com/${config.whatsapp.apiVersion}`;
  * si hizo falta, reintentar con plantilla.
  */
 export async function sendText(to: string, body: string): Promise<string | null> {
+  // Un cuerpo vacío lo rechaza Meta con 400 "The parameter text.body is
+  // required", y esa excepción se llevaba puesto el turno entero: el cliente
+  // se quedaba sin respuesta y, si venía con cotización, sin el PDF (pasó 7
+  // veces entre el 23 y el 26/11/2026). No hay nada que mandar, así que acá
+  // no se llama a Meta: se avisa y sigue.
+  if (!body || !body.trim()) {
+    console.warn(`⚠️  No mando un texto vacío a ${to}. Quien llamó a sendText no tenía nada que decir.`);
+    return null;
+  }
+
   const url = `${BASE}/${config.whatsapp.phoneNumberId}/messages`;
 
   // WhatsApp limita el cuerpo de texto a ~4096 caracteres.

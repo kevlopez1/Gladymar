@@ -878,7 +878,10 @@ function sleep(ms: number): Promise<void> {
 /** Divide la respuesta en máximo 2 bloques (para no saturar con "muchos mensajes"). */
 function splitBlocks(text: string): string[] {
   const parts = text.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
-  if (parts.length <= 1) return [text.trim()];
+  // Sin texto no hay globo. Antes devolvía [""], y ese globo vacío terminaba
+  // en un 400 de Meta que cortaba el turno (ver sendText).
+  if (!parts.length) return [];
+  if (parts.length === 1) return [text.trim()];
   if (parts.length === 2) return parts;
   // 3+ párrafos: los agrupamos en 2 globos como mucho.
   const corte = Math.ceil(parts.length / 2);
@@ -1864,6 +1867,14 @@ async function procesarTurnoCliente(
     // Respuestas en bloques: muestra "escribiendo…" antes de cada bloque (y un mínimo antes del primero).
     // El último bloque, si hay opciones, se envía como LISTA interactiva (igual que el demo).
     const bloques = splitBlocks(reply.text);
+    // El modelo contestó sin texto. Pasa cuando usó una herramienta y no
+    // escribió nada arriba. No se puede dejar al cliente en silencio si hay
+    // algo adjunto: sin un globo el bucle no corre y el PDF tampoco sale.
+    if (!bloques.length) {
+      if (reply.cotizacion) bloques.push("Te paso la cotización 👇");
+      else if (reply.options.length) bloques.push(""); // la lista arma su propio texto
+      else console.warn(`⚠️  El modelo no devolvió texto para ${from} y no había nada adjunto: no mando nada.`);
+    }
     for (let i = 0; i < bloques.length; i++) {
       const esUltimo = i === bloques.length - 1;
 
