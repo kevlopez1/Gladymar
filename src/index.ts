@@ -16,6 +16,7 @@ import { resumenUso, fechaBolivia, PRECIOS_USD_POR_MILLON } from "./agent/uso.js
 import { InMemorySessionStore } from "./session/store.js";
 import { sendTemplateCrudo, registrarNumero } from "./whatsapp/client.js";
 import { leerPlantilla, listarPlantillas } from "./whatsapp/plantillas.js";
+import { gastoDeMeta } from "./whatsapp/gasto.js";
 import { sendText, sendBotonUrl, sendDocument, sendInteractiveList, sendInteractiveSections, sendTemplate, downloadMedia, downloadDocumento, markAsRead, markReadAndTyping } from "./whatsapp/client.js";
 import { verifyWebhook, parseIncomingMessages, parseStatusUpdates } from "./whatsapp/webhook.js";
 import { SurveyScheduler, buildSurveyMessage } from "./session/survey.js";
@@ -540,6 +541,35 @@ app.get("/admin/uso", async (req, res) => {
 // repartir de una sola vez la cartera ya cargada (backfill sobre su columna
 // city), en vez de esperar a que cada cliente vuelva a escribir.
 // Se abre: /admin/municipios?key=TU_CLAVE
+/**
+ * Detalle de lo que Meta cobró por WhatsApp, para imputar el cargo de la
+ * tarjeta a un centro de costos.
+ *
+ *   /admin/gasto-meta?key=CLAVE&dias=60
+ *
+ * Separa la atención del chatbot (SERVICE/UTILITY) de las campañas
+ * (MARKETING), que era la duda de Gerencia el 27/11/2026. La FACTURA no sale
+ * de acá: la emite Meta en WhatsApp Manager → Facturación.
+ */
+app.get("/admin/gasto-meta", async (req, res) => {
+  const key = String(req.query.key || "");
+  if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
+    res.status(403).json({ error: "Clave inválida o BACKFILL_KEY no configurada." });
+    return;
+  }
+  const resumen = await gastoDeMeta(Number(req.query.dias) || 60);
+  if ("error" in resumen) {
+    res.status(502).json(resumen);
+    return;
+  }
+  res.json({
+    ...resumen,
+    nota:
+      "Consumo informado por Meta (misma fuente que WhatsApp Manager). El comprobante fiscal " +
+      "con el número de referencia del cargo se descarga en WhatsApp Manager → Facturación.",
+  });
+});
+
 app.get("/admin/municipios", (req, res) => {
   const key = String(req.query.key || "");
   if (!config.crm.backfillKey || key !== config.crm.backfillKey) {
